@@ -21,6 +21,7 @@ npm run dev                  # http://localhost:3000
 | Kompetenzprofil (Job) bzw. Businessplan-Bausteine und Zahlen (Gründung), KI-Auswertung von Gesprächsnotizen mit Vorschlägen, die der Coach einzeln übernimmt | `app/actions/profil.ts`, `components/akte/Wissen.tsx`, `lib/profile.ts` |
 | Gespräch einsprechen oder aufnehmen, Umwandlung in Text (Aufnahme wird nicht gespeichert) | `components/akte/Recorder.tsx`, `app/api/transkription` |
 | Lebenslauf-Generator: 10 Designs in jeder Farbe, Live-Vorschau, Foto mit Zuschnitt, bisherigen Lebenslauf (PDF/Word) per KI übernehmen, KI-Hilfe pro Feld, Kenntnisse aus dem Kompetenzprofil, mehrere Fassungen, PDF-Export, Coach und Coachee arbeiten am selben Lebenslauf | `app/lebenslauf`, `app/mein-bereich/lebenslauf`, `components/cv`, `lib/cv`, `app/actions/lebenslauf.ts` |
+| KI-Assistent pro Coachee: Chat, der Ziel, Kompetenzprofil, Zahlen, Lebenslauf und letzte Gespräche kennt, Startvorschläge für Job und Gründung, Antworten live, kopieren oder als Nachricht senden. Der Coach sieht alle Unterhaltungen der Akte, der Coachee nur seine | `app/api/assistent`, `lib/assistant.ts`, `components/assistant` |
 | Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
@@ -39,6 +40,7 @@ npm run dev                  # http://localhost:3000
 - Hochgeladene Dateien liegen AES-256-verschlüsselt im Volume und werden nur nach Prüfung der Akte ausgeliefert.
 - Beim Einlesen eines alten Lebenslaufs werden Name, E-Mail und Telefon vor der KI entfernt und danach lokal eingesetzt.
   Coachees können die KI begrenzt nutzen (`AI_COACHEE_MONTHLY_LIMIT`, Standard 40 Aufrufe im Monat).
+- Der KI-Assistent bekommt nie Gesundheitsangaben und als Coachee nie interne Notizen; Namen werden ersetzt.
 - Das PDF entsteht in einem Chromium ohne JavaScript und ohne Netzzugriff.
 - Keine Tracker, keine externen Skripte, `noindex` für Suchmaschinen.
 
