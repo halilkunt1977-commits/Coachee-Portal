@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gründarium Portal
 
-## Getting Started
-
-First, run the development server:
+Das Portal für Coachees von Gründarium unter **portal.gründarium.de**: jeder Coachee hat einen eigenen Zugang,
+der Coach sieht alle Akten. Next.js 16 (App Router), Tailwind 4, eigene PostgreSQL-Datenbank, Betrieb über Coolify.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # Werte eintragen
+node scripts/migrate.mjs     # Tabellen anlegen
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Was es schon gibt
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Bereich | Wo |
+| --- | --- |
+| Anmeldung, Zwei-Faktor (Pflicht für den Coach), Einladungen, Passwort vergessen | `app/login`, `app/konto`, `app/einladung`, `app/passwort-vergessen`, `lib/auth.ts`, `lib/crypto.ts` |
+| Coachee-Liste mit Suche und Filtern, neuen Coachee anlegen und einladen | `app/coach` |
+| Akte: Übersicht, Gespräche mit Unterrichtseinheiten, Aufgaben, Nachrichten, Stammdaten, Zugriffsprotokoll | `app/coach/coachees/[id]` |
+| Bereich des Coachees: Ziel, Aufgaben, Nachrichten, freigegebene Gespräche | `app/mein-bereich` |
+| Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
+| Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Sicherheit und Datenschutz
 
-## Learn More
+- Passwörter mit scrypt, Sitzungen als zufälliges Token im HttpOnly-Cookie (in der Datenbank nur der Hash).
+- Coach: Zwei-Faktor über eine Authenticator-App ist Pflicht, Sitzung 12 Stunden. Coachee: optional, Sitzung 14 Tage.
+- 5 Fehlversuche sperren den Zugang für 15 Minuten.
+- Interne Notizen des Coachs werden für Coachees gar nicht erst geladen.
+- Jede Aktion an einer Akte landet im Zugriffsprotokoll (Tab „Zugriffe“).
+- E-Mails enthalten nie Inhalte aus dem Coaching, nur einen Hinweis mit Link.
+- Keine Tracker, keine externen Skripte, `noindex` für Suchmaschinen.
 
-To learn more about Next.js, take a look at the following resources:
+## Einrichten in Coolify
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Datenbank:** Neue Ressource → PostgreSQL 16, Name z. B. `portal-db`. Unter „Backups“ tägliche Sicherung auf einen
+   S3-Speicher außerhalb des Servers einschalten (z. B. Hetzner Storage Box oder Object Storage).
+2. **App:** Neue Ressource → Anwendung aus GitHub `coachee-portal`, Build Pack **Dockerfile**, Port **3000**.
+3. **Domain:** `https://portal.xn--grndarium-r9a.de` (das ist `portal.gründarium.de` in der Schreibweise, die DNS und
+   Zertifikate brauchen). Der DNS-Eintrag `portal` muss auf den Server zeigen.
+4. **Umgebungsvariablen** wie in `.env.example`. `DATABASE_URL` ist die interne Verbindungs-URL aus Schritt 1.
+   `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
+5. **Speicher:** persistentes Volume auf `/app/data` (für hochgeladene Dateien, kommt mit dem Lebenslauf-Upload).
+6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   node scripts/create-coach.mjs info@gruendarium.de "Halil Kunt"
+   ```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   Den ausgegebenen Link öffnen, Passwort festlegen, anmelden und die Zwei-Faktor-App einrichten.

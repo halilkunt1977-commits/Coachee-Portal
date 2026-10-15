@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
+/* Farben wie gründarium.de */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --muted: #5d6068;
+  --line: #dcd7cd;
+  --line-soft: #e8e4dc;
+  --accent: #1f3a5f;
+  --accent-hover: #152a46;
+  --tint: #e7edf4;
+  --gold: #b88a4a;
+  --danger: #a33a2c;
+  --ok: #2f6b45;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-tint: var(--tint);
+  --color-gold: var(--gold);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line-soft bg-surface p-5 shadow-[0_1px_2px_rgba(22,24,29,0.04)] sm:p-6; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-50; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-accent hover:text-accent disabled:opacity-50; }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
+  .input { @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] outline-none transition focus:border-accent focus:ring-2 focus:ring-tint; }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink; }
+  .hint { @apply mt-1 text-xs text-muted; }
+  .h1 { @apply font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight sm:text-3xl; }
+  .h2 { @apply font-[family-name:var(--font-display)] text-lg font-bold tracking-tight; }
+  .badge { @apply inline-flex items-center rounded-full bg-tint px-2.5 py-0.5 text-xs font-semibold text-accent; }
+  .link { @apply font-semibold text-accent underline-offset-2 hover:underline; }
 }

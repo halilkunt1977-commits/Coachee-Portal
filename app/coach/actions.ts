@@ -1,0 +1,128 @@
+"use server";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { coacheeFor } from "@/lib/access";
+import { audit, requireCoach } from "@/lib/auth";
+import { query, transaction } from "@/lib/db";
+import { dateOrNull, isEmail, numberOrNull, optional, text, type FormState } from "@/lib/forms";
+import { createInvite } from "@/lib/invites";
+import { inviteMail, sendMail } from "@/lib/mail";
+
+function readCoachee(fd: FormData) {
+  const coaching_type = fd.get("coaching_type") === "gruendung" ? "gruendung" : "job";
+  const fundingRaw = text(fd, "funding", 20);
+  const funding = ["avgs", "selbstzahler", "sonstiges"].includes(fundingRaw) ? fundingRaw : "avgs";
+  return {
+    first_name: text(fd, "first_name", 100),
+    last_name: text(fd, "last_name", 100),
+    email: text(fd, "email", 200).toLowerCase(),
+    phone: optional(fd, "phone", 50),
+    coaching_type,
+    funding,
+    voucher_number: optional(fd, "voucher_number", 100),
+    start_date: dateOrNull(fd, "start_date"),
+    end_date: dateOrNull(fd, "end_date"),
+    units_total: numberOrNull(fd, "units_total"),
+    goal: optional(fd, "goal", 2000),
+    internal_note: optional(fd, "internal_note", 10000),
+  };
+}
+
+async function sendInvite(coach: { name: string }, c: { user_id: string; first_name: string; email: string }) {
+  const link = await createInvite(c.user_id, "invite");
+  const sent = await sendMail({ to: c.email, ...inviteMail(c.first_name, coach.name, link) }).catch((e) => {
+    console.error("[mail] invite", e);
+    return false;
+  });
+  return { link, sent };
+}
+
+export async function createCoachee(_prev: FormState, fd: FormData): Promise<FormState> {
+  const coach = await requireCoach();
+  const c = readCoachee(fd);
+  if (!c.first_name || !c.last_name) return { error: "Bitte Vor- und Nachnamen eingeben." };
+  if (!isEmail(c.email)) return { error: "Bitte eine gültige E-Mail-Adresse eingeben. Darüber bekommt der Coachee seinen Zugang." };
+
+  let created: { id: string; user_id: string };
+  try {
+    created = await transaction(async (db) => {
+      const u = await db.query<{ id: string }>("INSERT INTO users (email, name, role) VALUES ($1,$2,'coachee') RETURNING id", [c.email, `${c.first_name} ${c.last_name}`]);
+      const row = await db.query<{ id: string }>(
+        `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, goal, internal_note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+        [u.rows[0].id, coach.id, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note],
+      );
+      return { id: row.rows[0].id, user_id: u.rows[0].id };
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") return { error: "Für diese E-Mail-Adresse gibt es schon einen Zugang." };
+    throw error;
+  }
+  await audit(coach.id, "coachee_created", created.id);
+  const invite = fd.get("invite") === "on";
+  let q = "";
+  if (invite) {
+    const { sent } = await sendInvite(coach, { user_id: created.user_id, first_name: c.first_name, email: c.email });
+    await audit(coach.id, "invite_sent", created.id, { mail: sent });
+    q = sent ? "?eingeladen=1" : "?eingeladen=link";
+  }
+  redirect(`/coach/coachees/${created.id}${q}`);
+}
+
+export async function updateCoachee(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const coach = await requireCoach();
+  const current = await coacheeFor(coach, coacheeId);
+  const c = readCoachee(fd);
+  if (!c.first_name || !c.last_name) return { error: "Bitte Vor- und Nachnamen eingeben." };
+  if (!isEmail(c.email)) return { error: "Bitte eine gültige E-Mail-Adresse eingeben." };
+  const statusRaw = text(fd, "status", 20);
+  const status = ["aktiv", "pausiert", "abgeschlossen"].includes(statusRaw) ? statusRaw : current.status;
+  try {
+    await transaction(async (db) => {
+      await db.query(
+        `UPDATE coachees SET first_name=$2, last_name=$3, email=$4, phone=$5, coaching_type=$6, funding=$7, voucher_number=$8, start_date=$9, end_date=$10,
+                units_total=$11, goal=$12, internal_note=$13, status=$14, updated_at=now() WHERE id=$1`,
+        [coacheeId, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note, status],
+      );
+      if (current.user_id) {
+        // Abgeschlossene Coachings behalten nur Lesezugriff; der Zugang selbst bleibt bis zur Löschung bestehen
+        await db.query("UPDATE users SET email=$2, name=$3 WHERE id=$1", [current.user_id, c.email, `${c.first_name} ${c.last_name}`]);
+      }
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") return { error: "Diese E-Mail-Adresse gehört schon zu einem anderen Zugang." };
+    throw error;
+  }
+  await audit(coach.id, "coachee_updated", coacheeId);
+  revalidatePath(`/coach/coachees/${coacheeId}`);
+  return { ok: "Gespeichert." };
+}
+
+export async function resendInvite(coacheeId: string) {
+  const coach = await requireCoach();
+  const c = await coacheeFor(coach, coacheeId);
+  if (!c.user_id) return;
+  const { sent } = await sendInvite(coach, { user_id: c.user_id, first_name: c.first_name, email: c.email });
+  await audit(coach.id, "invite_sent", coacheeId, { mail: sent });
+  redirect(`/coach/coachees/${coacheeId}?tab=stammdaten&eingeladen=${sent ? "1" : "link"}`);
+}
+
+export async function inviteLink(coacheeId: string) {
+  // Link zum Weitergeben (z. B. per WhatsApp), falls die Mail nicht ankommt
+  const coach = await requireCoach();
+  const c = await coacheeFor(coach, coacheeId);
+  if (!c.user_id) return null;
+  const link = await createInvite(c.user_id, "invite");
+  await audit(coach.id, "invite_link_created", coacheeId);
+  return link;
+}
+
+export async function setAccess(coacheeId: string, active: boolean) {
+  const coach = await requireCoach();
+  const c = await coacheeFor(coach, coacheeId);
+  if (!c.user_id) return;
+  await query("UPDATE users SET active = $2 WHERE id = $1", [c.user_id, active]);
+  if (!active) await query("DELETE FROM auth_sessions WHERE user_id = $1", [c.user_id]);
+  await audit(coach.id, active ? "access_enabled" : "access_disabled", coacheeId);
+  revalidatePath(`/coach/coachees/${coacheeId}`);
+}
