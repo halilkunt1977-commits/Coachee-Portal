@@ -34,7 +34,7 @@ export function Assistant(p: Props) {
   const field = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    list.current?.scrollTo({ top: list.current.scrollHeight });
+    if (messages.length) list.current?.scrollTo({ top: list.current.scrollHeight });
   }, [messages]);
 
   async function send(text: string) {
@@ -85,7 +85,7 @@ export function Assistant(p: Props) {
   const empty = messages.length === 0;
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
       <aside className="card space-y-3 !p-4">
         <Link href={p.newHref} className="btn w-full">+ Neue Unterhaltung</Link>
         {p.chats.length === 0 ? (
