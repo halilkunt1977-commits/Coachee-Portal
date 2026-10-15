@@ -193,7 +193,7 @@ export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
         ))}
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
         <div className={`space-y-3 ${view === "form" ? "" : "hidden lg:block"}`}>
           <Step n={1} title="Persönliche Daten" tip={TIPS.personal} open>
             <div className="flex flex-wrap items-center gap-4">

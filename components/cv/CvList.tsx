@@ -13,7 +13,7 @@ import { NewCvForm } from "./NewCvForm";
 export async function CvList({ coacheeId, coach }: { coacheeId: string; coach: boolean }) {
   const cvs = await listCvs(coacheeId);
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="space-y-3">
         {cvs.length === 0 && <Empty>Noch kein Lebenslauf. Rechts lässt sich der erste anlegen, am schnellsten aus dem bisherigen Lebenslauf.</Empty>}
         {cvs.map((cv) => (
