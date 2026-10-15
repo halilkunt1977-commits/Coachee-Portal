@@ -4,6 +4,7 @@ import { MeetingForm } from "@/components/akte/MeetingForm";
 import { MessageForm } from "@/components/akte/MessageForm";
 import { MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
 import { TaskForm } from "@/components/akte/TaskForm";
+import { CvList } from "@/components/cv/CvList";
 import { AnalyzeButton, FinanceItemForm, ProfileItemForm, SuggestionCard } from "@/components/akte/Wissen";
 import { aiEnabled } from "@/lib/ai";
 import { FINANCE_SECTIONS, PERIOD_LABEL, categoriesFor, euro, monthly, type FinanceItem, type ProfileItem } from "@/lib/profile";
@@ -23,6 +24,7 @@ const TABS = [
   { key: "gespraeche", label: "Gespräche" },
   { key: "wissen", label: "Kompetenzprofil" },
   { key: "zahlen", label: "Zahlen" },
+  { key: "lebenslauf", label: "Lebenslauf" },
   { key: "aufgaben", label: "Aufgaben" },
   { key: "nachrichten", label: "Nachrichten" },
   { key: "stammdaten", label: "Stammdaten" },
@@ -36,6 +38,8 @@ const actionLabel: Record<string, string> = {
   coachee_created: "Akte angelegt", coachee_updated: "Stammdaten geändert", invite_sent: "Einladung verschickt", invite_link_created: "Einladungslink erzeugt",
   invite_accepted: "Einladung angenommen", meeting_created: "Gespräch angelegt", meeting_updated: "Gespräch geändert", meeting_deleted: "Gespräch gelöscht",
   task_created: "Aufgabe angelegt", task_toggled: "Aufgabe abgehakt", task_deleted: "Aufgabe gelöscht", message_sent: "Nachricht gesendet",
+  cv_created: "Lebenslauf angelegt", cv_imported: "Lebenslauf aus Datei übernommen", cv_duplicated: "Lebenslauf kopiert", cv_deleted: "Lebenslauf gelöscht",
+  cv_saved: "Lebenslauf bearbeitet", cv_opened: "Lebenslauf geöffnet", cv_photo: "Foto hochgeladen", cv_pdf: "Lebenslauf als PDF geladen",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -96,7 +100,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
             {t.key === "wissen" && (stats?.suggestions ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-gold px-1.5 text-[11px] text-white">{stats?.suggestions}</span>}
           </Link>
         ))}
-        {[c.coaching_type === "job" ? "Lebenslauf" : "Businessplan", c.coaching_type === "job" ? "Stellen" : "Finanzplan", "KI-Assistent"].map((l) => (
+        {[c.coaching_type === "job" ? "Stellen" : "Businessplan", c.coaching_type === "job" ? "Bewerbungen" : "Finanzplan", "KI-Assistent"].map((l) => (
           <span key={l} title="Kommt im nächsten Schritt" className="cursor-default whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-line">{l}</span>
         ))}
       </nav>
@@ -105,6 +109,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
       {tab === "zahlen" && <Zahlen coacheeId={c.id} />}
+      {tab === "lebenslauf" && <CvList coacheeId={c.id} coach />}
       {tab === "aufgaben" && <Tasks coacheeId={c.id} />}
       {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
       {tab === "stammdaten" && (

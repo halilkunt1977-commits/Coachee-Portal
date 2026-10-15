@@ -8,6 +8,9 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
+# Chromium für die PDF-Lebensläufe (Schriften sind eingebettet, deshalb keine Systemschriften nötig)
+RUN apk add --no-cache chromium
+ENV CHROMIUM_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATA_DIR=/app/data

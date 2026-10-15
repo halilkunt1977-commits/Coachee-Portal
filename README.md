@@ -20,6 +20,8 @@ npm run dev                  # http://localhost:3000
 | Bereich des Coachees: Ziel, Aufgaben, Nachrichten, freigegebene Gespräche | `app/mein-bereich` |
 | Kompetenzprofil (Job) bzw. Businessplan-Bausteine und Zahlen (Gründung), KI-Auswertung von Gesprächsnotizen mit Vorschlägen, die der Coach einzeln übernimmt | `app/actions/profil.ts`, `components/akte/Wissen.tsx`, `lib/profile.ts` |
 | Gespräch einsprechen oder aufnehmen, Umwandlung in Text (Aufnahme wird nicht gespeichert) | `components/akte/Recorder.tsx`, `app/api/transkription` |
+| Lebenslauf-Generator: 10 Designs in jeder Farbe, Live-Vorschau, Foto mit Zuschnitt, bisherigen Lebenslauf (PDF/Word) per KI übernehmen, KI-Hilfe pro Feld, Kenntnisse aus dem Kompetenzprofil, mehrere Fassungen, PDF-Export, Coach und Coachee arbeiten am selben Lebenslauf | `app/lebenslauf`, `app/mein-bereich/lebenslauf`, `components/cv`, `lib/cv`, `app/actions/lebenslauf.ts` |
+| Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
 
@@ -34,6 +36,10 @@ npm run dev                  # http://localhost:3000
 - KI (OpenAI): Namen werden vor dem Senden durch Platzhalter ersetzt, Antworten werden bei OpenAI nicht gespeichert
   (`store: false`), jede Anfrage wird mit Tokenzahl in `ai_usage` protokolliert. Gesundheitsthemen landen nur intern
   und nur mit Einwilligung des Coachees.
+- Hochgeladene Dateien liegen AES-256-verschlüsselt im Volume und werden nur nach Prüfung der Akte ausgeliefert.
+- Beim Einlesen eines alten Lebenslaufs werden Name, E-Mail und Telefon vor der KI entfernt und danach lokal eingesetzt.
+  Coachees können die KI begrenzt nutzen (`AI_COACHEE_MONTHLY_LIMIT`, Standard 40 Aufrufe im Monat).
+- Das PDF entsteht in einem Chromium ohne JavaScript und ohne Netzzugriff.
 - Keine Tracker, keine externen Skripte, `noindex` für Suchmaschinen.
 
 ## Einrichten in Coolify
@@ -47,7 +53,7 @@ npm run dev                  # http://localhost:3000
    `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
    alles, nur die KI-Knöpfe fehlen.
-5. **Speicher:** persistentes Volume auf `/app/data` (für hochgeladene Dateien, kommt mit dem Lebenslauf-Upload).
+5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
 6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 
    ```bash
