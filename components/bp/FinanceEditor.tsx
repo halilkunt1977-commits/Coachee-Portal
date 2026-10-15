@@ -318,6 +318,10 @@ function Results({ f, r }: { f: FinanceInput; r: FinanceResult }) {
   const [year, setYear] = useState(0);
   const months = r.months.slice(year * 12, year * 12 + 12);
   const max = Math.max(1, ...r.months.map((m) => Math.abs(m.balance)));
+  // Nulllinie in der Mitte nur, wenn der Kontostand irgendwann negativ wird
+  const neg = r.months.some((m) => m.balance < 0);
+  const pos = r.months.some((m) => m.balance > 0);
+  const half = neg && pos ? 50 : 100;
   return (
     <div className="space-y-6">
       <section className="card space-y-3">
@@ -352,7 +356,10 @@ function Results({ f, r }: { f: FinanceInput; r: FinanceResult }) {
         <div className="flex h-24 items-center gap-[3px]" aria-label="Kontostand über 36 Monate">
           {r.months.map((m, i) => (
             <div key={i} className={`relative h-full flex-1 ${Math.floor(i / 12) === year ? "" : "opacity-40"}`} title={`${monthLabel(f.start, i)}: ${eur(m.balance)}`}>
-              <div className={`absolute inset-x-0 ${m.balance >= 0 ? "bottom-1/2 rounded-t-sm bg-ok" : "top-1/2 rounded-b-sm bg-danger"}`} style={{ height: `${(Math.abs(m.balance) / max) * 50}%` }} />
+              <div
+                className={`absolute inset-x-0 ${m.balance >= 0 ? "rounded-t-sm bg-ok" : "rounded-b-sm bg-danger"}`}
+                style={{ height: `${(Math.abs(m.balance) / max) * half}%`, ...(m.balance >= 0 ? { bottom: `${100 - half === 0 ? 0 : 50}%` } : { top: `${half === 100 ? 0 : 50}%` }) }}
+              />
             </div>
           ))}
         </div>
