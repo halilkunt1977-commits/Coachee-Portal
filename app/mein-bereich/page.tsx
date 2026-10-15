@@ -4,6 +4,7 @@ import { TaskForm } from "@/components/akte/TaskForm";
 import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { ownCoachee, typeLabel } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
+import { categoriesFor, type ProfileItem } from "@/lib/profile";
 import { one, query } from "@/lib/db";
 
 export const metadata = { title: "Mein Bereich" };
@@ -15,14 +16,17 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, used] = await Promise.all([
+  const [meetings, tasks, messages, coach, used, profile] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
     query<Message>("SELECT m.id, m.body, m.created_at, m.author_id, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at", [c.id]),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
     one<{ units: number }>("SELECT COALESCE(sum(units), 0) AS units FROM meetings WHERE coachee_id = $1", [c.id]),
+    // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
+    query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
   ]);
+  const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
   return (
@@ -54,6 +58,27 @@ export default async function MyArea() {
           <MessageForm coacheeId={c.id} />
         </section>
       </div>
+
+      {groups.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="h2">{c.coaching_type === "job" ? "Meine Stärken und Kompetenzen" : "Bausteine für meinen Businessplan"}</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {groups.map(({ cat, list }) => (
+              <div key={cat.key} className="card space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-accent">{cat.label}</p>
+                <ul className="space-y-1.5">
+                  {list.map((i) => (
+                    <li key={i.id}>
+                      <p className="font-medium">{i.title}{i.level && <span className="ml-2 tracking-wider text-accent">{"●".repeat(i.level)}<span className="text-line">{"●".repeat(5 - i.level)}</span></span>}</p>
+                      {i.detail && <p className="text-sm text-muted">{i.detail}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="h2">Unsere Gespräche</h2>

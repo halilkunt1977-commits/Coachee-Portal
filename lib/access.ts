@@ -21,6 +21,7 @@ export type Coachee = {
   goal: string | null;
   internal_note: string | null;
   consent_at: string | null;
+  consent_special_at: string | null;
   archived_at: string | null;
   created_at: string;
 };
