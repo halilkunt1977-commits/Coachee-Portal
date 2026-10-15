@@ -5,6 +5,8 @@ import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { ownCoachee, typeLabel } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { categoriesFor, type ProfileItem } from "@/lib/profile";
+import Link from "next/link";
+import { SECTIONS, normalizeSections, sectionDone } from "@/lib/bp/sections";
 import { one, query } from "@/lib/db";
 
 export const metadata = { title: "Mein Bereich" };
@@ -16,7 +18,7 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, used, profile] = await Promise.all([
+  const [meetings, tasks, messages, coach, used, profile, plan] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
@@ -25,7 +27,10 @@ export default async function MyArea() {
     one<{ units: number }>("SELECT COALESCE(sum(units), 0) AS units FROM meetings WHERE coachee_id = $1", [c.id]),
     // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
     query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
+    c.coaching_type === "gruendung" ? one<{ sections: unknown }>("SELECT sections FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
   ]);
+  const sections = normalizeSections(plan?.sections);
+  const written = SECTIONS.filter((s) => sectionDone(sections[s.key])).length;
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
@@ -40,6 +45,20 @@ export default async function MyArea() {
         <div className="card bg-tint/60">
           <p className="text-xs font-semibold uppercase tracking-wide text-accent">Unser Ziel</p>
           <p className="mt-1 whitespace-pre-wrap text-lg">{c.goal}</p>
+        </div>
+      )}
+
+      {c.coaching_type === "gruendung" && (
+        <div className="card flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1 basis-60">
+            <h2 className="h2">Mein Businessplan</h2>
+            <p className="text-sm text-muted">{written} von {SECTIONS.length} Abschnitten geschrieben</p>
+            <div className="mt-2 h-1.5 max-w-sm rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok" style={{ width: `${(written / SECTIONS.length) * 100}%` }} /></div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/mein-bereich/finanzplan" className="btn-ghost">Finanzplan</Link>
+            <Link href="/mein-bereich/businessplan" className="btn">Weiterschreiben</Link>
+          </div>
         </div>
       )}
 

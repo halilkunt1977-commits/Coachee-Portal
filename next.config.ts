@@ -12,7 +12,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["pg", "playwright-core", "unpdf", "mammoth"],
+  serverExternalPackages: ["pg", "playwright-core", "unpdf", "mammoth", "exceljs"],
   // Fotos und alte Lebensläufe werden über Server Actions hochgeladen
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
   turbopack: {
