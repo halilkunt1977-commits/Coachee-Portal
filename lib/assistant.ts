@@ -1,4 +1,5 @@
 import "server-only";
+import { statusLabel } from "./jobs/shared";
 import { notFound } from "next/navigation";
 import { coacheeFor, type Coachee } from "./access";
 import { pseudonymize } from "./ai";
@@ -78,7 +79,7 @@ export const STARTERS = {
 /** Was der Assistent über die Akte weiß. Gesundheit und interne Notizen des Coachs gehen nie an die KI. */
 export async function assistantInstructions(user: User, c: Coachee) {
   const coach = user.role === "coach";
-  const [profile, finance, meetings, cv, planRow] = await Promise.all([
+  const [profile, finance, meetings, cv, planRow, apps] = await Promise.all([
     query<{ category: string; title: string; detail: string; level: number | null }>(
       "SELECT category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' AND (NOT internal OR $2) ORDER BY category, created_at",
       [c.id, coach],
@@ -90,6 +91,12 @@ export async function assistantInstructions(user: User, c: Coachee) {
     ),
     one<{ data: unknown }>("SELECT data FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 1", [c.id]),
     c.coaching_type === "gruendung" ? one<{ title: string; sections: unknown; finance: unknown }>("SELECT title, sections, finance FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
+    c.coaching_type === "job"
+      ? query<{ title: string; employer: string; location: string; status: string; applied_on: string | null; next_on: string | null; next_note: string }>(
+          "SELECT title, employer, location, status, applied_on::text, next_on::text, next_note FROM applications WHERE coachee_id = $1 AND status <> 'verworfen' ORDER BY updated_at DESC LIMIT 25",
+          [c.id],
+        )
+      : Promise.resolve([]),
   ]);
   const plan = planRow ? { title: planRow.title, sections: normalizeSections(planRow.sections), finance: normalizeFinance(planRow.finance) } : null;
 
@@ -118,6 +125,10 @@ export async function assistantInstructions(user: User, c: Coachee) {
     for (const e of d.education) lines.push(`- Ausbildung: ${e.degree}, ${e.school} (${e.end || e.start})`);
     if (d.skills.length) lines.push(`Kenntnisse: ${d.skills.map((s) => s.name).join(", ")}`);
     if (d.languages.length) lines.push(`Sprachen: ${d.languages.map((l) => `${l.name} ${l.level}`).join(", ")}`);
+  }
+  if (apps.length) {
+    lines.push("\nStellen und Bewerbungen (Stand im Bewerbungs-Tracker):");
+    for (const a of apps) lines.push(`- ${a.title}${a.employer ? `, ${a.employer}` : ""}${a.location ? ` (${a.location})` : ""}: ${statusLabel(a.status)}${a.applied_on ? `, beworben am ${a.applied_on}` : ""}${a.next_on ? `, nächster Schritt ${a.next_on}${a.next_note ? ` ${a.next_note}` : ""}` : ""}`);
   }
   if (meetings.length) {
     lines.push("\nLetzte Gespräche (neueste zuerst):");
