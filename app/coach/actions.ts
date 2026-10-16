@@ -6,7 +6,7 @@ import { audit, requireCoach } from "@/lib/auth";
 import { query, transaction } from "@/lib/db";
 import { dateOrNull, isEmail, numberOrNull, optional, text, type FormState } from "@/lib/forms";
 import { createInvite } from "@/lib/invites";
-import { inviteMail, sendMail } from "@/lib/mail";
+import { inviteMail, mailProblem, sendMail } from "@/lib/mail";
 
 function readCoachee(fd: FormData) {
   const coaching_type = fd.get("coaching_type") === "gruendung" ? "gruendung" : "job";
@@ -30,11 +30,13 @@ function readCoachee(fd: FormData) {
 
 async function sendInvite(coach: { name: string }, c: { user_id: string; first_name: string; email: string }) {
   const link = await createInvite(c.user_id, "invite");
+  let problem: string | null = null;
   const sent = await sendMail({ to: c.email, ...inviteMail(c.first_name, coach.name, link) }).catch((e) => {
     console.error("[mail] invite", e);
+    problem = mailProblem(e);
     return false;
   });
-  return { link, sent };
+  return { link, sent, problem: sent ? null : (problem ?? "aus") };
 }
 
 export async function createCoachee(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -62,9 +64,9 @@ export async function createCoachee(_prev: FormState, fd: FormData): Promise<For
   const invite = fd.get("invite") === "on";
   let q = "";
   if (invite) {
-    const { sent } = await sendInvite(coach, { user_id: created.user_id, first_name: c.first_name, email: c.email });
+    const { sent, problem } = await sendInvite(coach, { user_id: created.user_id, first_name: c.first_name, email: c.email });
     await audit(coach.id, "invite_sent", created.id, { mail: sent });
-    q = sent ? "?eingeladen=1" : "?eingeladen=link";
+    q = sent ? "?eingeladen=1" : `?eingeladen=${problem}`;
   }
   redirect(`/coach/coachees/${created.id}${q}`);
 }
@@ -102,9 +104,9 @@ export async function resendInvite(coacheeId: string) {
   const coach = await requireCoach();
   const c = await coacheeFor(coach, coacheeId);
   if (!c.user_id) return;
-  const { sent } = await sendInvite(coach, { user_id: c.user_id, first_name: c.first_name, email: c.email });
+  const { sent, problem } = await sendInvite(coach, { user_id: c.user_id, first_name: c.first_name, email: c.email });
   await audit(coach.id, "invite_sent", coacheeId, { mail: sent });
-  redirect(`/coach/coachees/${coacheeId}?tab=stammdaten&eingeladen=${sent ? "1" : "link"}`);
+  redirect(`/coach/coachees/${coacheeId}?tab=stammdaten&eingeladen=${sent ? "1" : problem}`);
 }
 
 export async function inviteLink(coacheeId: string) {
