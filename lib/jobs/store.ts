@@ -5,6 +5,7 @@ import { normalizeCv } from "../cv/types";
 import { one, query } from "../db";
 import { categoryLabel } from "../profile";
 import { ANGEBOTSART, ARBEITSZEIT, UMKREIS, type Application, type JobQuery, type SavedSearch } from "./shared";
+import { cleanWas } from "./ba";
 
 export const APP_COLUMNS = `a.id, a.refnr, a.title, a.employer, a.location, a.url, a.published_on::text, a.status, a.channel, a.applied_on::text, a.next_on::text,
   a.next_note, a.contact, a.note, a.reason, a.history, a.created_at, a.updated_at, p.name AS proposed_by_name`;
@@ -76,5 +77,5 @@ export async function defaultQuery(c: Coachee): Promise<JobQuery> {
     one<{ data: unknown }>("SELECT data FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 1", [c.id]),
   ]);
   const d = cv ? normalizeCv(cv.data) : null;
-  return normalizeQuery({ was: wish?.title ?? d?.personal.headline ?? "", wo: d?.personal.city || d?.personal.zip || "", umkreis: 25 });
+  return normalizeQuery({ was: cleanWas(wish?.title ?? d?.personal.headline ?? ""), wo: d?.personal.city || d?.personal.zip || "", umkreis: 25 });
 }

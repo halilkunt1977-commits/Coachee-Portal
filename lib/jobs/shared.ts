@@ -15,6 +15,7 @@ export type Job = {
   start: string | null;
   url: string;
   externalUrl: string | null;
+  homeoffice?: boolean;
 };
 
 export type Fit = { level: "hoch" | "mittel" | "gering"; reason: string };
