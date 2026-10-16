@@ -1,6 +1,6 @@
 # Gründarium Portal
 
-Das Portal für Coachees von Gründarium unter **portal.gründarium.de**: jeder Coachee hat einen eigenen Zugang,
+Das Portal für Coachees von Gründarium unter **portal.gruendarium.de**: jeder Coachee hat einen eigenen Zugang,
 der Coach sieht alle Akten. Next.js 16 (App Router), Tailwind 4, eigene PostgreSQL-Datenbank, Betrieb über Coolify.
 
 ```bash
@@ -22,6 +22,9 @@ npm run dev                  # http://localhost:3000
 | Gespräch einsprechen oder aufnehmen, Umwandlung in Text (Aufnahme wird nicht gespeichert) | `components/akte/Recorder.tsx`, `app/api/transkription` |
 | Lebenslauf-Generator: 10 Designs in jeder Farbe, Live-Vorschau, Foto mit Zuschnitt, bisherigen Lebenslauf (PDF/Word) per KI übernehmen, KI-Hilfe pro Feld, Kenntnisse aus dem Kompetenzprofil, mehrere Fassungen, PDF-Export, Coach und Coachee arbeiten am selben Lebenslauf | `app/lebenslauf`, `app/mein-bereich/lebenslauf`, `components/cv`, `lib/cv`, `app/actions/lebenslauf.ts` |
 | KI-Assistent pro Coachee: Chat, der Ziel, Kompetenzprofil, Zahlen, Lebenslauf und letzte Gespräche kennt, Startvorschläge für Job und Gründung, Antworten live, kopieren oder als Nachricht senden. Der Coach sieht alle Unterhaltungen der Akte, der Coachee nur seine | `app/api/assistent`, `lib/assistant.ts`, `components/assistant` |
+| Businessplan (Gründung): 10 Abschnitte nach den Erwartungen von Fachstelle und Bank, Leitfragen, Bausteine aus den Gesprächen zum Einfügen, KI-Entwurf pro Abschnitt, automatisches Speichern pro Abschnitt mit Konfliktanzeige, Fortschritt | `components/bp/PlanEditor.tsx`, `lib/bp/sections.ts`, `app/actions/businessplan.ts` |
+| Finanzplan (Gründung): Kapitalbedarf, Finanzierung mit Darlehen und Zuschüssen, Umsatz mit Anlaufphase, laufende Kosten, privater Bedarf; Rentabilität über 3 Jahre und Liquidität über 36 Monate live gerechnet, Hinweise auf Lücken; beim ersten Öffnen aus den Zahlen der Gespräche vorbelegt | `components/bp/FinanceEditor.tsx`, `lib/bp/finance.ts`, `lib/bp/store.ts` |
+| Excel-Export des Finanzplans (Summen und Ergebnisse als Formeln) und PDF des ganzen Businessplans mit Deckblatt, Inhalt, Finanzteil und Liquidität im Querformat | `app/api/businessplan/[id]/excel`, `app/api/businessplan/[id]/pdf`, `lib/bp/excel.ts`, `lib/bp/render.ts` |
 | Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
@@ -49,8 +52,8 @@ npm run dev                  # http://localhost:3000
 1. **Datenbank:** Neue Ressource → PostgreSQL 16, Name z. B. `portal-db`. Unter „Backups“ tägliche Sicherung auf einen
    S3-Speicher außerhalb des Servers einschalten (z. B. Hetzner Storage Box oder Object Storage).
 2. **App:** Neue Ressource → Anwendung aus GitHub `coachee-portal`, Build Pack **Dockerfile**, Port **3000**.
-3. **Domain:** `https://portal.xn--grndarium-r9a.de` (das ist `portal.gründarium.de` in der Schreibweise, die DNS und
-   Zertifikate brauchen). Der DNS-Eintrag `portal` muss auf den Server zeigen.
+3. **Domain:** `https://portal.gruendarium.de`. Die Subdomain ist beim Domain-Anbieter angelegt; ihr A-Eintrag muss auf
+   den Coolify-Server zeigen (dieselbe IP wie gruendarium.de, wenn die Seite schon dort läuft).
 4. **Umgebungsvariablen** wie in `.env.example`. `DATABASE_URL` ist die interne Verbindungs-URL aus Schritt 1.
    `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft

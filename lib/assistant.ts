@@ -4,6 +4,8 @@ import { coacheeFor, type Coachee } from "./access";
 import { pseudonymize } from "./ai";
 import type { User } from "./auth";
 import { one, query } from "./db";
+import { financeSummary, normalizeFinance } from "./bp/finance";
+import { SECTIONS, normalizeSections } from "./bp/sections";
 import { normalizeCv } from "./cv/types";
 import { PERIOD_LABEL, categoryLabel, euro, type FinanceItem } from "./profile";
 
@@ -76,7 +78,7 @@ export const STARTERS = {
 /** Was der Assistent über die Akte weiß. Gesundheit und interne Notizen des Coachs gehen nie an die KI. */
 export async function assistantInstructions(user: User, c: Coachee) {
   const coach = user.role === "coach";
-  const [profile, finance, meetings, cv] = await Promise.all([
+  const [profile, finance, meetings, cv, planRow] = await Promise.all([
     query<{ category: string; title: string; detail: string; level: number | null }>(
       "SELECT category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' AND (NOT internal OR $2) ORDER BY category, created_at",
       [c.id, coach],
@@ -87,7 +89,9 @@ export async function assistantInstructions(user: User, c: Coachee) {
       [c.id, coach],
     ),
     one<{ data: unknown }>("SELECT data FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 1", [c.id]),
+    c.coaching_type === "gruendung" ? one<{ title: string; sections: unknown; finance: unknown }>("SELECT title, sections, finance FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
   ]);
+  const plan = planRow ? { title: planRow.title, sections: normalizeSections(planRow.sections), finance: normalizeFinance(planRow.finance) } : null;
 
   const lines: string[] = [];
   lines.push(`Coaching-Art: ${c.coaching_type === "job" ? "Jobcoaching (berufliche Neuorientierung, Bewerbung)" : "Gründungscoaching (Weg in die Selbstständigkeit, Businessplan)"}`);
@@ -99,6 +103,12 @@ export async function assistantInstructions(user: User, c: Coachee) {
   if (finance.length) {
     lines.push("\nZahlen für den Finanzplan:");
     for (const f of finance) lines.push(`- ${f.section}: ${f.label} ${euro(f.amount)} ${PERIOD_LABEL[f.period]}${f.note ? ` (${f.note})` : ""}`);
+  }
+  if (plan) {
+    const written = SECTIONS.filter((s) => plan.sections[s.key].text.trim());
+    lines.push(`\nBusinessplan „${plan.title || "ohne Titel"}“: ${written.length} von ${SECTIONS.length} Abschnitten begonnen.`);
+    for (const s of written) lines.push(`## ${s.title}\n${plan.sections[s.key].text.trim().slice(0, 900)}`);
+    lines.push("\n" + financeSummary(plan.finance));
   }
   if (cv) {
     const d = normalizeCv(cv.data);
