@@ -32,11 +32,13 @@ import StammdatenForm from "./StammdatenForm";
 import { progressFor, type Links } from "@/lib/dashboard/progress";
 import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
 import type { Coachee } from "@/lib/access";
+import { AkteTermine } from "@/components/calendar/AkteTermine";
 
 type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null };
 
 const TABS = [
   { key: "uebersicht", label: "Übersicht", group: "ueberblick" },
+  { key: "termine", label: "Termine", group: "coaching" },
   { key: "gespraeche", label: "Gespräche", group: "coaching" },
   { key: "anwesenheit", label: "Anwesenheit", group: "coaching" },
   { key: "aufgaben", label: "Aufgaben", group: "coaching" },
@@ -81,6 +83,7 @@ const actionLabel: Record<string, string> = {
   attendance_from_document: "Anwesenheit aus Dokument übernommen", coaching_closed: "Coaching abgeschlossen", coaching_reopened: "Coaching wieder aufgenommen",
   attendance_updated: "Anwesenheit geändert", attendance_moved: "Anwesenheit verschoben",
   coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
+  appointment_created: "Termin angelegt", appointment_updated: "Termin geändert", appointment_cancelled: "Termin abgesagt", appointment_deleted: "Termin gelöscht",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -154,6 +157,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
           </div>
         </div>
         <div className="relative mt-5 flex flex-wrap gap-2">
+          <Link href="?tab=termine&neu=1" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="calendar" className="size-4" />Termin planen</Link>
           <Link href="?tab=nachrichten" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="chat" className="size-4" />Nachricht schreiben</Link>
           <Link href="?tab=gespraeche" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="plus" className="size-4" />Gespräch erfassen</Link>
           <Link href="?tab=anwesenheit" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="clock" className="size-4" />Anwesenheit</Link>
@@ -201,6 +205,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
 
 
       {tab === "uebersicht" && <Overview coachee={c} stats={stats} />}
+      {tab === "termine" && <AkteTermine coach={coach} coachee={c} sp={sp} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} oldestFirst={sp.sortierung === "alt"} />}
       {tab === "dokumente" && <DocumentsPanel coachee={c} />}

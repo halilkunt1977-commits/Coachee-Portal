@@ -16,6 +16,9 @@ import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/
 import { greeting, todayLong } from "@/components/dashboard/Hero";
 import { Ring } from "@/components/dashboard/Charts";
 import { Icon } from "@/components/shell/icons";
+import { TeamsMark } from "@/components/calendar/AppointmentDetail";
+import { dayMedium, KINDS, msUntil, relativeDay, todayBerlin } from "@/lib/calendar/dates";
+import { upcomingAppointments, type Appointment } from "@/lib/calendar/store";
 
 function NextStep({ label, hint, href }: { label: string; hint: string; href: string }) {
   return (
@@ -31,6 +34,31 @@ function NextStep({ label, hint, href }: { label: string; hint: string; href: st
   );
 }
 
+function NextAppointment({ a }: { a: Appointment }) {
+  const today = todayBerlin();
+  const soon = msUntil(a.starts_at) < 30 * 60_000;
+  return (
+    <div className="glass space-y-3 p-4">
+      <Link href={`/mein-bereich/kalender?datum=${a.day}&termin=${a.id}`} className="flex items-center gap-3">
+        <span className={`grid w-14 shrink-0 place-items-center rounded-xl py-1.5 text-center leading-none ${a.day === today ? "bg-gradient-to-br from-[#e2bd7d] to-gold text-night" : "bg-white/10"}`}>
+          <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{relativeDay(a.day, today).split(" ")[0].replace(",", "")}</span>
+          <span className="mt-1 text-lg font-bold tabular-nums">{a.start}</span>
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">Nächster Termin</span>
+          <span className="block truncate font-semibold">{a.title}</span>
+          <span className="block truncate text-xs text-white/60">{KINDS[a.kind].label}{a.day !== today ? ` · ${dayMedium(a.day)}` : ""}</span>
+        </span>
+      </Link>
+      {a.join_url && (
+        <a href={a.join_url} target="_blank" rel="noreferrer" className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition hover:brightness-110 ${soon ? "bg-[#5b5fc7] shadow-[0_8px_20px_-8px_#5b5fc7]" : "bg-white/10"}`}>
+          <TeamsMark /> {soon ? "Jetzt teilnehmen" : "Teams-Link"}
+        </a>
+      )}
+    </div>
+  );
+}
+
 export const metadata = { title: "Mein Bereich" };
 
 type SharedMeeting = { id: string; held_on: string; units: number; title: string; notes: string; results: string; next_steps: string };
@@ -40,7 +68,7 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, profile, docs, progress] = await Promise.all([
+  const [meetings, tasks, messages, coach, profile, docs, progress, [nextAppt]] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
@@ -51,6 +79,7 @@ export default async function MyArea() {
     // Nur Dokumente, die der Coach freigegeben hat
     query<{ id: string; file_id: string; title: string; category: string; created_at: string }>("SELECT id, file_id, title, category, created_at FROM documents WHERE coachee_id = $1 AND shared ORDER BY created_at DESC", [c.id]),
     progressFor(c),
+    upcomingAppointments(user, 1),
   ]);
   const links: Links = {
     cv: "/mein-bereich/lebenslauf",
@@ -108,12 +137,13 @@ export default async function MyArea() {
               <NextStep label={next.action} hint={next.hint} href={nextHref} />
             )}
             <div className="flex flex-wrap gap-2 text-sm">
-              {openTasks > 0 && <a href="#aufgaben" className="rounded-full bg-white/10 px-3 py-1 font-medium transition hover:bg-white/20">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</a>}
+              {openTasks > 0 && <Link href="/mein-bereich/aufgaben" className="rounded-full bg-white/10 px-3 py-1 font-medium transition hover:bg-white/20">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</Link>}
               {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-gold px-3 py-1 font-semibold text-night transition hover:brightness-110">{progress.jobs?.proposals} neue Stelle{progress.jobs?.proposals === 1 ? "" : "n"} für dich</Link>}
               {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-white px-3 py-1 font-semibold text-danger">Heute nachfassen: {progress.jobs?.due}</Link>}
             </div>
           </div>
           <div className="space-y-3">
+            {nextAppt && <NextAppointment a={nextAppt} />}
             <div className="glass p-4">
               <Suspense fallback={<WeatherSkeleton />}>
                 <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder="Dein Wohnort" />} />
