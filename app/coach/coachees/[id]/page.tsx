@@ -10,6 +10,7 @@ import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
 import { AnalyzeButton, FinanceItemForm, ProfileItemForm, SuggestionCard } from "@/components/akte/Wissen";
 import { aiEnabled } from "@/lib/ai";
+import { MAIL_PROBLEM_TEXT } from "@/lib/mail";
 import { FINANCE_SECTIONS, PERIOD_LABEL, categoriesFor, euro, monthly, type FinanceItem, type ProfileItem } from "@/lib/profile";
 import { Empty, Notice, formatDate, formatDateTime, formatUnits } from "@/components/ui";
 import { coacheeFor, fullName, fundingLabel, statusLabel, typeLabel } from "@/lib/access";
@@ -106,7 +107,11 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       </div>
 
       {sp.eingeladen === "1" && <Notice tone="ok">Die Einladung ist per E-Mail an {c.email} unterwegs.</Notice>}
-      {sp.eingeladen === "link" && <Notice tone="error">Die E-Mail konnte nicht verschickt werden (SMTP nicht eingerichtet). Erzeuge unter „Stammdaten“ einen Link zum Weitergeben.</Notice>}
+      {typeof sp.eingeladen === "string" && sp.eingeladen !== "1" && (
+        <Notice tone="error">
+          {MAIL_PROBLEM_TEXT[sp.eingeladen === "link" ? "aus" : sp.eingeladen] ?? MAIL_PROBLEM_TEXT.sonst} Bis dahin unter „Stammdaten“ einen Einladungslink erzeugen und selbst weitergeben.
+        </Notice>
+      )}
 
       <nav className="flex gap-1 overflow-x-auto border-b border-line-soft">
         {tabs.map((t) => (

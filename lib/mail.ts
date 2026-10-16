@@ -21,6 +21,25 @@ export function portalUrl(path = "") {
   }
 }
 
+/** Warum eine Mail nicht rausging, als Kürzel für die Oberfläche (die vollständige Meldung steht im Server-Log). */
+export function mailProblem(e: unknown): "aus" | "anmeldung" | "verbindung" | "absender" | "sonst" {
+  if (!mailEnabled()) return "aus";
+  const msg = String((e as Error)?.message ?? e);
+  const code = (e as { code?: string })?.code ?? "";
+  if (/„5(35|34|30)/.test(msg) || /erwartet 235/.test(msg)) return "anmeldung";
+  if (/ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|ECONNRESET|Zeitüberschreitung/.test(code + msg)) return "verbindung";
+  if (/erwartet 250/.test(msg) && /„5(50|53|54)/.test(msg)) return "absender";
+  return "sonst";
+}
+
+export const MAIL_PROBLEM_TEXT: Record<string, string> = {
+  aus: "Der E-Mail-Versand ist nicht eingerichtet: In Coolify fehlen SMTP_HOST, SMTP_USER oder SMTP_PASS.",
+  anmeldung: "Der Mailserver hat die Anmeldung abgelehnt. SMTP_USER muss die komplette E-Mail-Adresse sein und SMTP_PASS das Passwort genau dieses Postfachs.",
+  verbindung: "Der Mailserver war nicht erreichbar. Stimmen SMTP_HOST (Strato: smtp.strato.de) und SMTP_PORT (465)? Manche Server sperren ausgehende Mail-Ports.",
+  absender: "Der Mailserver hat Absender oder Empfänger abgelehnt. MAIL_FROM muss zur Adresse in SMTP_USER passen.",
+  sonst: "Die E-Mail konnte nicht verschickt werden. Die genaue Meldung steht im Log der App in Coolify unter „[mail]“.",
+};
+
 export async function sendMail({ to, subject, text, html }: { to: string; subject: string; text: string; html: string }) {
   if (!mailEnabled()) {
     console.warn(`[mail] SMTP nicht eingerichtet, Mail an ${to} nicht verschickt: ${subject}`);
