@@ -105,6 +105,7 @@ export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
   // ---------- Vorschau ----------
   const deferred = useDeferredValue(data);
   const photoUrl = photoId ? `/api/dateien/${photoId}` : null;
+  const [layout, setLayout] = useState({ pages: 1, fit: 1 });
   const html = useMemo(() => renderCvHtml(deferred, { template, color, photo: photoUrl, fontCss: PREVIEW_FONTS }), [deferred, template, color, photoUrl]);
 
   // ---------- Hilfen zum Ändern ----------
@@ -361,8 +362,11 @@ export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
         </div>
 
         <div className={`lg:sticky lg:top-20 ${view === "preview" ? "" : "hidden lg:block"}`}>
-          <CvPreview html={html} />
-          <p className="mt-2 text-center text-xs text-muted">Seitenumbrüche sind ungefähr. Das PDF zeigt das genaue Ergebnis.</p>
+          <CvPreview html={html} onLayout={setLayout} />
+          <p className="mt-2 text-center text-xs text-muted">
+            {layout.pages} {layout.pages === 1 ? "Seite" : "Seiten"}, Umbrüche wie im PDF.
+            {layout.fit < 1 && ` Schrift und Abstände sind auf ${Math.round(layout.fit * 100)} % verkleinert, damit kein Rest allein auf einer Seite steht.`}
+          </p>
         </div>
       </div>
 

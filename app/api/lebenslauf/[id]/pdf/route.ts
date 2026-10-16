@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/lebensl
   const html = renderCvHtml(cv.data, { template: cv.template, color: cv.color, photo: await photoDataUri(cv.photo_file_id), fontCss: cvFontCss() });
   let pdf: Uint8Array;
   try {
-    pdf = await htmlToPdf(html);
+    pdf = await htmlToPdf(html, { paginate: true });
   } catch (e) {
     console.error("PDF-Erzeugung fehlgeschlagen", e);
     return new NextResponse("Das PDF konnte gerade nicht erzeugt werden. Bitte später noch einmal versuchen.", { status: 500 });
