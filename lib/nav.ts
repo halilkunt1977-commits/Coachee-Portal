@@ -6,5 +6,6 @@ export const coachLinks = [
 export const coacheeLinks = [
   { href: "/mein-bereich", label: "Mein Bereich" },
   { href: "/mein-bereich/lebenslauf", label: "Lebenslauf" },
+  { href: "/mein-bereich/assistent", label: "KI-Assistent" },
   { href: "/datenschutz", label: "Datenschutz" },
 ];

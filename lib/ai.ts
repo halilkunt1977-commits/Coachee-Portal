@@ -69,3 +69,31 @@ export async function transcribe(file: File, usage: Usage) {
   await logUsage(usage, model);
   return result.text;
 }
+
+/** Antwort Stück für Stück (für den Chat). Liefert Textteile, protokolliert am Ende den Verbrauch. */
+export async function* streamText(opts: Usage & { instructions: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number; signal?: AbortSignal }) {
+  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  const model = MODEL();
+  const stream = await openai().responses.create(
+    {
+      model,
+      instructions: opts.instructions,
+      input: opts.messages.map((m) => ({ role: m.role, content: m.content })),
+      reasoning: { effort: "low" },
+      max_output_tokens: opts.maxTokens ?? 4000,
+      store: false,
+      stream: true,
+    },
+    { signal: opts.signal },
+  );
+  let usage: { input_tokens?: number; output_tokens?: number } | undefined;
+  try {
+    for await (const event of stream) {
+      if (event.type === "response.output_text.delta") yield event.delta;
+      else if (event.type === "response.completed") usage = event.response.usage ?? undefined;
+      else if (event.type === "error") throw new AiError("Die KI hat die Antwort abgebrochen. Bitte noch einmal versuchen.");
+    }
+  } finally {
+    await logUsage(opts, model, usage?.input_tokens, usage?.output_tokens);
+  }
+}
