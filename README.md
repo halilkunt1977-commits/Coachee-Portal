@@ -62,7 +62,7 @@ npm run dev                  # http://localhost:3000
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
    alles, nur die KI-Knöpfe fehlen.
    Für die Anwesenheit aus Erfolgspfad-Mails `IMAP_USER` (komplette Mailadresse des Postfachs, z. B. kunt@kuntsolutions.de) und
-   `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (INBOX), `ATTENDANCE_FROM` (erfolgspfad).
+   `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (Standard: alle Ordner außer Papierkorb, Spam, Gesendet, Entwürfe), `ATTENDANCE_SINCE` (erster Abruf ab diesem Datum, Standard 2026-01-01), `ATTENDANCE_FROM` (erfolgspfad).
 5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
 6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 

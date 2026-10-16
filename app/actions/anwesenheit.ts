@@ -141,10 +141,10 @@ export async function pasteMail(_prev: FormState, fd: FormData): Promise<FormSta
   return { ok: "Übernommen, aber keinem Coachee sicher zuzuordnen. Bitte unten auswählen." };
 }
 
-export async function fetchMailboxNow(): Promise<FormState> {
+export async function fetchMailboxNow(full: boolean): Promise<FormState> {
   await requireCoach();
   if (!imapConfigured()) return { error: "Der Postfach-Abruf ist noch nicht eingerichtet." };
-  const r = await importFromMailbox();
+  const r = await importFromMailbox({ full });
   refresh();
   if (!r.ok) return { error: r.error };
   return { ok: r.neu ? `${r.neu} neue Mail${r.neu > 1 ? "s" : ""}, davon ${r.zugeordnet} automatisch zugeordnet.` : "Keine neuen Anwesenheits-Mails." };
