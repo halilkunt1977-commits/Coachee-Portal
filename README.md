@@ -28,6 +28,8 @@ npm run dev                  # http://localhost:3000
 | Stellen (Job): Live-Suche in der Jobbörse der Bundesagentur, gespeicherte Suchen pro Coachee, KI schlägt Suchen aus dem Kompetenzprofil vor und schätzt die Passung der Treffer ein, Coach schlägt Stellen mit Begründung vor, Coachee merkt sie sich, Treffer ausblenden. An die Jobbörse gehen nur Suchbegriffe | `components/jobs/JobSearch.tsx`, `lib/jobs/ba.ts`, `app/actions/stellen.ts` |
 | Bewerbungs-Tracker (Job): Vorschläge, gemerkt, beworben, Gespräch, Zusage, Absage; Nachfassen mit Datum, Ansprechperson, Notizen, Verlauf; Nachweis der Eigenbemühungen als PDF und Excel | `components/jobs/Tracker.tsx`, `lib/jobs/export.ts`, `app/api/bewerbungen/[id]` |
 | Anwesenheit: Termine mit UE und Rest-UE pro Coachee. Erfolgspfad-Mails werden alle 15 Minuten per IMAP aus dem Postfach gelesen (nur lesend) und dem Coachee nach Namen zugeordnet; Unklares landet unter „Anwesenheit“ zum Zuordnen, Mails lassen sich auch einfügen. AVOCONS und andere Träger: selbst eintragen. Abgleich gerechneter Rest gegen Rest laut Träger | `lib/attendance`, `app/coach/anwesenheit`, `components/attendance`, `app/actions/anwesenheit.ts`, `instrumentation.ts` |
+| Kalender (Monat, Woche, Liste) für Coach und Coachee: Teams-, Büro-, Telefon- und Vor-Ort-Termine, fällige Aufgaben, beim Coach auch Outlook-Termine. Einladung per Kalendermail (Zusagen in Outlook, Gmail, Handy), Änderungen und Absagen gehen automatisch hinterher; mit Microsoft-Anbindung legt das Portal Termine in Outlook an und erstellt Teams-Links selbst. Abo-Link für den eigenen Kalender, Reiter „Termine“ in der Akte | `app/coach/kalender`, `app/mein-bereich/kalender`, `lib/calendar`, `components/calendar`, `app/actions/termine.ts`, `app/api/kalender`, `app/api/termine` |
+| Aufgaben für Coach (eigene und die aller Coachees) und Coachee, nach Dringlichkeit sortiert | `app/coach/aufgaben`, `app/mein-bereich/aufgaben`, `components/tasks`, `app/actions/aufgaben.ts` |
 | Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
@@ -63,6 +65,12 @@ npm run dev                  # http://localhost:3000
    alles, nur die KI-Knöpfe fehlen.
    Für die Anwesenheit aus Erfolgspfad-Mails `IMAP_USER` (komplette Mailadresse des Postfachs, z. B. kunt@kuntsolutions.de) und
    `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (Standard: alle Ordner außer Papierkorb, Spam, Gesendet, Entwürfe), `ATTENDANCE_SINCE` (erster Abruf ab diesem Datum, Standard 2026-01-01), `ATTENDANCE_FROM` (erfolgspfad).
+   Für Teams und Outlook (optional) eine App-Registrierung in Microsoft Entra: [entra.microsoft.com](https://entra.microsoft.com) →
+   App-Registrierungen → Neue Registrierung (Name „Gründarium Portal“, nur dieses Verzeichnis). Unter „API-Berechtigungen“
+   → Microsoft Graph → **Anwendungsberechtigungen** → `Calendars.ReadWrite` hinzufügen und „Administratorzustimmung
+   erteilen“. Unter „Zertifikate & Geheimnisse“ einen geheimen Clientschlüssel anlegen. Dann in Coolify `MS_TENANT_ID`
+   (Verzeichnis-ID), `MS_CLIENT_ID` (Anwendungs-ID), `MS_CLIENT_SECRET` (Wert des Schlüssels) und `MS_CALENDAR_USER`
+   (die Microsoft-365-Mailadresse, in deren Kalender die Termine sollen). Das Postfach braucht eine Teams-Lizenz.
 5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
 6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 

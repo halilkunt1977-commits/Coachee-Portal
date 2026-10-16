@@ -40,7 +40,7 @@ export const MAIL_PROBLEM_TEXT: Record<string, string> = {
   sonst: "Die E-Mail konnte nicht verschickt werden. Die genaue Meldung steht im Log der App in Coolify unter „[mail]“.",
 };
 
-export async function sendMail({ to, subject, text, html }: { to: string; subject: string; text: string; html: string }) {
+export async function sendMail({ to, subject, text, html, replyTo, calendar }: { to: string; subject: string; text: string; html: string; replyTo?: string | null; calendar?: { method: "REQUEST" | "CANCEL"; content: string } | null }) {
   if (!mailEnabled()) {
     console.warn(`[mail] SMTP nicht eingerichtet, Mail an ${to} nicht verschickt: ${subject}`);
     return false;
@@ -54,15 +54,17 @@ export async function sendMail({ to, subject, text, html }: { to: string; subjec
     pass: process.env.SMTP_PASS!,
     from: ascii(process.env.MAIL_FROM || `Gründarium Portal <${process.env.SMTP_USER}>`),
     to: [ascii(to)],
+    replyTo: replyTo ? ascii(replyTo) : null,
     subject,
     text,
     html,
+    calendar,
   });
   return true;
 }
 
 const NAVY = "#1f3a5f";
-function layout(title: string, paragraphs: string[], button?: { label: string; href: string }) {
+export function layout(title: string, paragraphs: string[], button?: { label: string; href: string }) {
   const p = paragraphs.map((t) => `<p style="margin:0 0 14px;line-height:1.55">${esc(t)}</p>`).join("");
   const b = button
     ? `<p style="margin:22px 0"><a href="${esc(button.href)}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">${esc(button.label)}</a></p><p style="font-size:12px;color:#6f6a60;word-break:break-all">Falls der Knopf nicht geht: ${esc(button.href)}</p>`

@@ -3,7 +3,7 @@ import os from "node:os";
 import tls from "node:tls";
 
 // Minimaler SMTP-Client ohne Abhängigkeiten (z. B. Strato: smtp.strato.de, Port 465 = SSL, 587 = STARTTLS), AUTH LOGIN.
-export type SmtpMail = { host: string; port: number; secure: boolean; user: string; pass: string; from: string; to: string[]; replyTo?: string | null; subject: string; text: string; html: string };
+export type SmtpMail = { host: string; port: number; secure: boolean; user: string; pass: string; from: string; to: string[]; replyTo?: string | null; subject: string; text: string; html: string; calendar?: { method: "REQUEST" | "CANCEL"; content: string } | null };
 
 export function smtpSend(m: SmtpMail): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -14,6 +14,10 @@ export function smtpSend(m: SmtpMail): Promise<void> {
     const wrap = (s: string) => b64(s).replace(/.{76}/g, "$&\r\n");
     const bound = "ks" + Date.now().toString(36);
     const host = os.hostname() || "gruendarium";
+    const alternatives = [
+      `--${bound}`, "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", wrap(m.text),
+      `--${bound}`, "Content-Type: text/html; charset=utf-8", "Content-Transfer-Encoding: base64", "", wrap(m.html),
+    ];
     const body = [
       `From: ${name ? enc(name) + " " : ""}<${addr(m.from)}>`,
       `To: ${m.to.join(", ")}`,
@@ -22,11 +26,21 @@ export function smtpSend(m: SmtpMail): Promise<void> {
       `Date: ${new Date().toUTCString()}`,
       `Message-ID: <${Date.now()}.${Math.random().toString(36).slice(2)}@${addr(m.from).split("@")[1] || "localhost"}>`,
       "MIME-Version: 1.0",
-      `Content-Type: multipart/alternative; boundary="${bound}"`,
-      "",
-      `--${bound}`, "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", wrap(m.text),
-      `--${bound}`, "Content-Type: text/html; charset=utf-8", "Content-Transfer-Encoding: base64", "", wrap(m.html),
-      `--${bound}--`, "",
+      ...(m.calendar
+        ? [
+            // Einladung: Text, HTML und Kalenderteil als Alternativen (Outlook zeigt Zusagen/Absagen), dazu die .ics als Anhang
+            `Content-Type: multipart/mixed; boundary="${bound}m"`,
+            "",
+            `--${bound}m`,
+            `Content-Type: multipart/alternative; boundary="${bound}"`,
+            "",
+            ...alternatives,
+            `--${bound}`, `Content-Type: text/calendar; charset=utf-8; method=${m.calendar.method}`, "Content-Transfer-Encoding: base64", "", wrap(m.calendar.content),
+            `--${bound}--`,
+            `--${bound}m`, `Content-Type: application/ics; name="einladung.ics"`, `Content-Disposition: attachment; filename="einladung.ics"`, "Content-Transfer-Encoding: base64", "", wrap(m.calendar.content),
+            `--${bound}m--`, "",
+          ]
+        : [`Content-Type: multipart/alternative; boundary="${bound}"`, "", ...alternatives, `--${bound}--`, ""]),
     ].join("\r\n");
     type Step = [(() => string) | null, number, ("tls" | undefined)?];
     const steps: Step[] = [

@@ -10,6 +10,9 @@ import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { fullName, typeLabel, type Coachee } from "@/lib/access";
 import { requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
+import { UpcomingList } from "@/components/calendar/Upcoming";
+import { todayBerlin } from "@/lib/calendar/dates";
+import { upcomingAppointments } from "@/lib/calendar/store";
 import { progressFor, weekSeries, weeklyUnitsSql, type Progress } from "@/lib/dashboard/progress";
 
 export const metadata = { title: "Dashboard" };
@@ -54,6 +57,7 @@ function stageOf(it: Item) {
 
 export default async function CoachDashboard() {
   const user = await requireCoach();
+  const upcomingP = upcomingAppointments(user, 5);
   const [rows, me, weekRows, month, openMails, closed] = await Promise.all([
     query<Row>(
       `SELECT c.*,
@@ -113,6 +117,9 @@ export default async function CoachDashboard() {
   const order = { danger: 0, gold: 1, accent: 2, ok: 3 };
   alerts.sort((a, b) => order[a.tone] - order[b.tone]);
 
+  const upcoming = await upcomingP;
+  const todayDay = todayBerlin();
+  const todayCount = upcoming.filter((a) => a.day === todayDay).length;
   const founders = active.filter((i) => i.c.coaching_type === "gruendung");
   const jobs = active.filter((i) => i.c.coaching_type === "job");
   const firstName = user.name.split(" ")[0];
@@ -128,7 +135,8 @@ export default async function CoachDashboard() {
               <p className="text-sm text-white/70">{todayLong()}</p>
               <h1 className="font-[family-name:var(--font-display)] text-[34px] leading-[1.05] font-bold tracking-tight sm:text-5xl">{greeting()}, <span className="text-gradient-gold">{firstName}</span>!</h1>
               <p className="mt-1 text-white/80">
-                {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} heute deinen Blick.` : "Alles im grünen Bereich."}
+                {todayCount ? `${todayCount} ${todayCount === 1 ? "Termin" : "Termine"} heute. ` : ""}
+                {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} deinen Blick.` : "Alles im grünen Bereich."}
               </p>
             </div>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -169,7 +177,21 @@ export default async function CoachDashboard() {
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="rise card space-y-3" style={{ ["--i" as string]: 1 }}>
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-[#eef0ff] text-[#5b5fc7]"><Icon name="calendar" className="size-4" /></span>
+            <h2 className="h2">Nächste Termine</h2>
+            <Link href="/coach/kalender?neu=1" className="ml-auto rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-accent" aria-label="Neuer Termin" title="Neuer Termin"><Icon name="plus" className="size-4" /></Link>
+          </div>
+          {upcoming.length ? (
+            <UpcomingList items={upcoming} coach hrefFor={(a) => `/coach/kalender?datum=${a.day}&termin=${a.id}`} />
+          ) : (
+            <Empty>Keine Termine geplant. <Link href="/coach/kalender?neu=1" className="link">Termin anlegen</Link></Empty>
+          )}
+          <Link href="/coach/kalender" className="link block text-sm">Zum Kalender</Link>
+        </section>
+
         <section className="rise card space-y-3" style={{ ["--i" as string]: 2 }}>
           <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-danger-soft text-danger"><Icon name="flag" className="size-4" /></span><h2 className="h2">Heute wichtig</h2>{alerts.length > 0 && <span className="ml-auto rounded-full bg-danger px-2 text-xs font-bold text-white">{alerts.length}</span>}</div>
           {alerts.length === 0 ? (
@@ -190,7 +212,7 @@ export default async function CoachDashboard() {
           )}
         </section>
 
-        <section className="rise card space-y-3" style={{ ["--i" as string]: 3 }}>
+        <section className="rise card space-y-3 lg:col-span-2 xl:col-span-1" style={{ ["--i" as string]: 3 }}>
           <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-tint text-accent"><Icon name="doc" className="size-4" /></span><h2 className="h2">Schlagzeilen</h2></div>
           <Suspense fallback={<NewsSkeleton />}>
             <NewsBox max={4} />

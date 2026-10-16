@@ -4,10 +4,12 @@ import type { IconName } from "@/components/shell/icons";
 export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number };
 export type NavGroup = { label?: string; items: NavItem[] };
 
-export const coachNav = (b: { mails?: number; unread?: number } = {}): NavGroup[] => [
+export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; today?: number } = {}): NavGroup[] => [
   {
     items: [
       { href: "/coach", label: "Dashboard", icon: "grid", exact: true },
+      { href: "/coach/kalender", label: "Kalender", icon: "calendar", badge: b.today },
+      { href: "/coach/aufgaben", label: "Aufgaben", icon: "check", badge: b.tasks },
       { href: "/coach/coachees", label: "Coachees", icon: "users", badge: b.unread },
       { href: "/coach/anwesenheit", label: "Anwesenheit", icon: "clock", badge: b.mails },
     ],
@@ -15,8 +17,14 @@ export const coachNav = (b: { mails?: number; unread?: number } = {}): NavGroup[
   { label: "Schnell", items: [{ href: "/coach/neu", label: "Neuer Coachee", icon: "plus" }] },
 ];
 
-export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number } = {}): NavGroup[] => [
-  { items: [{ href: "/mein-bereich", label: "Start", icon: "home", exact: true }] },
+export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number } = {}): NavGroup[] => [
+  {
+    items: [
+      { href: "/mein-bereich", label: "Start", icon: "home", exact: true },
+      { href: "/mein-bereich/kalender", label: "Kalender", icon: "calendar", badge: b.today },
+      { href: "/mein-bereich/aufgaben", label: "Aufgaben", icon: "flag", badge: b.tasks },
+    ],
+  },
   ...(type === "gruendung"
     ? [{ label: "Meine Gründung", items: [
         { href: "/mein-bereich/businessplan", label: "Businessplan", icon: "doc" as const },
@@ -32,7 +40,7 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
     label: "Meine Unterlagen",
     items: [
       { href: "/mein-bereich/lebenslauf", label: "Lebenslauf", icon: "idcard" },
-      { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "check" },
+      { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "doc" },
     ],
   },
 ];
