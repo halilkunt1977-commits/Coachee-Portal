@@ -14,7 +14,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 100) : "";
   const typ = sp.typ === "job" || sp.typ === "gruendung" ? sp.typ : "";
-  const status = sp.status === "abgeschlossen" || sp.status === "pausiert" || sp.status === "alle" ? sp.status : "aktiv";
+  const status = sp.status === "abgeschlossen" || sp.status === "pausiert" || sp.status === "aktiv" ? sp.status : "alle";
 
   const rows = await query<Row>(
     `SELECT c.*,
@@ -28,7 +28,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
         AND ($2 = '' OR (c.first_name || ' ' || c.last_name || ' ' || c.email) ILIKE '%' || $2 || '%')
         AND ($3 = '' OR c.coaching_type = $3)
         AND ($4 = 'alle' OR c.status = $4)
-      ORDER BY c.status = 'aktiv' DESC, c.last_name, c.first_name`,
+      ORDER BY CASE c.status WHEN 'aktiv' THEN 0 WHEN 'pausiert' THEN 1 ELSE 2 END, c.last_name, c.first_name`,
     [user.id, q, typ, status],
   );
 
@@ -57,7 +57,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
         <Link href={filterLink({ typ: "job" })} className={chip(typ === "job")}>Jobcoaching</Link>
         <Link href={filterLink({ typ: "gruendung" })} className={chip(typ === "gruendung")}>Gründungscoaching</Link>
         <span className="mx-1 h-5 w-px bg-line" />
-        {(["aktiv", "pausiert", "abgeschlossen", "alle"] as const).map((s) => (
+        {(["alle", "aktiv", "pausiert", "abgeschlossen"] as const).map((s) => (
           <Link key={s} href={filterLink({ status: s })} className={chip(status === s)}>{s === "alle" ? "Alle Status" : statusLabel[s]}</Link>
         ))}
       </div>
@@ -73,15 +73,16 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {rows.map((c) => (
-            <Link key={c.id} href={`/coach/coachees/${c.id}`} className="card block transition hover:border-accent">
+            <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card block transition hover:border-accent ${c.status === "abgeschlossen" ? "!border-ok/40 !bg-[#eef6f0]" : ""}`}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold">{fullName(c)}</p>
                   <p className="text-sm text-muted">{typeLabel[c.coaching_type]}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  {c.status !== "aktiv" && <span className="badge bg-bg text-muted">{statusLabel[c.status]}</span>}
-                  {!c.has_login && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
+                  {c.status === "abgeschlossen" && <span className="badge bg-ok text-white">✓ Abgeschlossen</span>}
+                  {c.status === "pausiert" && <span className="badge bg-bg text-muted">{statusLabel[c.status]}</span>}
+                  {!c.has_login && c.status !== "abgeschlossen" && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
                   {c.unread > 0 && <span className="badge">{c.unread} neue Nachricht{c.unread > 1 ? "en" : ""}</span>}
                 </div>
               </div>

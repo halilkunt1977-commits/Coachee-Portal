@@ -9,6 +9,7 @@ import Link from "next/link";
 import { SECTIONS, normalizeSections, sectionDone } from "@/lib/bp/sections";
 import { one, query } from "@/lib/db";
 import { unitsUsedSql } from "@/lib/attendance/units";
+import { categoryLabel } from "@/lib/documents";
 
 export const metadata = { title: "Mein Bereich" };
 
@@ -19,7 +20,7 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, used, profile, plan, jobs] = await Promise.all([
+  const [meetings, tasks, messages, coach, used, profile, plan, jobs, docs] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
@@ -39,6 +40,8 @@ export default async function MyArea() {
           [c.id],
         )
       : null,
+    // Nur Dokumente, die der Coach freigegeben hat
+    query<{ id: string; file_id: string; title: string; category: string; created_at: string }>("SELECT id, file_id, title, category, created_at FROM documents WHERE coachee_id = $1 AND shared ORDER BY created_at DESC", [c.id]),
   ]);
   const sections = normalizeSections(plan?.sections);
   const written = SECTIONS.filter((s) => sectionDone(sections[s.key])).length;
@@ -88,6 +91,20 @@ export default async function MyArea() {
             <Link href="/mein-bereich/bewerbungen" className="btn">{jobs.proposals ? "Vorschläge ansehen" : "Zu den Bewerbungen"}</Link>
           </div>
         </div>
+      )}
+
+      {docs.length > 0 && (
+        <section className="card space-y-3">
+          <h2 className="h2">Meine Dokumente</h2>
+          <ul className="divide-y divide-line-soft text-sm">
+            {docs.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="link font-medium">{d.title}</a>
+                <span className="text-xs text-muted">{categoryLabel(d.category)} · {formatDate(d.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

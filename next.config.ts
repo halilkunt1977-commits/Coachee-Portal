@@ -13,8 +13,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["pg", "playwright-core", "unpdf", "mammoth", "exceljs", "imapflow", "mailparser"],
-  // Fotos und alte Lebensläufe werden über Server Actions hochgeladen
-  experimental: { serverActions: { bodySizeLimit: "12mb" } },
+  // Fotos, Lebensläufe und Dokumente (bis 25 MB je Datei) werden über Server Actions hochgeladen
+  experimental: { serverActions: { bodySizeLimit: "26mb" } },
   turbopack: {
     rules: {
       "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" },
