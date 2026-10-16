@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
   const notice = sp.gesperrt ? "Zu viele falsche Codes. Dein Zugang ist kurz gesperrt." : sp.passwort ? "Dein Passwort ist gespeichert. Du kannst dich jetzt anmelden." : undefined;
   return (
-    <AuthCard title="Anmelden" intro="Willkommen im Portal für Coachees von Gründarium.">
+    <AuthCard title="Willkommen zurück" intro="Melde dich an, um mit deinem Coaching weiterzumachen.">
       <LoginForm notice={notice} />
     </AuthCard>
   );

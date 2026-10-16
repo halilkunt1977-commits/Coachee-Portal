@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/shell/AppShell";
 import { notFound } from "next/navigation";
 import { BewerbungenPanel } from "@/components/jobs/Panels";
 import { Empty } from "@/components/ui";
@@ -13,10 +14,7 @@ export default async function MyApplications() {
   if (c.coaching_type !== "job") notFound();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Meine Bewerbungen</h1>
-        <p className="text-muted">Vorschläge deines Coachs, gemerkte Stellen und alle Bewerbungen an einem Ort. Dein Coach sieht denselben Stand. Den Nachweis deiner Bewerbungen kannst du als PDF herunterladen.</p>
-      </div>
+      <PageHeader eyebrow="Meine Jobsuche" title="Meine Bewerbungen" description="Vorschläge deines Coachs, gemerkte Stellen und alle Bewerbungen an einem Ort. Dein Coach sieht denselben Stand. Den Nachweis deiner Bewerbungen kannst du als PDF herunterladen." />
       <BewerbungenPanel user={user} coachee={c} links={{ search: "/mein-bereich/stellen", tracker: "/mein-bereich/bewerbungen" }} />
     </div>
   );

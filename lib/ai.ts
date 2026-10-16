@@ -27,7 +27,9 @@ export function pseudonymize(text: string, names: string[]) {
 
 // Coachees sollen nicht merken, dass hinter den Hilfen eine KI steckt (Wunsch des Coachs): Meldungen an sie ohne „KI“.
 /** Coachees dürfen die KI nur begrenzt nutzen (AI_COACHEE_MONTHLY_LIMIT Aufrufe pro Monat, Standard 40). */
-export async function assertAiAllowed(user: User) {
+export async function assertAiAllowed(user: User, opts: { coachOnly?: boolean } = {}) {
+  // Schreibhilfen, Assistent und Vorschläge gibt es nur für den Coach. Coachees sehen davon nichts.
+  if (opts.coachOnly && user.role !== "coach") throw new AiError("Diese Funktion steht nur deinem Coach zur Verfügung.");
   if (!aiEnabled()) throw new AiError(user.role === "coach" ? "Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt)." : "Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
   if (user.role === "coach") return;
   const limit = Number(process.env.AI_COACHEE_MONTHLY_LIMIT || 40);

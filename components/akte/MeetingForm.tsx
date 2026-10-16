@@ -13,10 +13,10 @@ export function MeetingForm({ coacheeId, meeting, ai }: { coacheeId: string; mee
   const today = new Date().toISOString().slice(0, 10);
   return (
     <ActionForm action={saveMeeting.bind(null, coacheeId, meeting?.id ?? null)} resetOnOk={!meeting}>
-      <div className="grid gap-4 sm:grid-cols-4">
-        <div className="sm:col-span-2"><Field label="Thema" name="title" defaultValue={meeting?.title} placeholder="z. B. Stärkenanalyse" required /></div>
+      <Field label="Thema" name="title" defaultValue={meeting?.title} placeholder="z. B. Stärkenanalyse" required />
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Datum" name="held_on" type="date" defaultValue={meeting?.held_on ?? today} required />
-        <Field label="Unterrichtseinheiten" name="units" inputMode="decimal" defaultValue={meeting?.units ?? 2} />
+        <Field label="Unterrichtseinheiten (UE)" name="units" inputMode="decimal" defaultValue={meeting?.units ?? 2} />
       </div>
       <Select label="Form" name="format" defaultValue={meeting?.format ?? "praesenz"}>
         <option value="praesenz">Vor Ort</option>

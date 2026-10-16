@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/shell/AppShell";
 import { CvList } from "@/components/cv/CvList";
 import { Empty } from "@/components/ui";
 import { ownCoachee } from "@/lib/access";
@@ -11,10 +12,7 @@ export default async function MyCvs() {
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Mein Lebenslauf</h1>
-        <p className="text-muted">Felder ausfüllen, Design und Farbe wählen, als PDF herunterladen. Dein Coach sieht den Lebenslauf und kann mit dir daran arbeiten.</p>
-      </div>
+      <PageHeader eyebrow="Meine Unterlagen" title="Mein Lebenslauf" description="Felder ausfüllen, Design und Farbe wählen, als PDF herunterladen. Dein Coach sieht den Lebenslauf und kann mit dir daran arbeiten." />
       <CvList coacheeId={c.id} coach={false} />
     </div>
   );

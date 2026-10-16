@@ -15,7 +15,7 @@ export function Ring({ pct, size = 72, stroke = 8, tone = "accent", track = "var
     <div className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
-        {p > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TONE[tone]} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${(p / 100) * len} ${len}`} />}
+        {p > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={TONE[tone]} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${(p / 100) * len} ${len}`} className="ring-draw" />}
       </svg>
       <div className="absolute inset-0 grid place-items-center text-center leading-tight">{children ?? <span className="text-sm font-bold">{Math.round(p)}%</span>}</div>
     </div>
@@ -26,7 +26,7 @@ export function Meter({ pct, tone, className = "" }: { pct: number; tone?: Tone;
   const p = Math.max(0, Math.min(100, pct));
   return (
     <div className={`h-2 overflow-hidden rounded-full bg-line-soft ${className}`}>
-      <div className="h-2 rounded-full" style={{ width: `${p}%`, background: TONE[tone ?? toneFor(p)] }} />
+      <div className="bar-grow-x h-2 rounded-full" style={{ width: `${p}%`, background: TONE[tone ?? toneFor(p)] }} />
     </div>
   );
 }
@@ -53,8 +53,8 @@ export function WeekBars({ weeks, height = 120, light = false }: { weeks: { week
             <div key={w.week} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`KW ${kw(w.week)}: ${de(w.units)} UE`}>
               <span className={`text-[10px] font-semibold tabular-nums ${light ? "text-white/80" : "text-muted"} ${w.units ? "" : "invisible"}`}>{de(w.units)}</span>
               <div
-                className="w-full rounded-md transition-opacity group-hover:opacity-80"
-                style={{ height: h, background: light ? (current ? "#ffffff" : "rgba(255,255,255,.45)") : current ? "var(--gold)" : w.units ? "var(--accent)" : "var(--line-soft)" }}
+                className="bar-grow w-full rounded-md transition-opacity group-hover:opacity-80"
+                style={{ ["--i" as string]: i, height: h, background: light ? (current ? "linear-gradient(180deg,#f3d9a6,#c9974f)" : w.units ? "rgba(255,255,255,.32)" : "rgba(255,255,255,.1)") : current ? "linear-gradient(180deg,#e2bd7d,#b8863f)" : w.units ? "linear-gradient(180deg,#3459a0,#1d3a66)" : "var(--line-soft)" }}
               />
             </div>
           );

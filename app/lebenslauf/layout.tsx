@@ -1,14 +1,14 @@
-import { AppHeader } from "@/components/AppHeader";
+import { AppShell } from "@/components/shell/AppShell";
 import { ownCoachee } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
-import { coachLinks, coacheeLinks } from "@/lib/nav";
+import { coachNav, coacheeNav } from "@/lib/nav";
 
 export default async function CvLayout({ children }: LayoutProps<"/lebenslauf">) {
   const user = await requireUser();
+  const groups = user.role === "coach" ? coachNav() : coacheeNav((await ownCoachee(user))?.coaching_type);
   return (
-    <>
-      <AppHeader name={user.name} links={user.role === "coach" ? coachLinks : coacheeLinks((await ownCoachee(user))?.coaching_type)} />
-      <main className="mx-auto max-w-[96rem] px-4 py-6">{children}</main>
-    </>
+    <AppShell user={user} groups={groups} wide>
+      {children}
+    </AppShell>
   );
 }

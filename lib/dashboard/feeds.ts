@@ -18,7 +18,7 @@ async function cached<T>(key: string, fn: () => Promise<T>, ttl = TTL): Promise<
     if (cache.size > 500) cache.delete(cache.keys().next().value!);
     return value;
   } catch (e) {
-    console.error("[feeds]", key, e instanceof Error ? e.message : e);
+    console.warn("[feeds]", key, e instanceof Error ? e.message : e);
     // Lieber den alten Stand zeigen als nichts, und 5 Minuten lang nicht erneut versuchen
     const value = (hit?.value as T) ?? null;
     cache.set(key, { at: Date.now() - ttl + 5 * 60_000, value });

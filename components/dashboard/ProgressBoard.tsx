@@ -44,10 +44,11 @@ export function UnitsCard({ p, href, you }: { p: Progress; href: string; you: bo
 }
 
 /** Gesamtstand plus je Baustein ein Ring */
-export function PartsGrid({ p, links }: { p: Progress; links: Links }) {
+export function PartsGrid({ p, links, overall = true }: { p: Progress; links: Links; overall?: boolean }) {
+  const n = p.parts.length + (overall ? 1 : 0);
   return (
-    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${p.parts.length >= 5 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
-      <div className="card col-span-2 flex items-center gap-4 !bg-accent text-white sm:col-span-1 lg:col-span-1 lg:flex-col lg:justify-center lg:text-center">
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${n >= 6 ? "lg:grid-cols-6" : n === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+      {overall && <div className="rise night card col-span-2 !border-transparent flex items-center gap-4  sm:col-span-1 lg:col-span-1 lg:flex-col lg:justify-center lg:text-center">
         <Ring pct={p.overall} size={84} stroke={9} tone="white" track="rgba(255,255,255,.2)">
           <span className="font-[family-name:var(--font-display)] text-xl font-bold">{p.overall}%</span>
         </Ring>
@@ -55,9 +56,9 @@ export function PartsGrid({ p, links }: { p: Progress; links: Links }) {
           <p className="font-semibold">Gesamtstand</p>
           <p className="text-xs text-white/70">Bausteine und Etappen</p>
         </div>
-      </div>
-      {p.parts.map((x) => (
-        <Link key={x.key} href={links[x.href]} className="card group flex flex-col items-center gap-2 !p-4 text-center transition hover:border-accent">
+      </div>}
+      {p.parts.map((x, i) => (
+        <Link key={x.key} href={links[x.href]} style={{ ["--i" as string]: i + 1 }} className="rise card card-hover group flex flex-col items-center gap-2 !p-4 text-center">
           <Ring pct={x.pct} size={64} stroke={7} tone={toneFor(x.pct)} />
           <div className="min-w-0">
             <p className="text-sm font-semibold group-hover:text-accent">{x.label}</p>
@@ -127,7 +128,7 @@ export function MilestonesCard({ coacheeId, p, you }: { coacheeId: string; p: Pr
   const next = p.milestones.find((m) => !m.done);
   const done = p.milestones.filter((m) => m.done).length;
   return (
-    <section className="card space-y-3">
+    <section id="etappen" className="card scroll-mt-24 space-y-3">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="h2">{you ? "Meine Etappen" : "Etappen"}</h2>
         <span className="text-sm text-muted">{done} von {p.milestones.length}</span>
