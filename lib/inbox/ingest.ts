@@ -13,7 +13,8 @@ import { classify, findCoachee, isReply, ownPart, parseBookings, parseContact, p
  */
 
 export type RawAttachment = { name: string; mime: string; data: Buffer };
-export type RawMail = { coachId: string; messageId: string | null; from: string; fromName: string; subject: string; receivedAt: Date; body: string; attachments: RawAttachment[] };
+/** direction "out": eigene gesendete Mail an einen Träger, nur zum Zuordnen und für den Verlauf in der Akte */
+export type RawMail = { coachId: string; messageId: string | null; from: string; fromName: string; subject: string; receivedAt: Date; body: string; attachments: RawAttachment[]; direction?: "in" | "out"; to?: string };
 
 export type Parsed = { bookings?: Booking[]; location?: string | null; contact?: Contact; grant?: Grant };
 /** suggest: vermuteter Coachee für eine Buchung ohne Namen (z. B. Regus), nur als Vorschlag */
@@ -30,6 +31,7 @@ type MailRecord = {
   parsed: Parsed;
   coachee_id: string | null;
   applied: Applied;
+  direction: string;
 };
 
 const MAX_ATTACHMENT = 25 * 1024 * 1024;
@@ -56,15 +58,16 @@ export async function ingestInboxMail(m: RawMail): Promise<{ id: string; duplica
   const messageId = m.messageId || `inhalt:${createHash("sha256").update(`${m.from}\n${m.subject}\n${m.body}`).digest("hex").slice(0, 40)}`;
   const known = await one<{ id: string }>("SELECT id FROM inbox_mails WHERE message_id = $1", [messageId]);
   if (known) return { id: known.id, duplicate: true };
-  const category = classify({ subject: m.subject, body: m.body, attachments: m.attachments.map((a) => a.name) });
-  const parsed = parse(category, m.subject, m.body, m.receivedAt);
+  const out = m.direction === "out";
+  const category: Category = out ? "nachricht" : classify({ subject: m.subject, body: m.body, attachments: m.attachments.map((a) => a.name) });
+  const parsed = out ? {} : parse(category, m.subject, m.body, m.receivedAt);
   const coacheeId = findCoachee(`${m.subject}\n${ownPart(m.body)}`, await coacheesOf(m.coachId));
   const id = await transaction(async (db) => {
     const row = await db.query<{ id: string }>(
-      `INSERT INTO inbox_mails (coach_id, message_id, source, from_addr, from_name, subject, received_at, body, category, parsed, coachee_id, read_at, done_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, CASE WHEN $9 = 'anwesenheit' THEN now() END, CASE WHEN $9 = 'anwesenheit' THEN now() END)
+      `INSERT INTO inbox_mails (coach_id, message_id, source, from_addr, from_name, subject, received_at, body, category, parsed, coachee_id, direction, read_at, done_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, CASE WHEN $9 = 'anwesenheit' OR $12 = 'out' THEN now() END, CASE WHEN $9 = 'anwesenheit' OR $12 = 'out' THEN now() END)
        ON CONFLICT (message_id) DO NOTHING RETURNING id`,
-      [m.coachId, messageId, sourceOf(`${m.from} ${m.fromName}`, m.body), m.from.slice(0, 300), m.fromName.slice(0, 200), m.subject.slice(0, 500), m.receivedAt, m.body.slice(0, 60000), category, parsed, coacheeId],
+      [m.coachId, messageId, sourceOf(`${out ? m.to ?? "" : `${m.from} ${m.fromName}`}`, m.body), m.from.slice(0, 300), m.fromName.slice(0, 200), m.subject.slice(0, 500), m.receivedAt, m.body.slice(0, 60000), category, parsed, coacheeId, out ? "out" : "in"],
     );
     const mailId = row.rows[0]?.id;
     if (!mailId) return null;
@@ -75,7 +78,7 @@ export async function ingestInboxMail(m: RawMail): Promise<{ id: string; duplica
     return mailId;
   });
   if (!id) return { id: (await one<{ id: string }>("SELECT id FROM inbox_mails WHERE message_id = $1", [messageId]))!.id, duplicate: true };
-  await applyMail(id);
+  if (!out) await applyMail(id);
   return { id, duplicate: false };
 }
 
@@ -96,14 +99,29 @@ type Person = { id: string; first_name: string; last_name: string; traeger: stri
  * (anderer Coachee, andere Art); was schon passiert ist, steht in applied und passiert nicht noch einmal.
  */
 export async function applyMail(mailId: string) {
-  const m = await one<MailRecord>("SELECT id, coach_id, source, subject, body, received_at, category, parsed, coachee_id, applied FROM inbox_mails WHERE id = $1", [mailId]);
-  if (!m) return;
+  const m = await one<MailRecord>("SELECT id, coach_id, source, subject, body, received_at, category, parsed, coachee_id, applied, direction FROM inbox_mails WHERE id = $1", [mailId]);
+  if (!m || m.direction === "out") return;
   const applied: Applied = { ...m.applied };
   const coachee = m.coachee_id
     ? await one<Person>("SELECT id, first_name, last_name, traeger, units_total, start_date::text, end_date::text, voucher_number FROM coachees WHERE id = $1", [m.coachee_id])
     : null;
 
-  if (m.category === "buerobuchung") await applyBookings(m, coachee, applied);
+  // Projektvertrag oder Coachingstart zu jemandem, den es noch nicht gibt: Akte selbst anlegen
+  if (!coachee && !isReply(m.subject) && (m.category === "projektvertrag" || m.category === "coachbericht")) {
+    const created = await autoCoachee(m, applied);
+    if (created) {
+      await query("UPDATE inbox_mails SET coachee_id = $2, applied = $3 WHERE id = $1", [m.id, created, applied]);
+      return applyMail(m.id);
+    }
+  }
+  if (m.category === "buerobuchung") {
+    await applyBookings(m, coachee, applied);
+    // Buchung ohne Namen (Regus): eindeutig vermuteter Coachee wird direkt zugeordnet
+    if (!coachee && applied.suggest) {
+      await query("UPDATE inbox_mails SET coachee_id = $2, applied = $3 WHERE id = $1", [m.id, applied.suggest, applied]);
+      return applyMail(m.id);
+    }
+  }
   if ((m.category === "projektvertrag" || m.category === "coachbericht") && coachee) await fileDocuments(m, coachee, applied);
 
   if (coachee && !coachee.traeger && (m.source === "avocons" || m.source === "erfolgspfad")) {
@@ -132,7 +150,54 @@ export async function applyMail(mailId: string) {
     if (lead) applied.lead = lead.id;
   }
 
-  await query("UPDATE inbox_mails SET applied = $2 WHERE id = $1", [m.id, applied]);
+  // Was das Portal vollständig umgesetzt hat, braucht keinen Blick mehr: gelesen und erledigt.
+  // Offen bleiben nur Mails ohne Coachee und Nachrichten (die sollst du lesen, sie liegen aber schon in der Akte).
+  const handled =
+    (m.category === "anfrage" && Boolean(applied.lead)) ||
+    (Boolean(coachee) && (m.category === "buerobuchung" || m.category === "projektvertrag" || m.category === "coachbericht" || m.category === "anwesenheit"));
+  await query(
+    `UPDATE inbox_mails SET applied = $2, done_at = CASE WHEN $3 OR ($4 AND coachee_id IS NOT NULL) THEN COALESCE(done_at, now()) ELSE done_at END,
+            read_at = CASE WHEN $3 THEN COALESCE(read_at, now()) ELSE read_at END WHERE id = $1`,
+    [m.id, applied, handled, m.category === "nachricht"],
+  );
+}
+
+/** Neue Akte aus Projektvertrag oder AVOCONS-Startmail, ohne Einladung (die verschickst du, wenn du so weit bist) */
+async function autoCoachee(m: MailRecord, applied: Applied): Promise<string | null> {
+  const lead = await upsertLead(m);
+  if (lead) applied.lead = lead.id;
+  if (lead?.coacheeId) return lead.coacheeId;
+  const c = m.parsed.contact ?? parseContact(m.body, m.subject);
+  if (!c.first_name || !c.last_name) return null;
+  const g = m.parsed.grant ?? {};
+  const leadRow = lead ? await one<{ email: string | null; phone: string | null; coaching_type: string | null; city: string | null }>("SELECT email, phone, coaching_type, city FROM leads WHERE id = $1", [lead.id]) : null;
+  const email = (c.email ?? leadRow?.email ?? "").toLowerCase();
+  const type = c.coaching_type ?? leadRow?.coaching_type ?? "job";
+  const traeger = m.source === "avocons" || m.source === "erfolgspfad" ? m.source : null;
+  const id = await transaction(async (db) => {
+    // Zugang vorbereiten (ohne Mail), damit „Einladung mailen“ in der Akte sofort geht
+    const taken = email ? await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email]) : null;
+    const user = email && !taken?.rows.length ? await db.query<{ id: string }>("INSERT INTO users (email, name, role) VALUES ($1,$2,'coachee') RETURNING id", [email, `${c.first_name} ${c.last_name}`]) : null;
+    const row = await db.query<{ id: string }>(
+      `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, traeger, city, internal_note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      [user?.rows[0].id ?? null, m.coach_id, c.first_name, c.last_name, email, c.phone ?? leadRow?.phone ?? null, type, "avgs",
+       g.voucher_number ?? null, g.start_date ?? null, g.end_date ?? null, g.units_total ?? null, traeger, c.city ?? leadRow?.city ?? null,
+       `Automatisch angelegt aus der Mail „${m.subject.slice(0, 120)}“${g.code ? `, Coachingart ${g.code}` : ""}.`],
+    );
+    await db.query("INSERT INTO audit_log (user_id, coachee_id, action, detail) VALUES ($1,$2,'coachee_created',$3)", [m.coach_id, row.rows[0].id, { auto: "postfach", mailId: m.id }]);
+    if (lead) {
+      await db.query(
+        `UPDATE leads SET status = 'gewonnen', coachee_id = $2, follow_up_on = NULL, updated_at = now(),
+                log = log || jsonb_build_array(jsonb_build_object('at', now(), 'what', 'Akte automatisch angelegt')) WHERE id = $1`,
+        [lead.id, row.rows[0].id],
+      );
+      // Frühere Mails dieser Person (z. B. die Anfrage) gehören jetzt in die Akte
+      await db.query("UPDATE inbox_mails SET coachee_id = $2 WHERE coach_id = $3 AND coachee_id IS NULL AND applied->>'lead' = $1::text", [lead.id, row.rows[0].id, m.coach_id]);
+    }
+    return row.rows[0].id;
+  });
+  return id;
 }
 
 async function applyBookings(m: MailRecord, coachee: Person | null, applied: Applied) {
@@ -179,7 +244,12 @@ async function applyBookings(m: MailRecord, coachee: Person | null, applied: App
           AND (${days.map((_, i) => `position($${i + 4} in body) > 0 OR position($${i + 4} in subject) > 0`).join(" OR ")})`,
       [m.coach_id, m.id, m.received_at, ...days],
     );
-    applied.suggest = hits.length === 1 ? hits[0].coachee_id : undefined;
+    if (hits.length === 1) applied.suggest = hits[0].coachee_id;
+    else {
+      // Kein Datum passt eindeutig: wenn bei diesem Träger gerade nur ein Coachee aktiv ist, dann der
+      const only = hits.length ? [] : await query<{ id: string }>("SELECT id FROM coachees WHERE coach_id = $1 AND archived_at IS NULL AND status = 'aktiv' AND traeger = $2", [m.coach_id, m.source]);
+      applied.suggest = only.length === 1 ? only[0].id : undefined;
+    }
   } else delete applied.suggest;
 }
 
@@ -256,7 +326,8 @@ async function upsertLead(m: MailRecord): Promise<{ id: string; coacheeId: strin
 /** Mails ohne Coachee erneut zuordnen, z. B. nachdem ein Coachee angelegt wurde */
 export async function rematchInbox(coachId: string) {
   const open = await query<{ id: string; subject: string; body: string }>(
-    "SELECT id, subject, body FROM inbox_mails WHERE coach_id = $1 AND coachee_id IS NULL AND category <> 'anfrage' AND received_at > now() - interval '180 days'",
+    `SELECT id, subject, body FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' AND received_at > now() - interval '180 days'
+        AND ((coachee_id IS NULL AND category <> 'anfrage') OR done_at IS NULL) ORDER BY received_at`,
     [coachId],
   );
   const people = await coacheesOf(coachId);
@@ -273,14 +344,15 @@ export async function rematchInbox(coachId: string) {
     const mails = await query<{ id: string }>("UPDATE inbox_mails SET coachee_id = $2 WHERE coach_id = $3 AND coachee_id IS NULL AND applied->>'lead' = $1::text RETURNING id", [l.id, hit[0].id, coachId]);
     for (const m of mails) await applyMail(m.id);
   }
-  if (!open.length) return 0;
   let n = 0;
   for (const m of open) {
     const id = findCoachee(`${m.subject}\n${ownPart(m.body)}`, people);
-    if (!id) continue;
-    await query("UPDATE inbox_mails SET coachee_id = $2 WHERE id = $1 AND coachee_id IS NULL", [m.id, id]);
+    if (id) {
+      const r = await query<{ id: string }>("UPDATE inbox_mails SET coachee_id = $2 WHERE id = $1 AND coachee_id IS NULL RETURNING id", [m.id, id]);
+      n += r.length;
+    }
+    // Auch ohne Treffer: Akte aus Vertrag anlegen, Buchung über das Datum zuordnen
     await applyMail(m.id);
-    n++;
   }
   return n;
 }

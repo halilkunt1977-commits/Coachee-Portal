@@ -88,7 +88,12 @@ export default async function CoachDashboard() {
         WHERE coach_id = $1 AND status IN ('neu','kontaktiert') AND follow_up_on <= (now() AT TIME ZONE 'Europe/Berlin')::date ORDER BY created_at`,
       [user.id],
     ),
-    one<{ n: number }>("SELECT count(*)::int AS n FROM inbox_mails WHERE coach_id = $1 AND read_at IS NULL", [user.id]),
+    one<{ n: number; open: number }>(
+      `SELECT count(*) FILTER (WHERE read_at IS NULL AND coachee_id IS NOT NULL)::int AS n,
+              count(*) FILTER (WHERE done_at IS NULL AND coachee_id IS NULL AND category <> 'anfrage')::int AS open
+         FROM inbox_mails WHERE coach_id = $1 AND direction = 'in'`,
+      [user.id],
+    ),
     query<{ coachee_id: string; n: number }>(
       `SELECT d.coachee_id, count(*)::int AS n FROM documents d JOIN coachees c ON c.id = d.coachee_id
         WHERE c.coach_id = $1 AND c.archived_at IS NULL AND d.signature = 'offen' GROUP BY d.coachee_id`,
@@ -109,7 +114,8 @@ export default async function CoachDashboard() {
   const alerts: Alert[] = [];
   for (const l of leads)
     alerts.push({ tone: "danger", text: l.status === "neu" ? `Neue Anfrage: ${l.name || "ohne Namen"}, jetzt melden` : `Anfrage ${l.name || "ohne Namen"}: heute nachfassen`, href: `/coach/anfragen?anfrage=${l.id}#a-${l.id}` });
-  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Mail${inbox!.n > 1 ? "s" : ""} von Erfolgspfad oder AVOCONS`, href: "/coach/posteingang?art=neu" });
+  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Nachricht${inbox!.n > 1 ? "en" : ""} von AVOCONS oder Erfolgspfad`, href: "/coach/posteingang?art=neu" });
+  if ((inbox?.open ?? 0) > 0) alerts.push({ tone: "gold", text: `${inbox?.open} Mail${inbox!.open > 1 ? "s" : ""} ohne erkennbaren Coachee`, href: "/coach/posteingang?art=offen" });
   if ((openMails?.n ?? 0) > 0) alerts.push({ tone: "gold", text: `${openMails?.n} Anwesenheits-Mail${openMails!.n > 1 ? "s" : ""} nicht zugeordnet`, href: "/coach/anwesenheit" });
   for (const { c, p } of items) {
     const name = fullName(c);

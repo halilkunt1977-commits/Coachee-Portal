@@ -100,6 +100,10 @@ export async function updateCoachee(coacheeId: string, _prev: FormState, fd: For
       if (current.user_id) {
         // Abgeschlossene Coachings behalten nur Lesezugriff; der Zugang selbst bleibt bis zur Löschung bestehen
         await db.query("UPDATE users SET email=$2, name=$3 WHERE id=$1", [current.user_id, c.email, `${c.first_name} ${c.last_name}`]);
+      } else {
+        // Akte ohne Zugang (z. B. automatisch aus einem Projektvertrag angelegt): mit der Mailadresse den Zugang vorbereiten
+        const u = await db.query<{ id: string }>("INSERT INTO users (email, name, role) VALUES ($1,$2,'coachee') RETURNING id", [c.email, `${c.first_name} ${c.last_name}`]);
+        await db.query("UPDATE coachees SET user_id = $2 WHERE id = $1", [coacheeId, u.rows[0].id]);
       }
     });
   } catch (error) {
