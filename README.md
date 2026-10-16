@@ -1,6 +1,6 @@
 # Gründarium Portal
 
-Das Portal für Coachees von Gründarium unter **portal.gründarium.de**: jeder Coachee hat einen eigenen Zugang,
+Das Portal für Coachees von Gründarium unter **portal.gruendarium.de**: jeder Coachee hat einen eigenen Zugang,
 der Coach sieht alle Akten. Next.js 16 (App Router), Tailwind 4, eigene PostgreSQL-Datenbank, Betrieb über Coolify.
 
 ```bash
@@ -52,8 +52,8 @@ npm run dev                  # http://localhost:3000
 1. **Datenbank:** Neue Ressource → PostgreSQL 16, Name z. B. `portal-db`. Unter „Backups“ tägliche Sicherung auf einen
    S3-Speicher außerhalb des Servers einschalten (z. B. Hetzner Storage Box oder Object Storage).
 2. **App:** Neue Ressource → Anwendung aus GitHub `coachee-portal`, Build Pack **Dockerfile**, Port **3000**.
-3. **Domain:** `https://portal.xn--grndarium-r9a.de` (das ist `portal.gründarium.de` in der Schreibweise, die DNS und
-   Zertifikate brauchen). Der DNS-Eintrag `portal` muss auf den Server zeigen.
+3. **Domain:** `https://portal.gruendarium.de`. Die Subdomain ist beim Domain-Anbieter angelegt; ihr A-Eintrag muss auf
+   den Coolify-Server zeigen (dieselbe IP wie gruendarium.de, wenn die Seite schon dort läuft).
 4. **Umgebungsvariablen** wie in `.env.example`. `DATABASE_URL` ist die interne Verbindungs-URL aus Schritt 1.
    `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
