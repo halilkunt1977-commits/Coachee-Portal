@@ -7,6 +7,7 @@ import { query, transaction } from "@/lib/db";
 import { dateOrNull, isEmail, numberOrNull, optional, text, type FormState } from "@/lib/forms";
 import { createInvite } from "@/lib/invites";
 import { inviteMail, mailProblem, sendMail } from "@/lib/mail";
+import { rematchOpen } from "@/lib/attendance/import";
 
 function readCoachee(fd: FormData) {
   const coaching_type = fd.get("coaching_type") === "gruendung" ? "gruendung" : "job";
@@ -62,6 +63,8 @@ export async function createCoachee(_prev: FormState, fd: FormData): Promise<For
     throw error;
   }
   await audit(coach.id, "coachee_created", created.id);
+  // Anwesenheits-Mails, die auf diesen Coachee warten, gleich zuordnen
+  await rematchOpen(coach.id).catch((e) => console.error("[anwesenheit]", e));
   const invite = fd.get("invite") === "on";
   let q = "";
   if (invite) {
@@ -97,6 +100,7 @@ export async function updateCoachee(coacheeId: string, _prev: FormState, fd: For
     throw error;
   }
   await audit(coach.id, "coachee_updated", coacheeId);
+  await rematchOpen(coach.id).catch((e) => console.error("[anwesenheit]", e));
   revalidatePath(`/coach/coachees/${coacheeId}`);
   return { ok: "Gespeichert." };
 }

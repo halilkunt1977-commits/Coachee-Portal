@@ -54,8 +54,29 @@ export function nameKey(name: string) {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/ß/g, "ss")
+    .replace(/ı/g, "i")
+    .replace(/[łđøæœ]/g, (ch) => ({ ł: "l", đ: "d", ø: "o", æ: "ae", œ: "oe" })[ch] ?? ch)
+    // „Jörg“, „Joerg“ und „Jorg“ gleich behandeln
+    .replace(/ae/g, "a")
+    .replace(/oe/g, "o")
+    .replace(/ue/g, "u")
     .split(/[^a-z]+/)
     .filter(Boolean)
     .sort()
     .join(" ");
+}
+
+const tokens = (s: string) => nameKey(s).split(" ").filter(Boolean);
+
+/**
+ * Passt der Name aus der Mail zu einem Coachee? Der Nachname muss vollständig vorkommen, vom Vornamen reicht einer
+ * („Djamal Ali Weise“ passt zu „Djamal Weise“ und umgekehrt). Reihenfolge, Akzente und Bindestriche spielen keine Rolle.
+ */
+export function namesMatch(mailName: string, first: string, last: string) {
+  const mail = new Set(tokens(mailName));
+  const lastT = tokens(last);
+  const firstT = tokens(first);
+  if (!mail.size || !lastT.length) return false;
+  if (!lastT.every((t) => mail.has(t))) return false;
+  return firstT.length === 0 || firstT.some((t) => mail.has(t));
 }

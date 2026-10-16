@@ -130,7 +130,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
 
       {tab === "uebersicht" && <Overview coacheeId={c.id} goal={c.goal} note={c.internal_note} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
-      {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} />}
+      {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} oldestFirst={sp.sortierung === "alt"} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
       {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
       {tab === "bewerbungen" && <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />}
