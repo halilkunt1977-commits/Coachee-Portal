@@ -1,5 +1,6 @@
 export const coachLinks = [
-  { href: "/coach", label: "Coachees" },
+  { href: "/coach", label: "Dashboard" },
+  { href: "/coach/coachees", label: "Coachees" },
   { href: "/coach/anwesenheit", label: "Anwesenheit" },
   { href: "/coach/neu", label: "Neuer Coachee" },
 ];

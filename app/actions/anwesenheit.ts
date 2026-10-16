@@ -9,7 +9,7 @@ import { dateOrNull, numberOrNull, text, type FormState } from "@/lib/forms";
 const refresh = (coacheeId?: string | null) => {
   if (coacheeId) revalidatePath(`/coach/coachees/${coacheeId}`);
   revalidatePath("/coach/anwesenheit");
-  revalidatePath("/coach");
+  revalidatePath("/coach", "layout");
 };
 
 const timeOrNull = (fd: FormData, key: string) => {

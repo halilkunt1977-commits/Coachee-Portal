@@ -1,15 +1,19 @@
 import { MessageForm } from "@/components/akte/MessageForm";
 import { MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
 import { TaskForm } from "@/components/akte/TaskForm";
-import { Empty, formatDate, formatUnits } from "@/components/ui";
+import { Empty, formatDate } from "@/components/ui";
 import { ownCoachee, typeLabel } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { categoriesFor, type ProfileItem } from "@/lib/profile";
 import Link from "next/link";
-import { SECTIONS, normalizeSections, sectionDone } from "@/lib/bp/sections";
+import { Suspense } from "react";
 import { one, query } from "@/lib/db";
-import { unitsUsedSql } from "@/lib/attendance/units";
 import { categoryLabel } from "@/lib/documents";
+import { progressFor, type Links } from "@/lib/dashboard/progress";
+import { setCoacheeCity } from "@/app/actions/dashboard";
+import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
+import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
+import { greeting, todayLong } from "@/components/dashboard/Hero";
 
 export const metadata = { title: "Mein Bereich" };
 
@@ -20,78 +24,71 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, used, profile, plan, jobs, docs] = await Promise.all([
+  const [meetings, tasks, messages, coach, profile, docs, progress] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
     query<Message>("SELECT m.id, m.body, m.created_at, m.author_id, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at", [c.id]),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
-    one<{ units: number }>(`SELECT ${unitsUsedSql("$1")} AS units`, [c.id]),
     // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
     query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
-    c.coaching_type === "gruendung" ? one<{ sections: unknown }>("SELECT sections FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
-    c.coaching_type === "job"
-      ? one<{ proposals: number; applied: number; talks: number; due: number }>(
-          `SELECT count(*) FILTER (WHERE status = 'vorschlag')::int AS proposals,
-                  count(*) FILTER (WHERE status IN ('beworben', 'gespraech', 'zusage', 'absage'))::int AS applied,
-                  count(*) FILTER (WHERE status IN ('gespraech', 'zusage'))::int AS talks,
-                  count(*) FILTER (WHERE next_on <= CURRENT_DATE AND status IN ('gemerkt', 'beworben', 'gespraech'))::int AS due
-             FROM applications WHERE coachee_id = $1`,
-          [c.id],
-        )
-      : null,
     // Nur Dokumente, die der Coach freigegeben hat
     query<{ id: string; file_id: string; title: string; category: string; created_at: string }>("SELECT id, file_id, title, category, created_at FROM documents WHERE coachee_id = $1 AND shared ORDER BY created_at DESC", [c.id]),
+    progressFor(c),
   ]);
-  const sections = normalizeSections(plan?.sections);
-  const written = SECTIONS.filter((s) => sectionDone(sections[s.key])).length;
+  const links: Links = {
+    cv: "/mein-bereich/lebenslauf",
+    plan: "/mein-bereich/businessplan",
+    finance: "/mein-bereich/finanzplan",
+    profile: "#profil",
+    survey: "/mein-bereich/erfahrung",
+    jobs: "/mein-bereich/bewerbungen",
+    attendance: "#gespraeche",
+  };
+  const openTasks = tasks.filter((t) => !t.done_at).length;
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Hallo {c.first_name}!</h1>
-        <p className="text-muted">{typeLabel[c.coaching_type]} mit {coach?.name ?? "deinem Coach"}{c.units_total ? ` · ${formatUnits(used?.units)} von ${c.units_total} Einheiten` : ""}</p>
-      </div>
-
-      {c.goal && (
-        <div className="card bg-tint/60">
-          <p className="text-xs font-semibold uppercase tracking-wide text-accent">Unser Ziel</p>
-          <p className="mt-1 whitespace-pre-wrap text-lg">{c.goal}</p>
-        </div>
-      )}
-
-      {c.coaching_type === "gruendung" && (
-        <div className="card flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0 flex-1 basis-60">
-            <h2 className="h2">Mein Businessplan</h2>
-            <p className="text-sm text-muted">{written} von {SECTIONS.length} Abschnitten geschrieben</p>
-            <div className="mt-2 h-1.5 max-w-sm rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok" style={{ width: `${(written / SECTIONS.length) * 100}%` }} /></div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/mein-bereich/finanzplan" className="btn-ghost">Finanzplan</Link>
-            <Link href="/mein-bereich/businessplan" className="btn">Weiterschreiben</Link>
-          </div>
-        </div>
-      )}
-
-      {jobs && (
-        <div className="card flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0 flex-1 basis-60">
-            <h2 className="h2">Meine Bewerbungen</h2>
-            <p className="text-sm text-muted">
-              {jobs.applied ? `${jobs.applied} ${jobs.applied === 1 ? "Bewerbung" : "Bewerbungen"}${jobs.talks ? `, ${jobs.talks} ${jobs.talks === 1 ? "Gespräch" : "Gespräche"}` : ""}` : "Noch keine Bewerbung eingetragen"}
+      <section className="-mx-4 overflow-hidden bg-gradient-to-br from-accent via-[#24456f] to-[#2f5683] px-4 py-6 text-white sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8">
+        <div className="grid gap-6 md:grid-cols-[1fr_minmax(260px,340px)] md:items-center">
+          <div className="min-w-0 space-y-3">
+            <p className="text-sm text-white/70">{todayLong()}</p>
+            <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">{greeting()}, {c.first_name}!</h1>
+            <p className="text-white/80">
+              {typeLabel[c.coaching_type]} mit {coach?.name ?? "deinem Coach"}
+              {c.end_date ? ` · bis ${formatDate(c.end_date)}` : ""}
             </p>
-            {jobs.proposals > 0 && <p className="mt-1 text-sm font-semibold text-gold">{jobs.proposals} {jobs.proposals === 1 ? "neue Stelle" : "neue Stellen"} von {coach?.name ?? "deinem Coach"} für dich</p>}
-            {jobs.due > 0 && <p className="mt-1 text-sm font-semibold text-danger">Heute nachfassen: {jobs.due}</p>}
+            {c.goal && (
+              <div className="max-w-xl rounded-2xl bg-white/10 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60">Unser Ziel</p>
+                <p className="mt-0.5 whitespace-pre-wrap">{c.goal}</p>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1 text-sm">
+              {openTasks > 0 && <a href="#aufgaben" className="rounded-full bg-white/15 px-3 py-1 font-medium hover:bg-white/25">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</a>}
+              {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-gold px-3 py-1 font-medium hover:opacity-90">{progress.jobs?.proposals} neue Stelle{progress.jobs?.proposals === 1 ? "" : "n"} für dich</Link>}
+              {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-white px-3 py-1 font-medium text-danger">Heute nachfassen: {progress.jobs?.due}</Link>}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/mein-bereich/stellen" className="btn-ghost">Stellen finden</Link>
-            <Link href="/mein-bereich/bewerbungen" className="btn">{jobs.proposals ? "Vorschläge ansehen" : "Zu den Bewerbungen"}</Link>
+          <div className="rounded-2xl bg-white/10 p-4">
+            <Suspense fallback={<WeatherSkeleton />}>
+              <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder="Dein Wohnort" />} />
+            </Suspense>
           </div>
         </div>
-      )}
+      </section>
+
+      <PartsGrid p={progress} links={links} />
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <div className="min-w-0 space-y-6">
+          <UnitsCard p={progress} href={links.attendance} you />
+          {c.coaching_type === "gruendung" ? <ChaptersCard p={progress} href={links.plan} /> : <JobsFunnel p={progress} href={links.jobs} />}
+        </div>
+        <MilestonesCard coacheeId={c.id} p={progress} you />
+      </div>
 
       {docs.length > 0 && (
         <section className="card space-y-3">
@@ -108,7 +105,7 @@ export default async function MyArea() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card space-y-4">
+        <section id="aufgaben" className="card scroll-mt-24 space-y-4">
           <h2 className="h2">Meine Aufgaben</h2>
           <TaskList coacheeId={c.id} tasks={tasks} coach={false} />
           <details className="text-sm">
@@ -124,7 +121,7 @@ export default async function MyArea() {
       </div>
 
       {groups.length > 0 && (
-        <section className="space-y-3">
+        <section id="profil" className="scroll-mt-24 space-y-3">
           <h2 className="h2">{c.coaching_type === "job" ? "Meine Stärken und Kompetenzen" : "Bausteine für meinen Businessplan"}</h2>
           <div className="grid gap-3 md:grid-cols-2">
             {groups.map(({ cat, list }) => (
@@ -144,7 +141,14 @@ export default async function MyArea() {
         </section>
       )}
 
-      <section className="space-y-3">
+      <section className="card space-y-3">
+        <h2 className="h2">Schlagzeilen</h2>
+        <Suspense fallback={<NewsSkeleton />}>
+          <NewsBox />
+        </Suspense>
+      </section>
+
+      <section id="gespraeche" className="scroll-mt-24 space-y-3">
         <h2 className="h2">Unsere Gespräche</h2>
         {meetings.length === 0 && <Empty>Hier erscheinen die Zusammenfassungen unserer Gespräche.</Empty>}
         {meetings.map((m) => (

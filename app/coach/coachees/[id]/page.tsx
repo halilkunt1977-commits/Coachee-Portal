@@ -26,6 +26,9 @@ import { resendInvite, setAccess } from "../../actions";
 import DeleteCoachee from "./DeleteCoachee";
 import InviteLink from "./InviteLink";
 import StammdatenForm from "./StammdatenForm";
+import { progressFor, type Links } from "@/lib/dashboard/progress";
+import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
+import type { Coachee } from "@/lib/access";
 
 type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null };
 
@@ -67,7 +70,7 @@ const actionLabel: Record<string, string> = {
   document_uploaded: "Dokument hochgeladen", document_updated: "Dokument geändert", document_deleted: "Dokument gelöscht",
   attendance_from_document: "Anwesenheit aus Dokument übernommen", coaching_closed: "Coaching abgeschlossen", coaching_reopened: "Coaching wieder aufgenommen",
   attendance_updated: "Anwesenheit geändert", attendance_moved: "Anwesenheit verschoben",
-  coachee_deleted: "Coachee gelöscht",
+  coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -101,7 +104,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/coach" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
+        <Link href="/coach/coachees" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="h1">{fullName(c)}</h1>
@@ -143,7 +146,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
         ))}
       </nav>
 
-      {tab === "uebersicht" && <Overview coacheeId={c.id} goal={c.goal} note={c.internal_note} stats={stats} />}
+      {tab === "uebersicht" && <Overview coachee={c} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} oldestFirst={sp.sortierung === "alt"} />}
       {tab === "dokumente" && <DocumentsPanel coachee={c} />}
@@ -196,12 +199,33 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
   );
 }
 
-async function Overview({ coacheeId, goal, note, stats }: { coacheeId: string; goal: string | null; note: string | null; stats: { meetings: number; open_tasks: number } | null }) {
-  const [last, tasks] = await Promise.all([
+const AKTE_LINKS: Links = {
+  cv: "?tab=lebenslauf",
+  plan: "?tab=businessplan",
+  finance: "?tab=finanzplan",
+  profile: "?tab=wissen",
+  survey: "?tab=erfahrung",
+  jobs: "?tab=bewerbungen",
+  attendance: "?tab=anwesenheit",
+};
+
+async function Overview({ coachee, stats }: { coachee: Coachee; stats: { meetings: number; open_tasks: number } | null }) {
+  const { id: coacheeId, goal, internal_note: note } = coachee;
+  const [last, tasks, progress] = await Promise.all([
     one<Meeting>("SELECT * FROM meetings WHERE coachee_id = $1 ORDER BY held_on DESC, created_at DESC LIMIT 1", [coacheeId]),
     query<Task>("SELECT * FROM tasks WHERE coachee_id = $1 AND done_at IS NULL ORDER BY due_on NULLS LAST, created_at LIMIT 5", [coacheeId]),
+    progressFor(coachee),
   ]);
   return (
+    <div className="space-y-6">
+    <PartsGrid p={progress} links={AKTE_LINKS} />
+    <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <div className="min-w-0 space-y-6">
+        <UnitsCard p={progress} href={AKTE_LINKS.attendance} you={false} />
+        {coachee.coaching_type === "gruendung" ? <ChaptersCard p={progress} href={AKTE_LINKS.plan} /> : <JobsFunnel p={progress} href={AKTE_LINKS.jobs} />}
+      </div>
+      <MilestonesCard coacheeId={coacheeId} p={progress} you={false} />
+    </div>
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="card space-y-3">
         <h2 className="h2">Ziel</h2>
@@ -223,6 +247,7 @@ async function Overview({ coacheeId, goal, note, stats }: { coacheeId: string; g
         <div className="flex items-center justify-between"><h2 className="h2">Offene Aufgaben</h2><Link href="?tab=aufgaben" className="link text-sm">Alle {stats?.open_tasks ?? 0}</Link></div>
         <TaskList coacheeId={coacheeId} tasks={tasks} coach />
       </div>
+    </div>
     </div>
   );
 }

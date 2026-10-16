@@ -17,7 +17,7 @@ import { normalizeSurvey, type Station, type SurveyData } from "@/lib/survey/typ
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
   revalidatePath("/mein-bereich/erfahrung");
-  revalidatePath("/coach");
+  revalidatePath("/coach", "layout");
 };
 
 /** Coachees sehen neutrale Meldungen, der Coach die genaue. */

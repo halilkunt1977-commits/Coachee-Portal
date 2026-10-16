@@ -41,7 +41,7 @@ export default async function AttendanceInbox({ searchParams }: PageProps<"/coac
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/coach" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
+        <Link href="/coach/coachees" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
         <h1 className="h1 mt-2">Anwesenheit</h1>
         <p className="text-muted">Bestätigte Termine von Erfolgspfad werden automatisch beim passenden Coachee eingetragen. Was sich nicht eindeutig zuordnen lässt, steht hier.</p>
       </div>
