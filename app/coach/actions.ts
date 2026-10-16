@@ -8,6 +8,7 @@ import { dateOrNull, isEmail, numberOrNull, optional, text, type FormState } fro
 import { createInvite } from "@/lib/invites";
 import { inviteMail, mailProblem, sendMail } from "@/lib/mail";
 import { rematchOpen } from "@/lib/attendance/import";
+import { removeFile } from "@/lib/files";
 
 function readCoachee(fd: FormData) {
   const coaching_type = fd.get("coaching_type") === "gruendung" ? "gruendung" : "job";
@@ -132,4 +133,24 @@ export async function setAccess(coacheeId: string, active: boolean) {
   if (!active) await query("DELETE FROM auth_sessions WHERE user_id = $1", [c.user_id]);
   await audit(coach.id, active ? "access_enabled" : "access_disabled", coacheeId);
   revalidatePath(`/coach/coachees/${coacheeId}`);
+}
+
+/**
+ * Coachee endgültig löschen, z. B. Test-Akten: Akte mit allem Inhalt, Dateien und Zugang.
+ * Zur Sicherheit muss der Nachname eingetippt werden. Anwesenheits-Mails bleiben ausgeblendet erhalten.
+ */
+export async function deleteCoachee(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const coach = await requireCoach();
+  const c = await coacheeFor(coach, coacheeId);
+  if (text(fd, "confirm", 100).toLowerCase() !== c.last_name.trim().toLowerCase()) return { error: `Bitte zum Bestätigen den Nachnamen „${c.last_name}“ eintippen.` };
+  const files = await query<{ id: string }>("SELECT id FROM files WHERE coachee_id = $1", [c.id]);
+  await transaction(async (tx) => {
+    await tx.query("UPDATE attendance_mails SET status = 'ignoriert', coachee_id = NULL WHERE coachee_id = $1", [c.id]);
+    await tx.query("DELETE FROM coachees WHERE id = $1", [c.id]);
+    if (c.user_id) await tx.query("DELETE FROM users WHERE id = $1 AND role = 'coachee'", [c.user_id]);
+  });
+  for (const f of files) await removeFile(f.id).catch(() => {});
+  await audit(coach.id, "coachee_deleted", null, { name: `${c.first_name} ${c.last_name}` });
+  revalidatePath("/coach");
+  redirect(`/coach?geloescht=${encodeURIComponent(`${c.first_name} ${c.last_name}`)}`);
 }

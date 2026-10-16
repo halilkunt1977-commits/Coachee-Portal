@@ -1,22 +1,29 @@
 import Link from "next/link";
 import { deleteDocument } from "@/app/actions/dokumente";
 import type { Coachee } from "@/lib/access";
-import { DOC_CATEGORIES, compareWithPortal, isReport, type ReportRow } from "@/lib/documents";
+import { DOC_CATEGORIES, compareWithPortal, isReport, reportTotal, type ReportRow } from "@/lib/documents";
 import { query } from "@/lib/db";
+import { PARSER_VERSION, reparseDocument } from "@/lib/documents-text";
 import { ConfirmButton } from "../ConfirmButton";
 import { Empty, Notice, formatDate, formatUnits } from "../ui";
 import { EditDocument, ImportRows, UploadForm } from "./Forms";
 
-type Doc = { id: string; file_id: string; category: string; title: string; shared: boolean; extracted: ReportRow[] | null; has_text: boolean; name: string; size: number; created_at: string };
+type Doc = { id: string; file_id: string; category: string; title: string; shared: boolean; extracted: ReportRow[] | null; has_text: boolean; extracted_text: string | null; name: string; size: number; created_at: string };
 type Att = { id: string; held_on: string; units: number; starts_at: string | null };
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const time = (r: { starts_at: string | null; ends_at?: string | null }) => (r.starts_at ? ` ${r.starts_at.slice(0, 5)}${r.ends_at ? `–${r.ends_at.slice(0, 5)}` : ""}` : "");
 
 export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
+  // Mit älterer Erkennung gelesene Dokumente einmal neu auslesen
+  const stale = await query<{ id: string; file_id: string; category: string; name: string }>(
+    "SELECT d.id, d.file_id, d.category, f.name FROM documents d JOIN files f ON f.id = d.file_id WHERE d.coachee_id = $1 AND d.parser_version < $2",
+    [c.id, PARSER_VERSION],
+  );
+  for (const d of stale) await reparseDocument(d);
   const [docs, attendance] = await Promise.all([
     query<Doc>(
-      `SELECT d.id, d.file_id, d.category, d.title, d.shared, d.extracted, d.extracted_text IS NOT NULL AS has_text, f.name, f.size, d.created_at
+      `SELECT d.id, d.file_id, d.category, d.title, d.shared, d.extracted, d.extracted_text IS NOT NULL AS has_text, CASE WHEN d.category IN ('anwesenheit', 'taetigkeitsnachweis', 'coachbericht') THEN d.extracted_text END AS extracted_text, f.name, f.size, d.created_at
          FROM documents d JOIN files f ON f.id = d.file_id WHERE d.coachee_id = $1 ORDER BY d.created_at DESC`,
       [c.id],
     ),
@@ -57,7 +64,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                           <form action={deleteDocument.bind(null, c.id, d.id)}><ConfirmButton /></form>
                         </div>
                         <EditDocument coacheeId={c.id} doc={d} />
-                        {cmp && <Comparison coacheeId={c.id} docId={d.id} rows={d.extracted!} cmp={cmp} />}
+                        {cmp && <Comparison coacheeId={c.id} docId={d.id} rows={d.extracted!} cmp={cmp} total={reportTotal(d.extracted_text)} />}
                         {report && !cmp && (
                           <p className="text-sm text-muted">
                             {d.has_text ? "Im Text dieses Dokuments stehen keine Zeilen mit Datum und UE oder Uhrzeit." : "Aus dieser Datei lässt sich kein Text lesen (z. B. ein eingescanntes Bild)."} Ein Abgleich mit der Anwesenheit ist deshalb nicht möglich.
@@ -83,7 +90,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
   );
 }
 
-function Comparison({ coacheeId, docId, rows, cmp }: { coacheeId: string; docId: string; rows: ReportRow[]; cmp: ReturnType<typeof compareWithPortal> }) {
+function Comparison({ coacheeId, docId, rows, cmp, total }: { coacheeId: string; docId: string; rows: ReportRow[]; cmp: ReturnType<typeof compareWithPortal>; total: number | null }) {
   const diff = Math.round((cmp.reportSum - cmp.portalSum) * 100) / 100;
   const indexOf = (r: ReportRow) => rows.indexOf(r);
   return (
@@ -92,6 +99,9 @@ function Comparison({ coacheeId, docId, rows, cmp }: { coacheeId: string; docId:
         <b>Abgleich:</b> Im Dokument {cmp.matched.length + cmp.differs.length + cmp.missing.length} Termine mit {formatUnits(cmp.reportSum)}, im Portal für denselben Zeitraum {formatUnits(cmp.portalSum)}.
         {diff !== 0 && <span className={diff > 0 ? " text-gold" : " text-danger"}> Unterschied {diff > 0 ? "+" : ""}{formatUnits(diff)}.</span>}
       </p>
+      {total != null && Math.abs(total - cmp.reportSum) >= 0.05 && (
+        <p className="text-xs text-muted">Das Dokument nennt selbst eine Summe von {formatUnits(total)}, die einzelnen Termine ergeben {formatUnits(cmp.reportSum)}. Bitte im Dokument prüfen, ob ein Termin fehlt oder die Summe anders gerechnet ist.</p>
+      )}
       {cmp.matched.length > 0 && <p className="text-ok">✓ {cmp.matched.length} Termin{cmp.matched.length > 1 ? "e stimmen" : " stimmt"} überein.</p>}
       {cmp.differs.length > 0 && (
         <div>

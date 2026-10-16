@@ -3,8 +3,8 @@ import { revalidatePath } from "next/cache";
 import { coacheeFor } from "@/lib/access";
 import { audit, requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
-import { DOC_CATEGORIES, DOC_TYPES, MAX_DOC_BYTES, categoryLabel, extOf, extractReportRows, guessCategory, isReport, type ReportRow } from "@/lib/documents";
-import { extractDocumentText } from "@/lib/documents-text";
+import { DOC_CATEGORIES, DOC_TYPES, MAX_DOC_BYTES, categoryLabel, extOf, extractReportRows, guessCategory, guessCategoryFromText, isReport, type ReportRow } from "@/lib/documents";
+import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { removeFile, storeFile } from "@/lib/files";
 import { text, type FormState } from "@/lib/forms";
 
@@ -26,15 +26,16 @@ export async function uploadDocument(coacheeId: string, fd: FormData): Promise<{
   if (!mime) return { error: `${file.name}: Dieses Dateiformat geht nicht. Erlaubt sind PDF, Word, Excel, Bilder und Text.` };
   if (file.size > MAX_DOC_BYTES) return { error: `${file.name}: Die Datei ist größer als 25 MB.` };
   const chosen = text(fd, "category", 40);
-  const category = validCategory(chosen) ? chosen : guessCategory(file.name);
   const data = Buffer.from(await file.arrayBuffer());
   const fileId = await storeFile({ coacheeId: c.id, kind: "dokument", name: file.name, mime, data, userId: coach.id });
   const plain = await extractDocumentText(file.name, data);
+  const byName = guessCategory(file.name);
+  const category = validCategory(chosen) ? chosen : byName !== "sonstiges" ? byName : (guessCategoryFromText(plain) ?? "sonstiges");
   const rows = isReport(category) && plain ? extractReportRows(plain) : null;
   const title = file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[_]+/g, " ").trim().slice(0, 200) || file.name;
   await query(
-    "INSERT INTO documents (coachee_id, file_id, category, title, extracted, extracted_text, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-    [c.id, fileId, category, title, rows ? JSON.stringify(rows) : null, plain || null, coach.id],
+    "INSERT INTO documents (coachee_id, file_id, category, title, extracted, extracted_text, created_by, parser_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    [c.id, fileId, category, title, rows ? JSON.stringify(rows) : null, plain || null, coach.id, PARSER_VERSION],
   );
   await audit(coach.id, "document_uploaded", c.id, { category, name: file.name.slice(0, 120) });
   refresh(c.id);
