@@ -6,6 +6,8 @@ import { MessageList, TaskList, type Message, type Task } from "@/components/akt
 import { TaskForm } from "@/components/akte/TaskForm";
 import { CvList } from "@/components/cv/CvList";
 import { AttendancePanel } from "@/components/attendance/Panel";
+import { DocumentsPanel } from "@/components/documents/Panel";
+import { setCoachingStatus } from "@/app/actions/dokumente";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
@@ -29,6 +31,7 @@ const TABS = [
   { key: "uebersicht", label: "Übersicht" },
   { key: "gespraeche", label: "Gespräche" },
   { key: "anwesenheit", label: "Anwesenheit" },
+  { key: "dokumente", label: "Dokumente" },
   { key: "wissen", label: "Kompetenzprofil" },
   { key: "stellen", label: "Stellen" },
   { key: "bewerbungen", label: "Bewerbungen" },
@@ -58,6 +61,9 @@ const actionLabel: Record<string, string> = {
   finance_saved: "Finanzplan bearbeitet", finance_imported: "Zahlen in den Finanzplan übernommen", finance_excel: "Finanzplan als Excel geladen", assistant_deleted: "KI-Unterhaltung gelöscht",
   cv_saved: "Lebenslauf bearbeitet", cv_opened: "Lebenslauf geöffnet", cv_photo: "Foto hochgeladen", cv_pdf: "Lebenslauf als PDF geladen",
   attendance_added: "Anwesenheit eingetragen", attendance_deleted: "Anwesenheit gelöscht", attendance_mail_assigned: "Anwesenheits-Mail zugeordnet",
+  document_uploaded: "Dokument hochgeladen", document_updated: "Dokument geändert", document_deleted: "Dokument gelöscht",
+  attendance_from_document: "Anwesenheit aus Dokument übernommen", coaching_closed: "Coaching abgeschlossen", coaching_reopened: "Coaching wieder aufgenommen",
+  attendance_updated: "Anwesenheit geändert", attendance_moved: "Anwesenheit verschoben",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -97,7 +103,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
             <p className="mt-1 flex flex-wrap gap-2 text-sm">
               <span className="badge">{typeLabel[c.coaching_type]}</span>
               <span className="badge bg-bg text-muted">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
-              <span className="badge bg-bg text-muted">{statusLabel[c.status]}</span>
+              <span className={`badge ${c.status === "abgeschlossen" ? "bg-[#e5f2ea] text-ok" : "bg-bg text-muted"}`}>{c.status === "abgeschlossen" ? "✓ " : ""}{statusLabel[c.status]}</span>
               {account && !account.has_password && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
               {account && !account.active && <span className="badge bg-[#f8e6e3] text-danger">Zugang gesperrt</span>}
             </p>
@@ -105,7 +111,10 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
           <div className="min-w-56">
             <Link href="?tab=anwesenheit" className="text-xs text-muted hover:text-ink">Unterrichtseinheiten</Link>
             <p className="font-semibold">{formatUnits(used)}{c.units_total ? ` von ${c.units_total}` : ""}</p>
-            {pct !== null && <div className="mt-1 h-2 rounded-full bg-line-soft"><div className="h-2 rounded-full bg-accent" style={{ width: `${pct}%` }} /></div>}
+            {pct !== null && <div className="mt-1 h-2 rounded-full bg-line-soft"><div className={`h-2 rounded-full ${c.status === "abgeschlossen" ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} /></div>}
+            <form action={setCoachingStatus.bind(null, c.id, c.status === "abgeschlossen" ? "aktiv" : "abgeschlossen")} className="mt-2 text-right">
+              <button className={`text-xs hover:underline ${c.status === "abgeschlossen" ? "text-muted" : "text-ok"}`}>{c.status === "abgeschlossen" ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
+            </form>
           </div>
         </div>
       </div>
@@ -131,6 +140,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "uebersicht" && <Overview coacheeId={c.id} goal={c.goal} note={c.internal_note} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} oldestFirst={sp.sortierung === "alt"} />}
+      {tab === "dokumente" && <DocumentsPanel coachee={c} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
       {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
       {tab === "bewerbungen" && <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />}
