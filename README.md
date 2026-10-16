@@ -27,6 +27,7 @@ npm run dev                  # http://localhost:3000
 | Excel-Export des Finanzplans (Summen und Ergebnisse als Formeln) und PDF des ganzen Businessplans mit Deckblatt, Inhalt, Finanzteil und Liquidität im Querformat | `app/api/businessplan/[id]/excel`, `app/api/businessplan/[id]/pdf`, `lib/bp/excel.ts`, `lib/bp/render.ts` |
 | Stellen (Job): Live-Suche in der Jobbörse der Bundesagentur, gespeicherte Suchen pro Coachee, KI schlägt Suchen aus dem Kompetenzprofil vor und schätzt die Passung der Treffer ein, Coach schlägt Stellen mit Begründung vor, Coachee merkt sie sich, Treffer ausblenden. An die Jobbörse gehen nur Suchbegriffe | `components/jobs/JobSearch.tsx`, `lib/jobs/ba.ts`, `app/actions/stellen.ts` |
 | Bewerbungs-Tracker (Job): Vorschläge, gemerkt, beworben, Gespräch, Zusage, Absage; Nachfassen mit Datum, Ansprechperson, Notizen, Verlauf; Nachweis der Eigenbemühungen als PDF und Excel | `components/jobs/Tracker.tsx`, `lib/jobs/export.ts`, `app/api/bewerbungen/[id]` |
+| Anwesenheit: Termine mit UE und Rest-UE pro Coachee. Erfolgspfad-Mails werden alle 15 Minuten per IMAP aus dem Postfach gelesen (nur lesend) und dem Coachee nach Namen zugeordnet; Unklares landet unter „Anwesenheit“ zum Zuordnen, Mails lassen sich auch einfügen. AVOCONS und andere Träger: selbst eintragen. Abgleich gerechneter Rest gegen Rest laut Träger | `lib/attendance`, `app/coach/anwesenheit`, `components/attendance`, `app/actions/anwesenheit.ts`, `instrumentation.ts` |
 | Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
@@ -60,6 +61,8 @@ npm run dev                  # http://localhost:3000
    `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
    alles, nur die KI-Knöpfe fehlen.
+   Für die Anwesenheit aus Erfolgspfad-Mails `IMAP_USER` (komplette Mailadresse des Postfachs, z. B. kunt@kuntsolutions.de) und
+   `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (INBOX), `ATTENDANCE_FROM` (erfolgspfad).
 5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
 6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 

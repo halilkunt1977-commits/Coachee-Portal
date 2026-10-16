@@ -12,6 +12,8 @@
     "@fontsource/source-sans-3": "^5.3.1",
     "@fontsource/source-serif-4": "^5.3.1",
     "exceljs": "^4.4.0",
+    "imapflow": "^2.5.0",
+    "mailparser": "^3.9.39",
     "mammoth": "^1.13.0",
     "next": "16.4.1",
     "openai": "^7.34.0",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",

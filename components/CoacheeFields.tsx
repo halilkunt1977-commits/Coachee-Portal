@@ -21,7 +21,13 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
           <option value="sonstiges">Sonstiges</option>
         </Select>
         <Field label="Gutschein- / Aktenzeichen" name="voucher_number" defaultValue={c?.voucher_number ?? ""} />
-        <Field label="Bewilligte Unterrichtseinheiten" name="units_total" inputMode="decimal" defaultValue={c?.units_total ?? ""} hint="Zum Beispiel 40. Wird mit den Gesprächen verrechnet." />
+        <Field label="Bewilligte Unterrichtseinheiten" name="units_total" inputMode="decimal" defaultValue={c?.units_total ?? ""} hint="Zum Beispiel 40. Wird mit der Anwesenheit verrechnet." />
+        <Select label="Bildungsträger" name="traeger" defaultValue={c?.traeger ?? ""} >
+          <option value="">–</option>
+          <option value="erfolgspfad">Erfolgspfad (Anwesenheit kommt per Mail)</option>
+          <option value="avocons">AVOCONS (Anwesenheit selbst eintragen)</option>
+          <option value="sonstige">Anderer Träger</option>
+        </Select>
         <Field label="Beginn" name="start_date" type="date" defaultValue={c?.start_date ?? ""} />
         <Field label="Ende" name="end_date" type="date" defaultValue={c?.end_date ?? ""} />
       </section>
