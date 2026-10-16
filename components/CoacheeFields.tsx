@@ -9,6 +9,7 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
         <Field label="Nachname" name="last_name" defaultValue={c?.last_name} required />
         <Field label="E-Mail" name="email" type="email" defaultValue={c?.email} required hint="Darüber bekommt der Coachee seinen Zugang." />
         <Field label="Telefon" name="phone" type="tel" defaultValue={c?.phone ?? ""} />
+        <Field label="Wohnort" name="city" defaultValue={c?.city ?? ""} hint="Für das Wetter auf der Startseite. Leer lassen, dann gilt der Ort aus dem Lebenslauf." />
       </section>
       <section className="grid gap-4 sm:grid-cols-2">
         <Select label="Coaching-Art" name="coaching_type" defaultValue={c?.coaching_type ?? "job"}>

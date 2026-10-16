@@ -1,104 +1,286 @@
 import Link from "next/link";
-import { Empty, Notice, formatDate, formatUnits } from "@/components/ui";
+import { Suspense } from "react";
+import { setCoachCity } from "@/app/actions/dashboard";
+import { Meter, Ring, WeekBars, toneFor } from "@/components/dashboard/Charts";
+import { greeting, todayLong } from "@/components/dashboard/Hero";
+import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
+import { Empty, formatDate, formatUnits } from "@/components/ui";
+import { fullName, typeLabel, type Coachee } from "@/lib/access";
 import { requireCoach } from "@/lib/auth";
-import { fullName, statusLabel, typeLabel, type Coachee } from "@/lib/access";
-import { query } from "@/lib/db";
-import { unitsUsedSql } from "@/lib/attendance/units";
+import { one, query } from "@/lib/db";
+import { progressFor, weekSeries, weeklyUnitsSql, type Progress } from "@/lib/dashboard/progress";
 
-export const metadata = { title: "Coachees" };
+export const metadata = { title: "Dashboard" };
 
-type Row = Coachee & { units_used: number; open_tasks: number; last_meeting: string | null; unread: number; has_login: boolean; survey_new: boolean };
+type Row = Coachee & { unread: number; has_login: boolean; survey_new: boolean; overdue: number; due_jobs: number };
+type Item = { c: Row; p: Progress };
 
-export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
+const de = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 1 });
+const daysSince = (d: string | null) => (d ? Math.floor((Date.now() - new Date(`${d.slice(0, 10)}T12:00:00`).getTime()) / 86_400_000) : null);
+const daysUntil = (d: string | null) => (d ? Math.ceil((new Date(`${d}T23:59:59`).getTime() - Date.now()) / 86_400_000) : null);
+
+// Stufen für die Übersicht „Wo stehen die Gründer?“ und „Wo stehen die Jobsuchenden?“
+const FOUNDER_STAGES = [
+  { key: "start", label: "Erste Schritte" },
+  { key: "idee", label: "Idee steht" },
+  { key: "businessplan", label: "Businessplan" },
+  { key: "finanzplan", label: "Finanzplan" },
+  { key: "tragfaehigkeit_beantragt", label: "Tragfähigkeit beantragt" },
+  { key: "tragfaehigkeit_erhalten", label: "Tragfähigkeit erhalten" },
+  { key: "gruendungszuschuss", label: "Zuschuss beantragt" },
+  { key: "gegruendet", label: "Gestartet" },
+];
+const JOB_STAGES = [
+  { key: "start", label: "Erste Schritte" },
+  { key: "erfahrung", label: "Erfahrung erfasst" },
+  { key: "lebenslauf", label: "Lebenslauf fertig" },
+  { key: "bewerbung", label: "Bewirbt sich" },
+  { key: "gespraech", label: "Gespräche" },
+  { key: "zusage", label: "Zusage" },
+];
+
+function stageOf(it: Item) {
+  const done = (k: string) => it.p.milestones.find((m) => m.key === k)?.done;
+  if (it.c.coaching_type === "gruendung") {
+    if (done("start") || done("gewerbe")) return "gegruendet";
+    for (const k of ["gruendungszuschuss", "tragfaehigkeit_erhalten", "tragfaehigkeit_beantragt", "finanzplan", "businessplan", "idee"]) if (done(k)) return k;
+    return "start";
+  }
+  for (const k of ["zusage", "gespraech", "bewerbung", "lebenslauf", "erfahrung"]) if (done(k)) return k;
+  return "start";
+}
+
+export default async function CoachDashboard() {
   const user = await requireCoach();
-  const sp = await searchParams;
-  const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 100) : "";
-  const typ = sp.typ === "job" || sp.typ === "gruendung" ? sp.typ : "";
-  const status = sp.status === "abgeschlossen" || sp.status === "pausiert" || sp.status === "aktiv" ? sp.status : "alle";
+  const [rows, me, weekRows, month, openMails, closed] = await Promise.all([
+    query<Row>(
+      `SELECT c.*,
+              (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
+              (u.password_hash IS NOT NULL) AS has_login,
+              EXISTS (SELECT 1 FROM experience_surveys s WHERE s.coachee_id = c.id AND s.status = 'eingereicht') AS survey_new,
+              (SELECT count(*) FROM tasks t WHERE t.coachee_id = c.id AND t.done_at IS NULL AND t.due_on < CURRENT_DATE)::int AS overdue,
+              (SELECT count(*) FROM applications a WHERE a.coachee_id = c.id AND a.next_on <= CURRENT_DATE AND a.status IN ('gemerkt', 'beworben', 'gespraech'))::int AS due_jobs
+         FROM coachees c LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.coach_id = $1 AND c.status <> 'abgeschlossen' AND c.archived_at IS NULL
+        ORDER BY c.last_name, c.first_name`,
+      [user.id],
+    ),
+    one<{ city: string | null }>("SELECT city FROM users WHERE id = $1", [user.id]),
+    query<{ week: string; units: number }>(weeklyUnitsSql("$c IN (SELECT id FROM coachees WHERE coach_id = $1)").replace("$WEEKS", "12"), [user.id]),
+    one<{ units: number }>(
+      `SELECT COALESCE(sum(units), 0)::float AS units FROM (
+         SELECT a.units FROM attendance a JOIN coachees c ON c.id = a.coachee_id WHERE c.coach_id = $1 AND a.held_on >= date_trunc('month', CURRENT_DATE)
+         UNION ALL
+         SELECT m.units FROM meetings m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.held_on >= date_trunc('month', CURRENT_DATE)
+           AND NOT EXISTS (SELECT 1 FROM attendance x WHERE x.coachee_id = m.coachee_id)) u`,
+      [user.id],
+    ),
+    one<{ n: number }>("SELECT count(*)::int AS n FROM attendance_mails WHERE coach_id = $1 AND status = 'offen'", [user.id]),
+    one<{ n: number }>("SELECT count(*)::int AS n FROM coachees WHERE coach_id = $1 AND status = 'abgeschlossen'", [user.id]),
+  ]);
 
-  const rows = await query<Row>(
-    `SELECT c.*,
-            ${unitsUsedSql("c.id")} AS units_used,
-            (SELECT count(*) FROM tasks t WHERE t.coachee_id = c.id AND t.done_at IS NULL)::int AS open_tasks,
-            (SELECT max(held_on) FROM meetings m WHERE m.coachee_id = c.id) AS last_meeting,
-            (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
-            (u.password_hash IS NOT NULL) AS has_login,
-            EXISTS (SELECT 1 FROM experience_surveys s WHERE s.coachee_id = c.id AND s.status = 'eingereicht') AS survey_new
-       FROM coachees c LEFT JOIN users u ON u.id = c.user_id
-      WHERE c.coach_id = $1
-        AND ($2 = '' OR (c.first_name || ' ' || c.last_name || ' ' || c.email) ILIKE '%' || $2 || '%')
-        AND ($3 = '' OR c.coaching_type = $3)
-        AND ($4 = 'alle' OR c.status = $4)
-      ORDER BY CASE c.status WHEN 'aktiv' THEN 0 WHEN 'pausiert' THEN 1 ELSE 2 END, c.last_name, c.first_name`,
-    [user.id, q, typ, status],
-  );
+  const items: Item[] = await Promise.all(rows.map(async (c) => ({ c, p: await progressFor(c) })));
+  const active = items.filter((i) => i.c.status === "aktiv");
+  const weeks = weekSeries(weekRows);
+  const thisWeek = weeks[weeks.length - 1]?.units ?? 0;
+  const lastWeek = weeks[weeks.length - 2]?.units ?? 0;
+  const restAll = active.reduce((a, i) => a + (i.p.units.rest ?? 0), 0);
+  const avg = active.length ? Math.round(active.reduce((a, i) => a + i.p.overall, 0) / active.length) : 0;
 
-  const openMails = (await query<{ n: number }>("SELECT count(*)::int AS n FROM attendance_mails WHERE coach_id = $1 AND status = 'offen'", [user.id]))[0]?.n ?? 0;
+  // Was heute Aufmerksamkeit braucht, das Dringendste zuerst
+  type Alert = { tone: "danger" | "gold" | "accent" | "ok"; text: string; href: string; c?: Row };
+  const alerts: Alert[] = [];
+  if ((openMails?.n ?? 0) > 0) alerts.push({ tone: "gold", text: `${openMails?.n} Anwesenheits-Mail${openMails!.n > 1 ? "s" : ""} nicht zugeordnet`, href: "/coach/anwesenheit" });
+  for (const { c, p } of items) {
+    const name = fullName(c);
+    const href = `/coach/coachees/${c.id}`;
+    if (c.unread) alerts.push({ tone: "accent", text: `${name}: ${c.unread} neue Nachricht${c.unread > 1 ? "en" : ""}`, href: `${href}?tab=nachrichten`, c });
+    if (c.survey_new) alerts.push({ tone: "ok", text: `${name} hat den Erfahrungsbogen ausgefüllt`, href: `${href}?tab=erfahrung`, c });
+    if (c.overdue) alerts.push({ tone: "danger", text: `${name}: ${c.overdue} Aufgabe${c.overdue > 1 ? "n" : ""} überfällig`, href: `${href}?tab=aufgaben`, c });
+    if (c.due_jobs) alerts.push({ tone: "gold", text: `${name}: bei ${c.due_jobs} Bewerbung${c.due_jobs > 1 ? "en" : ""} nachfassen`, href: `${href}?tab=bewerbungen`, c });
+    if (c.status !== "aktiv") continue;
+    const left = daysUntil(c.end_date);
+    if (left != null && left >= 0 && left <= 30 && (p.units.rest ?? 0) > 0)
+      alerts.push({ tone: left <= 14 ? "danger" : "gold", text: `${name}: endet in ${left} Tag${left === 1 ? "" : "en"}, noch ${de(p.units.rest ?? 0)} UE offen`, href, c });
+    else if (left != null && left < 0 && (p.units.rest ?? 0) > 0) alerts.push({ tone: "danger", text: `${name}: Ende überschritten, noch ${de(p.units.rest ?? 0)} UE offen`, href: `${href}?tab=stammdaten`, c });
+    if (p.units.perWeek != null && p.units.perWeek > 6) alerts.push({ tone: "danger", text: `${name}: ${de(p.units.perWeek)} UE pro Woche nötig, um das Kontingent zu schaffen`, href: `${href}?tab=anwesenheit`, c });
+    const quiet = daysSince(p.lastContact);
+    if (quiet != null && quiet >= 14) alerts.push({ tone: "gold", text: `${name}: seit ${quiet} Tagen kein Termin und keine Nachricht`, href, c });
+    if (quiet == null && !c.has_login) alerts.push({ tone: "gold", text: `${name}: Einladung noch nicht angenommen`, href: `${href}?tab=stammdaten`, c });
+  }
+  const order = { danger: 0, gold: 1, accent: 2, ok: 3 };
+  alerts.sort((a, b) => order[a.tone] - order[b.tone]);
 
-  const filterLink = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ ...(q && { q }), ...(typ && { typ }), status, ...patch });
-    for (const [k, v] of [...p]) if (!v) p.delete(k);
-    return `/coach?${p}`;
-  };
-  const chip = (active: boolean) => `rounded-full px-3 py-1 text-sm font-medium ${active ? "bg-accent text-white" : "bg-surface text-muted hover:text-ink border border-line-soft"}`;
+  const founders = active.filter((i) => i.c.coaching_type === "gruendung");
+  const jobs = active.filter((i) => i.c.coaching_type === "job");
+  const firstName = user.name.split(" ")[0];
+  const board = [...items].sort((a, b) => (a.c.status === b.c.status ? a.p.overall - b.p.overall : a.c.status === "aktiv" ? -1 : 1));
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="h1">Coachees</h1>
-          <p className="text-muted">{rows.length} {rows.length === 1 ? "Eintrag" : "Einträge"}</p>
-        </div>
-        <Link href="/coach/neu" className="btn">+ Neuer Coachee</Link>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <form className="mr-2"><input name="q" defaultValue={q} placeholder="Name oder E-Mail suchen" className="input w-64" />{typ && <input type="hidden" name="typ" value={typ} />}<input type="hidden" name="status" value={status} /></form>
-        <Link href={filterLink({ typ: "" })} className={chip(!typ)}>Alle</Link>
-        <Link href={filterLink({ typ: "job" })} className={chip(typ === "job")}>Jobcoaching</Link>
-        <Link href={filterLink({ typ: "gruendung" })} className={chip(typ === "gruendung")}>Gründungscoaching</Link>
-        <span className="mx-1 h-5 w-px bg-line" />
-        {(["alle", "aktiv", "pausiert", "abgeschlossen"] as const).map((s) => (
-          <Link key={s} href={filterLink({ status: s })} className={chip(status === s)}>{s === "alle" ? "Alle Status" : statusLabel[s]}</Link>
-        ))}
-      </div>
-
-      {typeof sp.geloescht === "string" && <Notice tone="ok">{sp.geloescht.slice(0, 200)} wurde gelöscht.</Notice>}
-
-      {openMails > 0 && (
-        <Link href="/coach/anwesenheit" className="block rounded-xl bg-[#fbf1e3] px-4 py-3 text-sm text-gold hover:underline">
-          {openMails} Anwesenheits-Mail{openMails > 1 ? "s" : ""} von Erfolgspfad konnte{openMails > 1 ? "n" : ""} keinem Coachee zugeordnet werden. Jetzt zuordnen →
-        </Link>
-      )}
-
-      {rows.length === 0 ? (
-        <Empty>Noch keine Coachees in dieser Auswahl. Lege mit „Neuer Coachee“ den ersten an.</Empty>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {rows.map((c) => (
-            <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card block transition hover:border-accent ${c.status === "abgeschlossen" ? "!border-ok/40 !bg-[#eef6f0]" : ""}`}>
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold">{fullName(c)}</p>
-                  <p className="text-sm text-muted">{typeLabel[c.coaching_type]}</p>
+      <section className="-mx-4 overflow-hidden bg-gradient-to-br from-accent via-[#24456f] to-[#2f5683] px-4 py-6 text-white sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8">
+        <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+          <div className="min-w-0 space-y-6">
+            <div>
+              <p className="text-sm text-white/70">{todayLong()}</p>
+              <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">{greeting()}, {firstName}!</h1>
+              <p className="mt-1 text-white/80">
+                {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} heute deinen Blick.` : "Alles im grünen Bereich."}
+              </p>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                { label: "Aktive Coachees", value: String(active.length), sub: `${jobs.length} Job · ${founders.length} Gründung` },
+                { label: "UE diese Woche", value: de(thisWeek), sub: lastWeek ? `Vorwoche ${de(lastWeek)}` : "Vorwoche –" },
+                { label: "UE im " + new Date().toLocaleDateString("de-DE", { month: "long", timeZone: "Europe/Berlin" }), value: de(month?.units ?? 0), sub: `${closed?.n ?? 0} Coachings abgeschlossen` },
+                { label: "UE noch offen", value: de(restAll), sub: "über alle aktiven" },
+              ].map((k) => (
+                <div key={k.label} className="rounded-2xl bg-white/10 px-4 py-3">
+                  <dt className="text-xs text-white/70">{k.label}</dt>
+                  <dd className="font-[family-name:var(--font-display)] text-3xl font-bold tabular-nums">{k.value}</dd>
+                  <dd className="text-[11px] text-white/60">{k.sub}</dd>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  {c.status === "abgeschlossen" && <span className="badge bg-ok text-white">✓ Abgeschlossen</span>}
-                  {c.status === "pausiert" && <span className="badge bg-bg text-muted">{statusLabel[c.status]}</span>}
-                  {!c.has_login && c.status !== "abgeschlossen" && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
-                  {c.survey_new && <span className="badge bg-[#e5f2ea] text-ok">Erfahrungsbogen neu</span>}
-                  {c.unread > 0 && <span className="badge">{c.unread} neue Nachricht{c.unread > 1 ? "en" : ""}</span>}
-                </div>
+              ))}
+            </dl>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">Unterrichtseinheiten pro Kalenderwoche</p>
+              <WeekBars weeks={weeks} height={110} light />
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white/10 p-4">
+              <Suspense fallback={<WeatherSkeleton />}>
+                <WeatherBox city={me?.city ?? null} edit={<CityForm action={setCoachCity} city={me?.city ?? null} placeholder="Dein Ort, z. B. Köln" />} />
+              </Suspense>
+            </div>
+            <div className="flex items-center gap-4 rounded-2xl bg-white/10 p-4">
+              <Ring pct={avg} size={76} stroke={8} tone="white" track="rgba(255,255,255,.2)">
+                <span className="text-lg font-bold">{avg}%</span>
+              </Ring>
+              <div>
+                <p className="font-semibold">Durchschnittlicher Stand</p>
+                <p className="text-xs text-white/70">aller aktiven Coachings, aus Bausteinen und Etappen</p>
               </div>
-              <dl className="grid grid-cols-3 gap-2 text-xs text-muted">
-                <div><dt>Stunden</dt><dd className="text-sm font-semibold text-ink">{formatUnits(c.units_used)}{c.units_total ? ` / ${c.units_total}` : ""}</dd></div>
-                <div><dt>Offene Aufgaben</dt><dd className="text-sm font-semibold text-ink">{c.open_tasks}</dd></div>
-                <div><dt>Letztes Gespräch</dt><dd className="text-sm font-semibold text-ink">{formatDate(c.last_meeting)}</dd></div>
-              </dl>
-            </Link>
-          ))}
+            </div>
+          </div>
         </div>
-      )}
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+        <section className="card space-y-3">
+          <h2 className="h2">Heute wichtig</h2>
+          {alerts.length === 0 ? (
+            <Empty>Nichts Dringendes. Gute Arbeit!</Empty>
+          ) : (
+            <ul className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
+              {alerts.map((a, i) => (
+                <li key={i}>
+                  <Link href={a.href} className="flex items-start gap-3 rounded-xl px-2 py-2 text-sm hover:bg-bg">
+                    <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: `var(--${a.tone === "accent" ? "accent" : a.tone})` }} />
+                    <span>{a.text}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="h2">Schlagzeilen</h2>
+          </div>
+          <Suspense fallback={<NewsSkeleton />}>
+            <NewsBox max={4} />
+          </Suspense>
+        </section>
+      </div>
+
+      {founders.length > 0 && <Pipeline title="Wo stehen die Gründer?" stages={FOUNDER_STAGES} items={founders} />}
+      {jobs.length > 0 && <Pipeline title="Wo stehen die Jobsuchenden?" stages={JOB_STAGES} items={jobs} />}
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <h2 className="h2">Alle laufenden Coachings</h2>
+          <div className="flex gap-2">
+            <Link href="/coach/coachees" className="btn-ghost btn-sm">Liste und Suche</Link>
+            <Link href="/coach/neu" className="btn btn-sm">+ Neuer Coachee</Link>
+          </div>
+        </div>
+        {board.length === 0 ? (
+          <Empty>Noch keine laufenden Coachings. Lege mit „Neuer Coachee“ den ersten an.</Empty>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {board.map(({ c, p }) => {
+              const next = p.milestones.find((m) => !m.done);
+              const left = daysUntil(c.end_date);
+              const low = p.units.rest != null && p.units.total ? p.units.rest / p.units.total <= 0.1 : false;
+              return (
+                <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card group block space-y-3 !p-4 transition hover:border-accent ${c.status === "pausiert" ? "opacity-70" : ""}`}>
+                  <div className="flex items-center gap-3">
+                    <Ring pct={p.overall} size={52} stroke={6} tone={toneFor(p.overall)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold group-hover:text-accent">{fullName(c)}</p>
+                      <p className="text-xs text-muted">{typeLabel[c.coaching_type]}{c.status === "pausiert" ? " · pausiert" : ""}{left != null ? ` · ${left >= 0 ? `noch ${left} Tage` : "Ende überschritten"}` : ""}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      {c.unread > 0 && <span className="badge">{c.unread} neu</span>}
+                      {c.survey_new && <span className="badge bg-[#e5f2ea] text-ok">Bogen</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex justify-between text-xs text-muted">
+                      <span>{formatUnits(p.units.used)}{p.units.total ? ` von ${de(p.units.total)}` : ""}</span>
+                      {p.units.rest != null && <span className={low ? "font-semibold text-danger" : ""}>{de(p.units.rest)} übrig</span>}
+                    </div>
+                    <Meter pct={p.units.pct ?? 0} tone={low ? "danger" : "accent"} />
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {p.parts.map((x) => (
+                      <span key={x.key} title={`${x.label}: ${x.detail}`} className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${x.pct >= 100 ? "bg-[#e5f2ea] text-ok" : x.pct >= 50 ? "bg-tint text-accent" : x.pct > 0 ? "bg-[#fbf1e3] text-gold" : "bg-bg text-muted"}`}>
+                        {x.label} {x.pct}%
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted">
+                    {next ? <>Als Nächstes: <span className="font-medium text-ink">{next.label}</span></> : "Alle Etappen erledigt"}
+                    {p.lastContact ? ` · zuletzt ${formatDate(p.lastContact)}` : ""}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+function Pipeline({ title, stages, items }: { title: string; stages: { key: string; label: string }[]; items: Item[] }) {
+  const by = new Map<string, Item[]>();
+  for (const it of items) by.set(stageOf(it), [...(by.get(stageOf(it)) ?? []), it]);
+  return (
+    <section className="card space-y-3">
+      <h2 className="h2">{title}</h2>
+      <div className="-mx-1 overflow-x-auto pb-1">
+        <div className="flex min-w-max gap-2 px-1">
+          {stages.map((s, i) => {
+            const list = by.get(s.key) ?? [];
+            return (
+              <div key={s.key} className={`w-40 shrink-0 rounded-xl p-3 ${list.length ? "bg-tint/70" : "bg-bg"}`}>
+                <div className="mb-2 flex items-baseline justify-between gap-1">
+                  <p className="text-xs font-semibold leading-tight text-accent">{i + 1}. {s.label}</p>
+                  <span className="text-sm font-bold tabular-nums">{list.length}</span>
+                </div>
+                <ul className="space-y-1">
+                  {list.map(({ c }) => (
+                    <li key={c.id}><Link href={`/coach/coachees/${c.id}`} className="block truncate rounded-md bg-surface px-2 py-1 text-xs font-medium hover:text-accent">{fullName(c)}</Link></li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }

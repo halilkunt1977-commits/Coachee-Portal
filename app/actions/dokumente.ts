@@ -10,7 +10,7 @@ import { text, type FormState } from "@/lib/forms";
 
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
-  revalidatePath("/coach");
+  revalidatePath("/coach", "layout");
   revalidatePath("/mein-bereich");
 };
 const validCategory = (v: string) => DOC_CATEGORIES.some((c) => c.key === v);
