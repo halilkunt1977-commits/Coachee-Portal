@@ -25,13 +25,14 @@ export function pseudonymize(text: string, names: string[]) {
   return out;
 }
 
+// Coachees sollen nicht merken, dass hinter den Hilfen eine KI steckt (Wunsch des Coachs): Meldungen an sie ohne „KI“.
 /** Coachees dürfen die KI nur begrenzt nutzen (AI_COACHEE_MONTHLY_LIMIT Aufrufe pro Monat, Standard 40). */
 export async function assertAiAllowed(user: User) {
-  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (!aiEnabled()) throw new AiError(user.role === "coach" ? "Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt)." : "Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
   if (user.role === "coach") return;
   const limit = Number(process.env.AI_COACHEE_MONTHLY_LIMIT || 40);
   const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now())", [user.id]);
-  if ((row?.n ?? 0) >= limit) throw new AiError("Die KI-Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
+  if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
 }
 
 type Usage = { coacheeId: string | null; userId: string; purpose: string };
@@ -57,7 +58,7 @@ export async function jsonResponse<T>(opts: Usage & { instructions: string; inpu
   try {
     return JSON.parse(response.output_text) as T;
   } catch {
-    throw new AiError("Die KI hat keine verwertbare Antwort geliefert. Bitte noch einmal versuchen.");
+    throw new AiError("Es kam keine verwertbare Antwort. Bitte noch einmal versuchen.");
   }
 }
 
@@ -91,7 +92,7 @@ export async function* streamText(opts: Usage & { instructions: string; messages
     for await (const event of stream) {
       if (event.type === "response.output_text.delta") yield event.delta;
       else if (event.type === "response.completed") usage = event.response.usage ?? undefined;
-      else if (event.type === "error") throw new AiError("Die KI hat die Antwort abgebrochen. Bitte noch einmal versuchen.");
+      else if (event.type === "error") throw new AiError("Die Antwort wurde abgebrochen. Bitte noch einmal versuchen.");
     }
   } finally {
     await logUsage(opts, model, usage?.input_tokens, usage?.output_tokens);

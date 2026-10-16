@@ -7,7 +7,7 @@ import { unitsUsedSql } from "@/lib/attendance/units";
 
 export const metadata = { title: "Coachees" };
 
-type Row = Coachee & { units_used: number; open_tasks: number; last_meeting: string | null; unread: number; has_login: boolean };
+type Row = Coachee & { units_used: number; open_tasks: number; last_meeting: string | null; unread: number; has_login: boolean; survey_new: boolean };
 
 export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
   const user = await requireCoach();
@@ -22,7 +22,8 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
             (SELECT count(*) FROM tasks t WHERE t.coachee_id = c.id AND t.done_at IS NULL)::int AS open_tasks,
             (SELECT max(held_on) FROM meetings m WHERE m.coachee_id = c.id) AS last_meeting,
             (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
-            (u.password_hash IS NOT NULL) AS has_login
+            (u.password_hash IS NOT NULL) AS has_login,
+            EXISTS (SELECT 1 FROM experience_surveys s WHERE s.coachee_id = c.id AND s.status = 'eingereicht') AS survey_new
        FROM coachees c LEFT JOIN users u ON u.id = c.user_id
       WHERE c.coach_id = $1
         AND ($2 = '' OR (c.first_name || ' ' || c.last_name || ' ' || c.email) ILIKE '%' || $2 || '%')
@@ -83,6 +84,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
                   {c.status === "abgeschlossen" && <span className="badge bg-ok text-white">✓ Abgeschlossen</span>}
                   {c.status === "pausiert" && <span className="badge bg-bg text-muted">{statusLabel[c.status]}</span>}
                   {!c.has_login && c.status !== "abgeschlossen" && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
+                  {c.survey_new && <span className="badge bg-[#e5f2ea] text-ok">Erfahrungsbogen neu</span>}
                   {c.unread > 0 && <span className="badge">{c.unread} neue Nachricht{c.unread > 1 ? "en" : ""}</span>}
                 </div>
               </div>

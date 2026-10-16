@@ -95,7 +95,7 @@ Regeln:
     return { text: out.text.replaceAll("[Name]", c.first_name).trim() };
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Businessplan-Entwurf", e);
-    return { error: e instanceof AiError ? e.message : "Die KI hat gerade nicht geantwortet. Bitte gleich noch einmal versuchen." };
+    return { error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
   }
 }
 

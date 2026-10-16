@@ -16,7 +16,7 @@ const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
   revalidatePath("/mein-bereich/lebenslauf");
 };
-const aiMessage = (e: unknown) => (e instanceof AiError ? e.message : "Die KI hat gerade nicht geantwortet. Bitte gleich noch einmal versuchen.");
+const aiMessage = (e: unknown) => (e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen.");
 
 // ---------- Anlegen, kopieren, löschen ----------
 
@@ -178,7 +178,7 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
       maxTokens: 1500,
     });
     const out = String(result.text ?? "").replace(/\[Name\]\s*/g, "").trim();
-    if (!out) return { ok: false, error: "Die KI hat keinen Text geliefert. Bitte noch einmal versuchen." };
+    if (!out) return { ok: false, error: "Es kam kein Text zurück. Bitte noch einmal versuchen." };
     return { ok: true, text: out };
   } catch (e) {
     if (!(e instanceof AiError)) console.error("KI-Hilfe Lebenslauf", e);

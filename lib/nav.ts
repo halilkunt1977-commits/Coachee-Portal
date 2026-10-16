@@ -18,6 +18,7 @@ export const coacheeLinks = (type: "job" | "gruendung" | null = null) => [
         ]
       : []),
   { href: "/mein-bereich/lebenslauf", label: "Lebenslauf" },
-  { href: "/mein-bereich/assistent", label: "KI-Assistent" },
+  { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen" },
+  { href: "/mein-bereich/assistent", label: "Assistent" },
   { href: "/datenschutz", label: "Datenschutz" },
 ];

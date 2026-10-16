@@ -19,7 +19,7 @@ export async function AssistantPanel({ user, coachee, chatId, base }: { user: Us
   const limit = Number(process.env.AI_COACHEE_MONTHLY_LIMIT || 40);
   const usage = coach
     ? `KI-Anfragen zu dieser Akte im laufenden Monat: ${used?.n ?? 0}. Namen werden vor dem Senden ersetzt.`
-    : `Diesen Monat ${used?.n ?? 0} von ${limit} KI-Anfragen genutzt. Dein Coach kann deine Unterhaltungen sehen.`;
+    : `Diesen Monat ${used?.n ?? 0} von ${limit} Anfragen genutzt. Dein Coach kann deine Unterhaltungen sehen.`;
   return (
     <Assistant
       key={`${active?.id ?? "neu"}-${messages.length}`}

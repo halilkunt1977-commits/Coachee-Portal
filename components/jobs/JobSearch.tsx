@@ -168,7 +168,7 @@ export function JobSearch(p: Props) {
           <div className="flex flex-wrap gap-2">
             {p.ai && (
               <button type="button" className="btn-ghost btn-sm" disabled={ideasBusy} onClick={loadIdeas}>
-                {ideasBusy ? "KI überlegt …" : "✦ Suchen aus dem Profil vorschlagen"}
+                {ideasBusy ? "Einen Moment …" : "✦ Suchen aus dem Profil vorschlagen"}
               </button>
             )}
             <button type="button" className="btn-ghost btn-sm" onClick={() => { setShowForm(!showForm); setActive(null); }}>
@@ -191,7 +191,7 @@ export function JobSearch(p: Props) {
         {ideas && (
           <div className="space-y-2 rounded-xl bg-tint/50 p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-accent">Vorschläge der KI</p>
+              <p className="text-sm font-semibold text-accent">{p.coach ? "Vorschläge der KI" : "Vorschläge"}</p>
               <button type="button" className="text-xs text-muted hover:text-ink" onClick={() => setIdeas(null)}>Ausblenden</button>
             </div>
             {ideas.length === 0 && <p className="text-sm text-muted">Keine Vorschläge. Ergänze das Kompetenzprofil um Wunschberufe und Rahmenbedingungen.</p>}
@@ -272,7 +272,7 @@ export function JobSearch(p: Props) {
             </p>
             {p.ai && jobs.length > 0 && unrated && (
               <button type="button" className="btn-ghost btn-sm" disabled={rating} onClick={rate}>
-                {rating ? "KI prüft die Stellen …" : `✦ KI: Passen die Stellen zu ${p.coach ? p.firstName : "mir"}?`}
+                {rating ? "Stellen werden geprüft …" : p.coach ? `✦ KI: Passen die Stellen zu ${p.firstName}?` : "✦ Passen die Stellen zu mir?"}
               </button>
             )}
           </div>

@@ -85,10 +85,10 @@ export function PlanEditor(p: Props) {
     setAiError(null);
     setDrafting(active);
     const key = active;
-    const res = await draftSection(p.coacheeId, key).catch(() => ({ error: "Die KI hat gerade nicht geantwortet.", text: undefined }));
+    const res = await draftSection(p.coacheeId, key).catch(() => ({ error: "Das hat gerade nicht geklappt.", text: undefined }));
     setDrafting(null);
     if (res.text) setDraft({ key, text: res.text });
-    else setAiError(res.error ?? "Die KI hat gerade nicht geantwortet.");
+    else setAiError(res.error ?? "Das hat gerade nicht geklappt.");
   }
 
   function go(key: string) {
@@ -172,7 +172,7 @@ export function PlanEditor(p: Props) {
             </div>
             {p.ai && (
               <button type="button" className="btn-ghost btn-sm" disabled={drafting !== null || Boolean(current.conflict)} onClick={askAi}>
-                {drafting === active ? "Schreibt …" : current.text.trim() ? "✦ Mit KI überarbeiten" : "✦ KI-Entwurf schreiben"}
+                {drafting === active ? "Schreibt …" : current.text.trim() ? (p.coach ? "✦ Mit KI überarbeiten" : "✦ Überarbeiten lassen") : p.coach ? "✦ KI-Entwurf schreiben" : "✦ Entwurf vorschlagen"}
               </button>
             )}
           </div>
@@ -203,7 +203,7 @@ export function PlanEditor(p: Props) {
           {aiError && <p className="rounded-lg bg-[#f8e6e3] px-3 py-2 text-sm text-danger" role="alert">{aiError}</p>}
           {draft?.key === active && (
             <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fbf6ec] p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gold">✦ Vorschlag der KI, bitte prüfen</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gold">✦ {p.coach ? "Vorschlag der KI" : "Vorschlag"}, bitte prüfen</p>
               <div className="text-[15px]"><Markdown text={draft.text} /></div>
               <p className="text-xs text-muted">Stellen in [eckigen Klammern] fehlen noch. Bitte mit echten Angaben ersetzen.</p>
               <div className="flex flex-wrap gap-2">

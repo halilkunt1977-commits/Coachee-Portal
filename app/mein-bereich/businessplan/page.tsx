@@ -15,7 +15,7 @@ export default async function MyPlan() {
     <div className="space-y-6">
       <div>
         <h1 className="h1">Mein Businessplan</h1>
-        <p className="text-muted">Abschnitt für Abschnitt, mit Leitfragen und KI-Hilfe. Dein Coach sieht jede Änderung und arbeitet mit dir daran. Alles wird automatisch gespeichert.</p>
+        <p className="text-muted">Abschnitt für Abschnitt, mit Leitfragen und Formulierungshilfe. Dein Coach sieht jede Änderung und arbeitet mit dir daran. Alles wird automatisch gespeichert.</p>
       </div>
       <PlanPanel user={user} coachee={c} links={{ plan: "/mein-bereich/businessplan", finance: "/mein-bereich/finanzplan", zahlen: null }} />
     </div>

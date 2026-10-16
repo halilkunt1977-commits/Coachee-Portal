@@ -140,7 +140,7 @@ export async function assistantInstructions(user: User, c: Coachee) {
     ? "Du sprichst mit dem Coach, der mit dem Coachee arbeitet und Texte, Ideen und Einschätzungen für diese Arbeit braucht. Sprich den Coach mit „du“ an und den Coachee in der dritten Person als „der Coachee“."
     : "Du sprichst direkt mit dem Coachee. Sprich die Person freundlich mit „du“ an, ermutigend und klar, ohne Fachjargon. Bei Fragen, die ins Coaching gehören, verweise auf das nächste Gespräch mit dem Coach.";
 
-  return `Du bist der KI-Assistent im Coaching-Portal von Gründarium (Kunt Solutions, Nürnberg). ${who}
+  return `Du bist der Assistent im Coaching-Portal von Gründarium (Kunt Solutions, Nürnberg). ${who}
 
 So arbeitest du:
 - Antworte auf Deutsch, konkret und auf diese Person zugeschnitten. Nutze das Wissen aus der Akte unten.
