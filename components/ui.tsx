@@ -67,4 +67,4 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export const formatDate = (d: string | null | undefined) => (d ? new Date(d.length === 10 ? `${d}T12:00:00` : d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–");
 export const formatDateTime = (d: string | null | undefined) => (d ? new Date(d).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" }) : "–");
-export const formatUnits = (n: number | null | undefined) => (n == null ? "–" : `${n.toLocaleString("de-DE", { maximumFractionDigits: 1 })} UE`);
+export const formatUnits = (n: number | null | undefined) => (n == null ? "–" : `${n.toLocaleString("de-DE", { maximumFractionDigits: 2 })} UE`);

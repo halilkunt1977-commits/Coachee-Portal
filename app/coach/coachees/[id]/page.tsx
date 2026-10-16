@@ -5,6 +5,7 @@ import { MessageForm } from "@/components/akte/MessageForm";
 import { MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
 import { TaskForm } from "@/components/akte/TaskForm";
 import { CvList } from "@/components/cv/CvList";
+import { AttendancePanel } from "@/components/attendance/Panel";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
@@ -16,6 +17,7 @@ import { Empty, Notice, formatDate, formatDateTime, formatUnits } from "@/compon
 import { coacheeFor, fullName, fundingLabel, statusLabel, typeLabel } from "@/lib/access";
 import { audit, requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
+import { unitsUsedSql } from "@/lib/attendance/units";
 import { deleteFinanceItem, deleteProfileItem, rejectAllSuggestions } from "@/app/actions/profil";
 import { resendInvite, setAccess } from "../../actions";
 import InviteLink from "./InviteLink";
@@ -26,6 +28,7 @@ type Meeting = { id: string; held_on: string; units: number; format: string; tit
 const TABS = [
   { key: "uebersicht", label: "Übersicht" },
   { key: "gespraeche", label: "Gespräche" },
+  { key: "anwesenheit", label: "Anwesenheit" },
   { key: "wissen", label: "Kompetenzprofil" },
   { key: "stellen", label: "Stellen" },
   { key: "bewerbungen", label: "Bewerbungen" },
@@ -54,6 +57,7 @@ const actionLabel: Record<string, string> = {
   applications_excel: "Bewerbungen als Excel geladen", jobs_ai_searches: "KI-Vorschläge für Stellensuchen", jobs_ai_rated: "KI-Einschätzung zu Stellen",
   finance_saved: "Finanzplan bearbeitet", finance_imported: "Zahlen in den Finanzplan übernommen", finance_excel: "Finanzplan als Excel geladen", assistant_deleted: "KI-Unterhaltung gelöscht",
   cv_saved: "Lebenslauf bearbeitet", cv_opened: "Lebenslauf geöffnet", cv_photo: "Foto hochgeladen", cv_pdf: "Lebenslauf als PDF geladen",
+  attendance_added: "Anwesenheit eingetragen", attendance_deleted: "Anwesenheit gelöscht", attendance_mail_assigned: "Anwesenheits-Mail zugeordnet",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -68,7 +72,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
 
   const [stats, account] = await Promise.all([
     one<{ units_used: number; meetings: number; open_tasks: number; unread: number; suggestions: number; due: number }>(
-      `SELECT COALESCE((SELECT sum(units) FROM meetings WHERE coachee_id = $1), 0) AS units_used,
+      `SELECT ${unitsUsedSql("$1")} AS units_used,
               (SELECT count(*) FROM meetings WHERE coachee_id = $1)::int AS meetings,
               (SELECT count(*) FROM tasks WHERE coachee_id = $1 AND done_at IS NULL)::int AS open_tasks,
               (SELECT count(*) FROM messages WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2)::int AS unread,
@@ -99,7 +103,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
             </p>
           </div>
           <div className="min-w-56">
-            <p className="text-xs text-muted">Unterrichtseinheiten</p>
+            <Link href="?tab=anwesenheit" className="text-xs text-muted hover:text-ink">Unterrichtseinheiten</Link>
             <p className="font-semibold">{formatUnits(used)}{c.units_total ? ` von ${c.units_total}` : ""}</p>
             {pct !== null && <div className="mt-1 h-2 rounded-full bg-line-soft"><div className="h-2 rounded-full bg-accent" style={{ width: `${pct}%` }} /></div>}
           </div>
@@ -126,6 +130,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
 
       {tab === "uebersicht" && <Overview coacheeId={c.id} goal={c.goal} note={c.internal_note} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
+      {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
       {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
       {tab === "bewerbungen" && <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />}

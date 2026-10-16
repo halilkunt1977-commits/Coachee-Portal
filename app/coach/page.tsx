@@ -3,6 +3,7 @@ import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { requireCoach } from "@/lib/auth";
 import { fullName, statusLabel, typeLabel, type Coachee } from "@/lib/access";
 import { query } from "@/lib/db";
+import { unitsUsedSql } from "@/lib/attendance/units";
 
 export const metadata = { title: "Coachees" };
 
@@ -17,7 +18,7 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
 
   const rows = await query<Row>(
     `SELECT c.*,
-            COALESCE((SELECT sum(units) FROM meetings m WHERE m.coachee_id = c.id), 0) AS units_used,
+            ${unitsUsedSql("c.id")} AS units_used,
             (SELECT count(*) FROM tasks t WHERE t.coachee_id = c.id AND t.done_at IS NULL)::int AS open_tasks,
             (SELECT max(held_on) FROM meetings m WHERE m.coachee_id = c.id) AS last_meeting,
             (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
@@ -30,6 +31,8 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
       ORDER BY c.status = 'aktiv' DESC, c.last_name, c.first_name`,
     [user.id, q, typ, status],
   );
+
+  const openMails = (await query<{ n: number }>("SELECT count(*)::int AS n FROM attendance_mails WHERE coach_id = $1 AND status = 'offen'", [user.id]))[0]?.n ?? 0;
 
   const filterLink = (patch: Record<string, string>) => {
     const p = new URLSearchParams({ ...(q && { q }), ...(typ && { typ }), status, ...patch });
@@ -58,6 +61,12 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           <Link key={s} href={filterLink({ status: s })} className={chip(status === s)}>{s === "alle" ? "Alle Status" : statusLabel[s]}</Link>
         ))}
       </div>
+
+      {openMails > 0 && (
+        <Link href="/coach/anwesenheit" className="block rounded-xl bg-[#fbf1e3] px-4 py-3 text-sm text-gold hover:underline">
+          {openMails} Anwesenheits-Mail{openMails > 1 ? "s" : ""} von Erfolgspfad konnte{openMails > 1 ? "n" : ""} keinem Coachee zugeordnet werden. Jetzt zuordnen →
+        </Link>
+      )}
 
       {rows.length === 0 ? (
         <Empty>Noch keine Coachees in dieser Auswahl. Lege mit „Neuer Coachee“ den ersten an.</Empty>

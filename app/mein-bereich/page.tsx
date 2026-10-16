@@ -8,6 +8,7 @@ import { categoriesFor, type ProfileItem } from "@/lib/profile";
 import Link from "next/link";
 import { SECTIONS, normalizeSections, sectionDone } from "@/lib/bp/sections";
 import { one, query } from "@/lib/db";
+import { unitsUsedSql } from "@/lib/attendance/units";
 
 export const metadata = { title: "Mein Bereich" };
 
@@ -24,7 +25,7 @@ export default async function MyArea() {
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
     query<Message>("SELECT m.id, m.body, m.created_at, m.author_id, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at", [c.id]),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
-    one<{ units: number }>("SELECT COALESCE(sum(units), 0) AS units FROM meetings WHERE coachee_id = $1", [c.id]),
+    one<{ units: number }>(`SELECT ${unitsUsedSql("$1")} AS units`, [c.id]),
     // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
     query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
     c.coaching_type === "gruendung" ? one<{ sections: unknown }>("SELECT sections FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
