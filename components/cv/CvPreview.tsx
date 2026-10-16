@@ -1,18 +1,24 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { paginateCv } from "@/lib/cv/paginate";
 
 const PAGE_W = 794; // 210 mm in CSS-Pixeln
 const PAGE_H = 1123; // 297 mm
 
 /**
  * Zeigt das Lebenslauf-HTML als verkleinerte A4-Seite. Das iframe darf kein JavaScript ausführen;
- * der Inhalt wird direkt hineingeschrieben, damit beim Tippen nichts flackert.
+ * der Inhalt wird direkt hineingeschrieben, damit beim Tippen nichts flackert. Die Seiten werden mit
+ * derselben Funktion aufgeteilt wie im PDF, die Umbrüche in der Vorschau sind also die echten.
  */
-export function CvPreview({ html, width, showBreaks = true, className = "" }: { html: string; width?: number; showBreaks?: boolean; className?: string }) {
+export function CvPreview({ html, width, showBreaks = true, className = "", onLayout }: { html: string; width?: number; showBreaks?: boolean; className?: string; onLayout?: (info: { pages: number; fit: number }) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [boxW, setBoxW] = useState(width ?? 0);
   const [height, setHeight] = useState(PAGE_H);
+  const onLayoutRef = useRef(onLayout);
+  useEffect(() => {
+    onLayoutRef.current = onLayout;
+  });
 
   useEffect(() => {
     if (width || !box.current) return;
@@ -29,7 +35,19 @@ export function CvPreview({ html, width, showBreaks = true, className = "" }: { 
     doc.open();
     doc.write(html);
     doc.close();
-    const measure = () => setHeight(Math.max(PAGE_H, doc.documentElement.scrollHeight));
+    const measure = () => {
+      if (showBreaks) {
+        try {
+          const info = paginateCv(doc);
+          onLayoutRef.current?.(info);
+          setHeight(info.pages * PAGE_H);
+          return;
+        } catch (e) {
+          console.error("Seitenaufteilung", e);
+        }
+      }
+      setHeight(Math.max(PAGE_H, doc.documentElement.scrollHeight));
+    };
     measure();
     const t = window.setTimeout(measure, 150);
     doc.fonts?.ready.then(measure).catch(() => {});
@@ -39,10 +57,10 @@ export function CvPreview({ html, width, showBreaks = true, className = "" }: { 
       window.clearTimeout(t);
       imgs.forEach((i) => i.removeEventListener("load", measure));
     };
-  }, [html]);
+  }, [html, showBreaks]);
 
   const scale = boxW ? boxW / PAGE_W : 0.5;
-  const pages = Math.max(1, Math.ceil((height - 4) / PAGE_H));
+  const pages = Math.max(1, Math.round(height / PAGE_H) || 1);
   return (
     <div ref={box} className={className} style={width ? { width } : undefined}>
       <div className="relative overflow-hidden rounded-md bg-white shadow-[0_1px_3px_rgba(22,24,29,.12),0_8px_24px_rgba(22,24,29,.08)]" style={{ height: pages * PAGE_H * scale }}>
