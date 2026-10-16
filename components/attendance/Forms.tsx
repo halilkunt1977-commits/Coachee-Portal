@@ -45,10 +45,14 @@ export function PasteForm() {
   );
 }
 
-export function FetchNow() {
+export function FetchNow({ full = false }: { full?: boolean }) {
   return (
-    <ActionForm action={fetchMailboxNow} className="space-y-2">
-      <SubmitButton className="btn" pendingText="Postfach wird abgerufen …">Postfach jetzt abrufen</SubmitButton>
+    <ActionForm action={fetchMailboxNow.bind(null, full)} className="space-y-2">
+      {full ? (
+        <SubmitButton className="text-sm text-accent hover:underline" pendingText="Ganzes Postfach wird durchsucht, das kann eine Minute dauern …">Ganzes Postfach ab Januar 2026 durchsuchen</SubmitButton>
+      ) : (
+        <SubmitButton className="btn" pendingText="Postfach wird abgerufen …">Postfach jetzt abrufen</SubmitButton>
+      )}
     </ActionForm>
   );
 }

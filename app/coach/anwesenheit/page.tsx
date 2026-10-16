@@ -122,11 +122,12 @@ export default async function AttendanceInbox({ searchParams }: PageProps<"/coac
             {configured ? (
               <>
                 <p className="text-sm text-muted">
-                  {imapAccount()} wird alle 15 Minuten nach Mails von Erfolgspfad durchsucht. Im Postfach selbst ändert sich dabei nichts.
+                  {imapAccount()} wird alle 15 Minuten nach Mails von Erfolgspfad durchsucht, in allen Ordnern außer Papierkorb, Spam und Gesendet. Im Postfach selbst ändert sich dabei nichts.
                 </p>
                 <p className="text-sm">Zuletzt erfolgreich: {formatDateTime(state?.last_ok)}</p>
                 {state?.last_error && <Notice tone="error">{state.last_error}</Notice>}
                 <FetchNow />
+                <FetchNow full />
               </>
             ) : (
               <p className="text-sm text-muted">

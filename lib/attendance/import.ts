@@ -107,12 +107,12 @@ const g = globalThis as unknown as { attendanceImport?: Promise<ImportResult> };
 export type ImportResult = { ok: boolean; neu: number; zugeordnet: number; error?: string };
 
 /** Postfach abrufen. Läuft höchstens einmal gleichzeitig. */
-export function importFromMailbox(): Promise<ImportResult> {
-  if (!g.attendanceImport) g.attendanceImport = run().finally(() => (g.attendanceImport = undefined));
+export function importFromMailbox(opts: { full?: boolean } = {}): Promise<ImportResult> {
+  if (!g.attendanceImport) g.attendanceImport = run(opts).finally(() => (g.attendanceImport = undefined));
   return g.attendanceImport;
 }
 
-async function run(): Promise<ImportResult> {
+async function run(opts: { full?: boolean }): Promise<ImportResult> {
   if (!imapConfigured()) return { ok: false, neu: 0, zugeordnet: 0, error: "aus" };
   await query("UPDATE mail_import_state SET last_run = now() WHERE id = 1");
   const { ImapFlow } = await import("imapflow");
@@ -123,7 +123,7 @@ async function run(): Promise<ImportResult> {
     secure: (process.env.IMAP_SECURE ?? "true") !== "false",
     auth: { user: process.env.IMAP_USER!, pass: process.env.IMAP_PASS! },
     logger: false,
-    socketTimeout: 60_000,
+    socketTimeout: 120_000,
   });
   client.on("error", (e: Error) => console.error("[anwesenheit] IMAP", e.message));
   let neu = 0;
@@ -133,15 +133,27 @@ async function run(): Promise<ImportResult> {
     if (!coachId) throw new Error("Kein Coach-Konto gefunden.");
     zugeordnet += await rematchOpen(coachId);
     await client.connect();
-    const lock = await client.getMailboxLock(process.env.IMAP_FOLDER || "INBOX", { readOnly: true });
-    try {
-      const since = new Date(Date.now() - 45 * 86400_000);
-      const uids = (await client.search({ from: process.env.ATTENDANCE_FROM || "erfolgspfad", since }, { uid: true })) || [];
-      if (uids.length) {
+    // Beim ersten Abruf (oder auf Wunsch) alles ab Coaching-Beginn, danach reichen die letzten 45 Tage
+    const state = await one<{ full_scan_at: string | null }>("SELECT full_scan_at FROM mail_import_state WHERE id = 1");
+    const full = opts.full || !state?.full_scan_at;
+    const since = full ? new Date(`${process.env.ATTENDANCE_SINCE || "2026-01-01"}T00:00:00Z`) : new Date(Date.now() - 45 * 86400_000);
+    // Alle Ordner außer Papierkorb, Spam, Gesendet und Entwürfe, falls Mails einsortiert wurden
+    const folders = process.env.IMAP_FOLDER
+      ? [process.env.IMAP_FOLDER]
+      : (await client.list())
+          .filter((f) => !f.flags?.has("\\Noselect") && !["\\Trash", "\\Junk", "\\Sent", "\\Drafts"].includes(f.specialUse ?? ""))
+          .filter((f) => !/^(papierkorb|gelöschte|trash|spam|junk|gesendet|sent|entw[uü]rfe|drafts)/i.test(f.name))
+          .map((f) => f.path);
+    for (const folder of folders.length ? folders : ["INBOX"]) {
+      const lock = await client.getMailboxLock(folder, { readOnly: true }).catch(() => null);
+      if (!lock) continue;
+      try {
+        const uids = (await client.search({ from: process.env.ATTENDANCE_FROM || "erfolgspfad", since }, { uid: true })) || [];
+        if (!uids.length) continue;
         // Erst nur die Kopfzeilen, damit bekannte Mails nicht jedes Mal neu geladen werden
         const heads: { uid: number; messageId: string; subject: string }[] = [];
         for await (const msg of client.fetch(uids, { uid: true, envelope: true }, { uid: true })) {
-          heads.push({ uid: msg.uid, messageId: msg.envelope?.messageId ?? `uid:${msg.uid}`, subject: msg.envelope?.subject ?? "" });
+          heads.push({ uid: msg.uid, messageId: msg.envelope?.messageId ?? `uid:${folder}:${msg.uid}`, subject: msg.envelope?.subject ?? "" });
         }
         const known = new Set((await query<{ message_id: string }>("SELECT message_id FROM attendance_mails WHERE message_id = ANY($1)", [heads.map((h) => h.messageId)])).map((r) => r.message_id));
         const todo = heads.filter((h) => !known.has(h.messageId) && /anwesenheit/i.test(h.subject));
@@ -163,10 +175,11 @@ async function run(): Promise<ImportResult> {
             if (r.status === "zugeordnet") zugeordnet++;
           }
         }
+      } finally {
+        lock.release();
       }
-    } finally {
-      lock.release();
     }
+    if (full) await query("UPDATE mail_import_state SET full_scan_at = now() WHERE id = 1");
     await client.logout();
     await query("UPDATE mail_import_state SET last_ok = now(), last_error = NULL, last_new = $1 WHERE id = 1", [neu]);
     return { ok: true, neu, zugeordnet };
