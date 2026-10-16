@@ -4,13 +4,15 @@ import type { IconName } from "@/components/shell/icons";
 export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number };
 export type NavGroup = { label?: string; items: NavItem[] };
 
-export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; today?: number } = {}): NavGroup[] => [
+export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; today?: number; inbox?: number; leads?: number } = {}): NavGroup[] => [
   {
     items: [
       { href: "/coach", label: "Dashboard", icon: "grid", exact: true },
+      { href: "/coach/posteingang", label: "Posteingang", icon: "mail", badge: b.inbox },
       { href: "/coach/kalender", label: "Kalender", icon: "calendar", badge: b.today },
-      { href: "/coach/aufgaben", label: "Aufgaben", icon: "check", badge: b.tasks },
       { href: "/coach/coachees", label: "Coachees", icon: "users", badge: b.unread },
+      { href: "/coach/anfragen", label: "Anfragen", icon: "flag", badge: b.leads },
+      { href: "/coach/aufgaben", label: "Aufgaben", icon: "check", badge: b.tasks },
       { href: "/coach/anwesenheit", label: "Anwesenheit", icon: "clock", badge: b.mails },
     ],
   },

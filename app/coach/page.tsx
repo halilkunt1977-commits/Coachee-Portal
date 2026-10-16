@@ -58,7 +58,7 @@ function stageOf(it: Item) {
 export default async function CoachDashboard() {
   const user = await requireCoach();
   const upcomingP = upcomingAppointments(user, 5);
-  const [rows, me, weekRows, month, openMails, closed] = await Promise.all([
+  const [rows, me, weekRows, month, openMails, closed, leads, inbox, unsigned] = await Promise.all([
     query<Row>(
       `SELECT c.*,
               (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
@@ -83,6 +83,17 @@ export default async function CoachDashboard() {
     ),
     one<{ n: number }>("SELECT count(*)::int AS n FROM attendance_mails WHERE coach_id = $1 AND status = 'offen'", [user.id]),
     one<{ n: number }>("SELECT count(*)::int AS n FROM coachees WHERE coach_id = $1 AND status = 'abgeschlossen'", [user.id]),
+    query<{ id: string; name: string; status: string }>(
+      `SELECT id, trim(first_name || ' ' || last_name) AS name, status FROM leads
+        WHERE coach_id = $1 AND status IN ('neu','kontaktiert') AND follow_up_on <= (now() AT TIME ZONE 'Europe/Berlin')::date ORDER BY created_at`,
+      [user.id],
+    ),
+    one<{ n: number }>("SELECT count(*)::int AS n FROM inbox_mails WHERE coach_id = $1 AND read_at IS NULL", [user.id]),
+    query<{ coachee_id: string; n: number }>(
+      `SELECT d.coachee_id, count(*)::int AS n FROM documents d JOIN coachees c ON c.id = d.coachee_id
+        WHERE c.coach_id = $1 AND c.archived_at IS NULL AND d.signature = 'offen' GROUP BY d.coachee_id`,
+      [user.id],
+    ),
   ]);
 
   const items: Item[] = await Promise.all(rows.map(async (c) => ({ c, p: await progressFor(c) })));
@@ -96,11 +107,16 @@ export default async function CoachDashboard() {
   // Was heute Aufmerksamkeit braucht, das Dringendste zuerst
   type Alert = { tone: "danger" | "gold" | "accent" | "ok"; text: string; href: string; c?: Row };
   const alerts: Alert[] = [];
+  for (const l of leads)
+    alerts.push({ tone: "danger", text: l.status === "neu" ? `Neue Anfrage: ${l.name || "ohne Namen"}, jetzt melden` : `Anfrage ${l.name || "ohne Namen"}: heute nachfassen`, href: `/coach/anfragen?anfrage=${l.id}#a-${l.id}` });
+  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Mail${inbox!.n > 1 ? "s" : ""} von Erfolgspfad oder AVOCONS`, href: "/coach/posteingang?art=neu" });
   if ((openMails?.n ?? 0) > 0) alerts.push({ tone: "gold", text: `${openMails?.n} Anwesenheits-Mail${openMails!.n > 1 ? "s" : ""} nicht zugeordnet`, href: "/coach/anwesenheit" });
   for (const { c, p } of items) {
     const name = fullName(c);
     const href = `/coach/coachees/${c.id}`;
     if (c.unread) alerts.push({ tone: "accent", text: `${name}: ${c.unread} neue Nachricht${c.unread > 1 ? "en" : ""}`, href: `${href}?tab=nachrichten`, c });
+    const sign = unsigned.find((u) => u.coachee_id === c.id)?.n;
+    if (sign) alerts.push({ tone: "gold", text: `${name}: ${sign} Bericht${sign > 1 ? "e" : ""} noch nicht unterschrieben`, href: `${href}?tab=dokumente`, c });
     if (c.survey_new) alerts.push({ tone: "ok", text: `${name} hat den Erfahrungsbogen ausgefüllt`, href: `${href}?tab=erfahrung`, c });
     if (c.overdue) alerts.push({ tone: "danger", text: `${name}: ${c.overdue} Aufgabe${c.overdue > 1 ? "n" : ""} überfällig`, href: `${href}?tab=aufgaben`, c });
     if (c.due_jobs) alerts.push({ tone: "gold", text: `${name}: bei ${c.due_jobs} Bewerbung${c.due_jobs > 1 ? "en" : ""} nachfassen`, href: `${href}?tab=bewerbungen`, c });

@@ -1,4 +1,6 @@
 "use server";
+import { leadWon } from "@/lib/inbox/leads";
+import { rematchInbox } from "@/lib/inbox/ingest";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { coacheeFor } from "@/lib/access";
@@ -65,6 +67,9 @@ export async function createCoachee(_prev: FormState, fd: FormData): Promise<For
     throw error;
   }
   await audit(coach.id, "coachee_created", created.id);
+  const leadId = text(fd, "lead_id", 36);
+  if (/^[0-9a-f-]{36}$/i.test(leadId)) await leadWon(coach.id, leadId, created.id);
+  await rematchInbox(coach.id).catch((e) => console.error("[postfach]", e));
   // Anwesenheits-Mails, die auf diesen Coachee warten, gleich zuordnen
   await rematchOpen(coach.id).catch((e) => console.error("[anwesenheit]", e));
   const invite = fd.get("invite") === "on";
