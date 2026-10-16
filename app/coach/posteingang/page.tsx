@@ -168,10 +168,10 @@ async function MailDetail({ m, coachees, close }: { m: Detail; coachees: { id: s
   const [attachments, appts, lead] = await Promise.all([
     query<{ id: string; name: string; size: number; document_id: string | null }>("SELECT id, name, size, document_id FROM inbox_attachments WHERE mail_id = $1 ORDER BY name", [m.id]),
     m.applied.appointments?.length
-      ? query<{ id: string; day: string; start: string; end: string }>(
-          `SELECT id, to_char(starts_at AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD') AS day, to_char(starts_at AT TIME ZONE 'Europe/Berlin', 'HH24:MI') AS start,
+      ? query<{ id: string; day: string; start: string; end: string; status: string }>(
+          `SELECT id, status, to_char(starts_at AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD') AS day, to_char(starts_at AT TIME ZONE 'Europe/Berlin', 'HH24:MI') AS start,
                   to_char(ends_at AT TIME ZONE 'Europe/Berlin', 'HH24:MI') AS "end" FROM appointments WHERE id = ANY($1) ORDER BY starts_at`,
-          [m.applied.appointments],
+          [[...m.applied.appointments, ...(m.applied.cancelled ?? [])]],
         )
       : [],
     m.applied.lead ? one<{ id: string; first_name: string; last_name: string; status: string }>("SELECT id, first_name, last_name, status FROM leads WHERE id = $1", [m.applied.lead]) : null,
@@ -216,7 +216,7 @@ async function MailDetail({ m, coachees, close }: { m: Detail; coachees: { id: s
         </form>
       </div>
 
-      <ActionBox m={m} appts={appts} lead={lead} attachments={attachments} />
+      <ActionBox m={m} appts={appts} lead={lead} attachments={attachments} suggest={m.coachee_id ? undefined : coachees.find((c) => c.id === m.applied.suggest)} />
 
       {attachments.length > 0 && (
         <section className="space-y-2">
@@ -259,7 +259,7 @@ async function MailDetail({ m, coachees, close }: { m: Detail; coachees: { id: s
   );
 }
 
-function ActionBox({ m, appts, lead, attachments }: { m: Detail; appts: { id: string; day: string; start: string; end: string }[]; lead: { id: string; first_name: string; last_name: string; status: string } | null; attachments: { document_id: string | null }[] }) {
+function ActionBox({ m, appts, lead, attachments, suggest }: { m: Detail; appts: { id: string; day: string; start: string; end: string; status: string }[]; lead: { id: string; first_name: string; last_name: string; status: string } | null; attachments: { document_id: string | null }[]; suggest?: { id: string; name: string } }) {
   const box = "rounded-2xl border p-4 space-y-2";
   if (m.category === "buerobuchung") {
     const found = m.parsed.bookings ?? [];
@@ -268,10 +268,24 @@ function ActionBox({ m, appts, lead, attachments }: { m: Detail; appts: { id: st
         <p className="font-semibold">Bürobuchung</p>
         {appts.length > 0 ? (
           <>
-            <p className="text-sm">Im Kalender von dir {m.coachee_name ? `und ${m.coachee_name}` : ""} eingetragen:</p>
+            <p className="text-sm">{m.coachee_id ? `Im Kalender von dir und ${m.coachee_name}:` : "In deinem Kalender eingetragen. Die Mail nennt keinen Coachee; nach dem Zuordnen steht der Termin auch in seinem Kalender:"}</p>
             <ul className="space-y-1 text-sm">
-              {appts.map((a) => <li key={a.id}><Link href={`/coach/kalender?datum=${a.day}&termin=${a.id}`} className="link">✓ {dayMedium(a.day)}, {a.start}–{a.end} Uhr</Link></li>)}
+              {appts.map((a) => (
+                <li key={a.id}>
+                  <Link href={`/coach/kalender?datum=${a.day}&termin=${a.id}`} className={`link ${a.status === "abgesagt" ? "line-through" : ""}`}>
+                    {a.status === "abgesagt" ? "✕" : "✓"} {dayMedium(a.day)}, {a.start}–{a.end} Uhr
+                  </Link>
+                  {a.status === "abgesagt" && <span className="text-muted"> abgesagt</span>}
+                </li>
+              ))}
             </ul>
+            {suggest && (
+              <form action={setMailCoachee.bind(null, m.id)} className="flex flex-wrap items-center gap-2 pt-1 text-sm">
+                <input type="hidden" name="coachee_id" value={suggest.id} />
+                <span>Vermutlich für <strong>{suggest.name}</strong> (eine frühere Mail nennt dasselbe Datum).</span>
+                <button className="btn btn-sm">{suggest.name} zuordnen</button>
+              </form>
+            )}
           </>
         ) : found.length > 0 ? (
           <p className="text-sm">Erkannt: {found.map((b) => `${dayMedium(b.day)} ${b.start}${b.end ? `–${b.end}` : ""}`).join(", ")}. {m.coachee_id ? "" : "Ordne oben den Coachee zu, dann landet der Termin automatisch in beiden Kalendern."}</p>
@@ -304,8 +318,14 @@ function ActionBox({ m, appts, lead, attachments }: { m: Detail; appts: { id: st
     const placed = attachments.filter((a) => a.document_id).length;
     return (
       <section className={`${box} ${m.category === "coachbericht" ? "border-[#5b5fc7]/25 bg-[#eef0ff]/70" : "border-accent/20 bg-tint/60"}`}>
-        <p className="font-semibold">{m.category === "coachbericht" ? "Bericht zum Unterschreiben" : "Projektvertrag"}</p>
-        {!attachments.length ? (
+        <p className="font-semibold">{m.category === "coachbericht" ? "Coachingstart und Bericht zum Unterschreiben" : "Projektvertrag"}</p>
+        {!m.coachee_id && lead ? (
+          <p className="text-sm">
+            {lead.first_name} {lead.last_name} ist noch kein Coachee.{" "}
+            {lead.status === "gewonnen" ? null : <Link href={`/coach/neu?anfrage=${lead.id}`} className="link font-semibold">Jetzt als Coachee anlegen.</Link>}
+            {attachments.length > 0 && " Danach liegen die Anhänge automatisch in den Dokumenten."}
+          </p>
+        ) : !attachments.length ? (
           <p className="text-sm">Die Mail hat keinen Anhang.</p>
         ) : placed && m.coachee_id ? (
           <p className="text-sm">{placed} Datei{placed > 1 ? "en" : ""} liegt in den <Link href={`/coach/coachees/${m.coachee_id}?tab=dokumente`} className="link">Dokumenten von {m.coachee_name}</Link>{m.category === "coachbericht" ? ", markiert mit „Unterschrift fehlt“." : "."}</p>

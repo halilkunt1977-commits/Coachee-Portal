@@ -47,6 +47,8 @@ CREATE TABLE leads (
   city text,
   coaching_type text CHECK (coaching_type IN ('job', 'gruendung')),
   note text NOT NULL DEFAULT '',
+  -- Aus Startmail oder Vertrag: AVGS-Nummer, UE, Zeitraum für die neue Akte
+  details jsonb NOT NULL DEFAULT '{}',
   status text NOT NULL DEFAULT 'neu' CHECK (status IN ('neu', 'kontaktiert', 'termin', 'gewonnen', 'abgesagt')),
   follow_up_on date DEFAULT CURRENT_DATE,
   log jsonb NOT NULL DEFAULT '[]',

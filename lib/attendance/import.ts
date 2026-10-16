@@ -114,6 +114,16 @@ export function importFromMailbox(opts: { full?: boolean } = {}): Promise<Import
   return g.attendanceImport;
 }
 
+/** HTML-Mail als Text: Tabellenzellen mit Tab, Zeilen und Absätze mit Zeilenumbruch (für Buchungstabellen) */
+const htmlText = (html: string) =>
+  html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>|<\/(p|div|tr|h\d|li)>/gi, "\n")
+    .replace(/<\/t[dh]>/gi, "\t")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&auml;/g, "ä").replace(/&ouml;/g, "ö").replace(/&uuml;/g, "ü").replace(/&szlig;/g, "ß")
+    .replace(/\n[ \t]+\n/g, "\n\n");
+
 async function run(opts: { full?: boolean }): Promise<ImportResult> {
   if (!imapConfigured()) return { ok: false, neu: 0, zugeordnet: 0, error: "aus" };
   await query("UPDATE mail_import_state SET last_run = now() WHERE id = 1");
@@ -170,7 +180,7 @@ async function run(opts: { full?: boolean }): Promise<ImportResult> {
           const msg = await client.fetchOne(String(h.uid), { source: true, envelope: true, internalDate: true }, { uid: true });
           if (!msg || !msg.source) continue;
           const mail = await simpleParser(msg.source);
-          const body = mail.text || (typeof mail.html === "string" ? mail.html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, " ") : "");
+          const body = mail.text || (typeof mail.html === "string" ? htmlText(mail.html) : "");
           const receivedAt = mail.date ?? (msg.internalDate ? new Date(msg.internalDate) : new Date());
           const fromAddr = mail.from?.value?.[0]?.address ?? mail.from?.text ?? "";
           if (attendance && /erfolgspfad/i.test(`${fromAddr} ${mail.from?.text ?? ""}`)) {

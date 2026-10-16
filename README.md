@@ -65,7 +65,7 @@ npm run dev                  # http://localhost:3000
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
    alles, nur die KI-Knöpfe fehlen.
    Für die Anwesenheit aus Erfolgspfad-Mails `IMAP_USER` (komplette Mailadresse des Postfachs, z. B. kunt@kuntsolutions.de) und
-   `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (Standard: alle Ordner außer Papierkorb, Spam, Gesendet, Entwürfe), `ATTENDANCE_SINCE` (erster Abruf ab diesem Datum, Standard 2026-01-01), `ATTENDANCE_FROM` (erfolgspfad), `INBOX_FROM` (Absender für den Posteingang, Standard `erfolgspfad,avocons`).
+   `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (Standard: alle Ordner außer Papierkorb, Spam, Gesendet, Entwürfe), `ATTENDANCE_SINCE` (erster Abruf ab diesem Datum, Standard 2026-01-01), `ATTENDANCE_FROM` (erfolgspfad), `INBOX_FROM` (Absender für den Posteingang, Standard `erfolgspfad,avocons,avgs-coaching,regus`; Regus für Besprechungsräume, die AVOCONS bucht).
    Für Teams und Outlook (optional) eine App-Registrierung in Microsoft Entra: [entra.microsoft.com](https://entra.microsoft.com) →
    App-Registrierungen → Neue Registrierung (Name „Gründarium Portal“, nur dieses Verzeichnis). Unter „API-Berechtigungen“
    → Microsoft Graph → **Anwendungsberechtigungen** → `Calendars.ReadWrite` hinzufügen und „Administratorzustimmung
