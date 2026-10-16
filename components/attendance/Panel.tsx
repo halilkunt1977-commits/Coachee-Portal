@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { deleteAttendance } from "@/app/actions/anwesenheit";
 import type { Coachee } from "@/lib/access";
-import { nameKey } from "@/lib/attendance/parse";
+import { namesMatch } from "@/lib/attendance/parse";
 import { SOURCE_LABEL, TRAEGER_LABEL } from "@/lib/attendance/units";
 import { query } from "@/lib/db";
 import { Empty, Notice, formatDate, formatDateTime, formatUnits } from "../ui";
@@ -18,15 +18,14 @@ const hhmm = (t: string | null) => (t ? t.slice(0, 5) : "");
  * Hinweise auf falsche Zuordnung: Name in der Mail passt nicht zum Coachee, der Rest laut Träger passt nicht zum
  * vorherigen Termin (vorheriger Rest minus UE), oder derselbe Termin steht doppelt da.
  */
-function entryFlags(rows: Row[], coacheeName: string) {
-  const own = nameKey(coacheeName);
+function entryFlags(rows: Row[], first: string, last: string) {
   const out = new Map<string, { otherName: string | null; restJump: number | null; duplicate: boolean }>();
   const seen = new Map<string, number>();
   for (const r of rows) {
     const k = `${r.held_on}|${hhmm(r.starts_at)}|${r.units}`;
     seen.set(k, (seen.get(k) ?? 0) + 1);
   }
-  const chrono = [...rows].reverse();
+  const chrono = [...rows].sort((a, b) => `${a.held_on} ${hhmm(a.starts_at)}`.localeCompare(`${b.held_on} ${hhmm(b.starts_at)}`));
   let prevRest: number | null = null;
   for (const r of chrono) {
     let restJump: number | null = null;
@@ -36,7 +35,7 @@ function entryFlags(rows: Row[], coacheeName: string) {
       prevRest = r.rest_units;
     }
     out.set(r.id, {
-      otherName: r.mail_name && nameKey(r.mail_name) !== own ? r.mail_name : null,
+      otherName: r.mail_name && !namesMatch(r.mail_name, first, last) ? r.mail_name : null,
       restJump,
       duplicate: (seen.get(`${r.held_on}|${hhmm(r.starts_at)}|${r.units}`) ?? 0) > 1,
     });
@@ -44,13 +43,14 @@ function entryFlags(rows: Row[], coacheeName: string) {
   return out;
 }
 
-export async function AttendancePanel({ coachee: c, used }: { coachee: Coachee; used: number }) {
+export async function AttendancePanel({ coachee: c, used, oldestFirst = false }: { coachee: Coachee; used: number; oldestFirst?: boolean }) {
+  const dir = oldestFirst ? "ASC" : "DESC";
   const [rows, meetingUnits, open, coachees] = await Promise.all([
     query<Row>(
       `SELECT a.id, a.held_on, a.starts_at, a.ends_at, a.units, a.rest_units, a.source, a.note, a.mail_id,
               m.subject, m.from_addr, m.received_at, m.body, m.parsed->>'name' AS mail_name
          FROM attendance a LEFT JOIN attendance_mails m ON m.id = a.mail_id
-        WHERE a.coachee_id = $1 ORDER BY a.held_on DESC, a.starts_at DESC NULLS LAST, a.created_at DESC`,
+        WHERE a.coachee_id = $1 ORDER BY a.held_on ${dir}, a.starts_at ${dir} NULLS LAST, a.created_at ${dir}`,
       [c.id],
     ),
     query<{ units: number }>("SELECT COALESCE(sum(units), 0) AS units FROM meetings WHERE coachee_id = $1", [c.id]),
@@ -58,11 +58,11 @@ export async function AttendancePanel({ coachee: c, used }: { coachee: Coachee; 
     query<{ id: string; name: string }>("SELECT id, first_name || ' ' || last_name AS name FROM coachees WHERE coach_id = $1 AND archived_at IS NULL ORDER BY status = 'aktiv' DESC, last_name, first_name", [c.coach_id]),
   ]);
   const others = coachees;
-  const flags = entryFlags(rows, `${c.first_name} ${c.last_name}`);
+  const flags = entryFlags(rows, c.first_name, c.last_name);
   const wrong = rows.filter((r) => flags.get(r.id)?.otherName).length;
   const open1 = rows.find((r) => flags.get(r.id)?.otherName)?.id ?? null;
   // Letzte Meldung des Trägers; bei mehreren am selben Termin zählt der kleinste Rest
-  const withRest = rows.filter((r) => r.rest_units != null);
+  const withRest = (oldestFirst ? [...rows].reverse() : rows).filter((r) => r.rest_units != null);
   const top = withRest[0];
   const latestRest = top ? Math.min(...withRest.filter((r) => r.held_on === top.held_on && r.starts_at === top.starts_at).map((r) => r.rest_units!)) : null;
   const ownRest = c.units_total != null ? Math.round((c.units_total - used) * 100) / 100 : null;
@@ -105,8 +105,8 @@ export async function AttendancePanel({ coachee: c, used }: { coachee: Coachee; 
           </Empty>
         ) : (
           <div className="card divide-y divide-line-soft p-0 sm:p-0">
-            <div className="hidden grid-cols-[110px_110px_80px_1fr_auto] gap-2 px-4 py-2.5 text-xs font-semibold text-muted sm:grid">
-              <span>Datum</span><span>Zeit</span><span className="text-right">UE</span><span className="pl-6">Rest laut Träger · Quelle</span><span />
+            <div className="grid gap-2 px-4 py-2.5 text-xs font-semibold text-muted sm:grid-cols-[110px_110px_80px_1fr_auto]">
+              <Link href={oldestFirst ? "?tab=anwesenheit" : "?tab=anwesenheit&sortierung=alt"} className="hover:text-ink" title="Sortierung umdrehen">Datum {oldestFirst ? "↑" : "↓"}</Link><span className="hidden sm:inline">Zeit</span><span className="hidden text-right sm:inline">UE</span><span className="hidden pl-6 sm:inline">Rest laut Träger · Quelle</span><span className="hidden sm:inline" />
             </div>
             {rows.map((r) => {
               const f = flags.get(r.id)!;

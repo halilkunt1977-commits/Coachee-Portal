@@ -15,13 +15,13 @@ export default async function AttendanceInbox({ searchParams }: PageProps<"/coac
   const sp = await searchParams;
   const showIgnored = sp.ignoriert === "1";
   const [open, done, ignored, coachees, state] = await Promise.all([
-    query<Mail>("SELECT m.*, NULL AS coachee_name FROM attendance_mails m WHERE m.coach_id = $1 AND m.status = 'offen' ORDER BY m.received_at DESC", [coach.id]),
+    query<Mail>("SELECT m.*, NULL AS coachee_name FROM attendance_mails m WHERE m.coach_id = $1 AND m.status = 'offen' ORDER BY (m.parsed->>'held_on') DESC NULLS LAST, (m.parsed->>'starts_at') DESC NULLS LAST, m.received_at DESC", [coach.id]),
     query<Mail>(
       `SELECT m.*, c.first_name || ' ' || c.last_name AS coachee_name FROM attendance_mails m LEFT JOIN coachees c ON c.id = m.coachee_id
-        WHERE m.coach_id = $1 AND m.status = 'zugeordnet' ORDER BY m.received_at DESC LIMIT 30`,
+        WHERE m.coach_id = $1 AND m.status = 'zugeordnet' ORDER BY (m.parsed->>'held_on') DESC NULLS LAST, (m.parsed->>'starts_at') DESC NULLS LAST, m.received_at DESC LIMIT 30`,
       [coach.id],
     ),
-    query<Mail>("SELECT m.*, NULL AS coachee_name FROM attendance_mails m WHERE m.coach_id = $1 AND m.status = 'ignoriert' ORDER BY m.received_at DESC LIMIT 50", [coach.id]),
+    query<Mail>("SELECT m.*, NULL AS coachee_name FROM attendance_mails m WHERE m.coach_id = $1 AND m.status = 'ignoriert' ORDER BY (m.parsed->>'held_on') DESC NULLS LAST, (m.parsed->>'starts_at') DESC NULLS LAST, m.received_at DESC LIMIT 50", [coach.id]),
     query<{ id: string; name: string; traeger: string | null }>(
       "SELECT id, first_name || ' ' || last_name AS name, traeger FROM coachees WHERE coach_id = $1 AND archived_at IS NULL ORDER BY status = 'aktiv' DESC, last_name, first_name",
       [coach.id],

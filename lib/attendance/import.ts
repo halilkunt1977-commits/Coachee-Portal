@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { one, query, transaction } from "../db";
-import { nameKey, parseAttendanceMail, type ParsedAttendance } from "./parse";
+import { nameKey, namesMatch, parseAttendanceMail, type ParsedAttendance } from "./parse";
 
 /*
  * Anwesenheits-Mails von Erfolgspfad ins Portal holen.
@@ -25,19 +25,33 @@ export type MailRow = {
 
 type Incoming = { coachId: string; messageId: string | null; from: string; subject: string; receivedAt: Date; body: string };
 
-/** Coachee anhand des Namens finden. Bei Namensgleichheit gewinnt, wer über Erfolgspfad läuft und aktiv ist; bleibt es unklar, entscheidet der Coach. */
+/**
+ * Coachee anhand des Namens finden: Nachname muss stimmen, ein Vorname reicht (zweite Vornamen sind egal).
+ * Passen mehrere, gewinnt die exakte Schreibweise, dann wer über Erfolgspfad läuft und aktiv ist; bleibt es unklar, entscheidet der Coach.
+ */
 export async function matchCoachee(coachId: string, name: string | null) {
-  if (!name) return null;
-  const key = nameKey(name);
-  if (!key) return null;
+  if (!name || !nameKey(name)) return null;
   const rows = await query<{ id: string; first_name: string; last_name: string; traeger: string | null; status: string }>(
     "SELECT id, first_name, last_name, traeger, status FROM coachees WHERE coach_id = $1 AND archived_at IS NULL",
     [coachId],
   );
-  const hits = rows.filter((r) => nameKey(`${r.first_name} ${r.last_name}`) === key);
+  const hits = rows.filter((r) => namesMatch(name, r.first_name, r.last_name));
   if (hits.length <= 1) return hits[0]?.id ?? null;
+  const exact = hits.filter((r) => nameKey(`${r.first_name} ${r.last_name}`) === nameKey(name));
+  if (exact.length === 1) return exact[0].id;
   const preferred = hits.filter((r) => r.traeger === "erfolgspfad" && r.status === "aktiv");
   return preferred.length === 1 ? preferred[0].id : null;
+}
+
+/** Offene Mails noch einmal zuordnen, z. B. nachdem ein Coachee angelegt oder umbenannt wurde */
+export async function rematchOpen(coachId: string) {
+  const open = await query<{ id: string; name: string | null }>("SELECT id, parsed->>'name' AS name FROM attendance_mails WHERE coach_id = $1 AND status = 'offen'", [coachId]);
+  let n = 0;
+  for (const m of open) {
+    const coacheeId = await matchCoachee(coachId, m.name);
+    if (coacheeId && !(await bookMail(m.id, coacheeId, null))) n++;
+  }
+  return n;
 }
 
 /** Trägt die Anwesenheit aus einer Mail beim Coachee ein. Gibt einen Fehlertext zurück, wenn in der Mail Datum oder Dauer fehlen. */
@@ -117,6 +131,7 @@ async function run(): Promise<ImportResult> {
   try {
     const coachId = await mailboxCoach();
     if (!coachId) throw new Error("Kein Coach-Konto gefunden.");
+    zugeordnet += await rematchOpen(coachId);
     await client.connect();
     const lock = await client.getMailboxLock(process.env.IMAP_FOLDER || "INBOX", { readOnly: true });
     try {
