@@ -4,8 +4,27 @@ import path from "node:path";
 import pg from "pg";
 
 const dir = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "migrations");
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL fehlt. Bitte in Coolify unter Environment Variables die interne URL der PostgreSQL-Datenbank eintragen.");
+  process.exit(1);
+}
+// Beim gemeinsamen Start kann die Datenbank ein paar Sekunden später bereit sein: bis zu einer Minute warten
+let client;
+for (let attempt = 1; ; attempt++) {
+  client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    break;
+  } catch (error) {
+    await client.end().catch(() => {});
+    if (attempt >= 12) {
+      console.error(`Datenbank nicht erreichbar (${error.code ?? error.message}). Läuft die PostgreSQL-Ressource, und ist DATABASE_URL ihre interne URL?`);
+      throw error;
+    }
+    console.log(`Warte auf die Datenbank (${error.code ?? error.message}), Versuch ${attempt} von 12 …`);
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+}
 try {
   await client.query("SELECT pg_advisory_lock(727001)");
   await client.query("CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
