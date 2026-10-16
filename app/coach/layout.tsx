@@ -13,7 +13,7 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
                 WHERE (t.owner_id = $1 OR (c.coach_id = $1 AND c.archived_at IS NULL)) AND t.done_at IS NULL AND t.due_on <= (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS tasks,
               (SELECT count(*) FROM appointments a WHERE a.coach_id = $1 AND a.status = 'geplant' AND a.ends_at > now()
                 AND (a.starts_at AT TIME ZONE 'Europe/Berlin')::date = (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS today,
-              (SELECT count(*) FROM inbox_mails WHERE coach_id = $1 AND read_at IS NULL)::int AS inbox,
+              (SELECT count(*) FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' AND read_at IS NULL)::int AS inbox,
               (SELECT count(*) FROM leads WHERE coach_id = $1 AND status IN ('neu','kontaktiert') AND follow_up_on <= (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS leads,
               (SELECT count(*) FROM messages m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1)::int AS unread`,
       [user.id],

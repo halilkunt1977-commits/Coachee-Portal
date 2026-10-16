@@ -147,13 +147,47 @@ async function run(opts: { full?: boolean }): Promise<ImportResult> {
     zugeordnet += await rematchOpen(coachId);
     await client.connect();
     // Beim ersten Abruf (oder auf Wunsch) alles ab Coaching-Beginn, danach reichen die letzten 45 Tage
-    const state = await one<{ full_scan_at: string | null; inbox_scan_at: string | null }>("SELECT full_scan_at, inbox_scan_at FROM mail_import_state WHERE id = 1");
+    const state = await one<{ full_scan_at: string | null; inbox_scan_at: string | null; sent_scan_at: string | null }>("SELECT full_scan_at, inbox_scan_at, sent_scan_at FROM mail_import_state WHERE id = 1");
     const full = opts.full || !state?.full_scan_at || !state?.inbox_scan_at;
     const since = full ? new Date(`${process.env.ATTENDANCE_SINCE || "2026-01-01"}T00:00:00Z`) : new Date(Date.now() - 45 * 86400_000);
+    const all = await client.list();
+    // Zuerst eigene gesendete Mails an die Träger (z. B. „Bürobuchung Stefan Schmidt, 28.10.“): damit ordnet das Portal
+    // Bestätigungen ohne Namen (Regus) selbst zu. Nur lesen, nichts wird verschickt.
+    const sentSince = opts.full || !state?.sent_scan_at ? new Date(`${process.env.ATTENDANCE_SINCE || "2026-01-01"}T00:00:00Z`) : since;
+    for (const f of all.filter((f) => f.specialUse === "\\Sent" || /^(gesendet|sent)/i.test(f.name))) {
+      const lock = await client.getMailboxLock(f.path, { readOnly: true }).catch(() => null);
+      if (!lock) continue;
+      try {
+        const to = senders();
+        const uids = (await client.search(to.length > 1 ? { or: to.map((t) => ({ to: t })), since: sentSince } : { to: to[0], since: sentSince }, { uid: true })) || [];
+        for (const uid of uids) {
+          const msg = await client.fetchOne(String(uid), { source: true, envelope: true }, { uid: true });
+          if (!msg || !msg.source) continue;
+          const messageId = msg.envelope?.messageId ?? `uid:${f.path}:${uid}`;
+          if (await one("SELECT 1 FROM inbox_mails WHERE message_id = $1", [messageId])) continue;
+          const mail = await simpleParser(msg.source);
+          await ingestInboxMail({
+            coachId,
+            messageId,
+            direction: "out",
+            from: mail.from?.value?.[0]?.address ?? "",
+            fromName: mail.from?.value?.[0]?.name ?? "",
+            to: [mail.to].flat().map((t) => t?.text ?? "").join(" "),
+            subject: mail.subject ?? "",
+            receivedAt: mail.date ?? new Date(),
+            body: mail.text || (typeof mail.html === "string" ? htmlText(mail.html) : ""),
+            attachments: [],
+          });
+        }
+      } finally {
+        lock.release();
+      }
+    }
+    await query("UPDATE mail_import_state SET sent_scan_at = now() WHERE id = 1");
     // Alle Ordner außer Papierkorb, Spam, Gesendet und Entwürfe, falls Mails einsortiert wurden
     const folders = process.env.IMAP_FOLDER
       ? [process.env.IMAP_FOLDER]
-      : (await client.list())
+      : all
           .filter((f) => !f.flags?.has("\\Noselect") && !["\\Trash", "\\Junk", "\\Sent", "\\Drafts"].includes(f.specialUse ?? ""))
           .filter((f) => !/^(papierkorb|gelöschte|trash|spam|junk|gesendet|sent|entw[uü]rfe|drafts)/i.test(f.name))
           .map((f) => f.path);

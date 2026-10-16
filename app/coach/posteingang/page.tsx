@@ -40,7 +40,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
   const art = str(sp.art);
   const quelle = str(sp.quelle);
   const selectedId = str(sp.mail);
-  const filters: string[] = ["m.coach_id = $1"];
+  const filters: string[] = ["m.coach_id = $1", "m.direction = 'in'"];
   if (art === "neu") filters.push("m.read_at IS NULL");
   else if (art === "offen") filters.push("m.done_at IS NULL");
   else if (art && isCategory(art)) filters.push(`m.category = '${art}'`);
@@ -56,7 +56,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
       [coach.id],
     ),
     query<{ category: Category; total: number; unread: number }>(
-      "SELECT category, count(*)::int AS total, count(*) FILTER (WHERE read_at IS NULL)::int AS unread FROM inbox_mails WHERE coach_id = $1 GROUP BY category",
+      "SELECT category, count(*)::int AS total, count(*) FILTER (WHERE read_at IS NULL)::int AS unread FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' GROUP BY category",
       [coach.id],
     ),
     query<{ id: string; name: string }>("SELECT id, first_name || ' ' || last_name AS name FROM coachees WHERE coach_id = $1 AND archived_at IS NULL ORDER BY first_name, last_name", [coach.id]),
@@ -91,7 +91,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
       <PageHeader
         eyebrow="Bildungsträger"
         title="Posteingang"
-        description="Alle Mails von AVOCONS und Erfolgspfad, erkannt und einsortiert. Buchungen landen im Kalender, Verträge und Berichte in den Dokumenten, Anfragen unter „Anfragen“."
+        description="Das Portal liest alle Mails von AVOCONS und Erfolgspfad und erledigt sie selbst: Buchungen in die Kalender, Verträge und Berichte in die Akte, neue Coachees werden angelegt, Anfragen landen unter „Anfragen“. Hier siehst du, was passiert ist."
         actions={
           <>
             {unread > 0 && (
