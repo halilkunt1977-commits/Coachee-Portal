@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AkteMails } from "@/components/inbox/AkteMails";
 import { deleteMeeting } from "@/app/actions/akte";
 import { MeetingForm } from "@/components/akte/MeetingForm";
 import { MessageForm } from "@/components/akte/MessageForm";
@@ -43,6 +44,7 @@ const TABS = [
   { key: "anwesenheit", label: "Anwesenheit", group: "coaching" },
   { key: "aufgaben", label: "Aufgaben", group: "coaching" },
   { key: "nachrichten", label: "Nachrichten", group: "coaching" },
+  { key: "mails", label: "Mails", group: "coaching" },
   { key: "assistent", label: "KI-Assistent", group: "coaching" },
   { key: "wissen", label: "Kompetenzprofil", group: "ziel" },
   { key: "stellen", label: "Stellen", group: "ziel" },
@@ -70,6 +72,7 @@ const actionLabel: Record<string, string> = {
   login: "Anmeldung", logout: "Abmeldung", login_failed: "Fehlgeschlagene Anmeldung", mfa_passed: "Zweiter Faktor bestätigt",
   coachee_created: "Akte angelegt", coachee_updated: "Stammdaten geändert", invite_sent: "Einladung verschickt", invite_link_created: "Einladungslink erzeugt",
   invite_accepted: "Einladung angenommen", meeting_created: "Gespräch angelegt", meeting_updated: "Gespräch geändert", meeting_deleted: "Gespräch gelöscht",
+  mail_category: "Mail neu eingeordnet", mail_coachee: "Mail zugeordnet", document_from_mail: "Dokument aus Mail übernommen", document_signature: "Unterschrift-Status geändert",
   task_created: "Aufgabe angelegt", task_toggled: "Aufgabe abgehakt", task_deleted: "Aufgabe gelöscht", message_sent: "Nachricht gesendet",
   cv_created: "Lebenslauf angelegt", cv_imported: "Lebenslauf aus Datei übernommen", cv_duplicated: "Lebenslauf kopiert", cv_deleted: "Lebenslauf gelöscht",
   assistant_used: "KI-Assistent gefragt", bp_saved: "Businessplan bearbeitet", bp_draft: "KI-Entwurf für den Businessplan", bp_pdf: "Businessplan als PDF geladen",
@@ -219,6 +222,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "erfahrung" && <SurveyPanel coachee={c} coach />}
       {tab === "assistent" && <AssistantPanel user={coach} coachee={c} chatId={typeof sp.chat === "string" ? sp.chat : null} base={{ chat: "?tab=assistent&chat=", fresh: "?tab=assistent" }} />}
       {tab === "aufgaben" && <Tasks coacheeId={c.id} />}
+      {tab === "mails" && <AkteMails coacheeId={c.id} />}
       {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
       {tab === "stammdaten" && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">

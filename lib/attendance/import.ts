@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { one, query, transaction } from "../db";
 import { nameKey, namesMatch, parseAttendanceMail, type ParsedAttendance } from "./parse";
+import { senders } from "../inbox/classify";
+import { ingestInboxMail, keepAttachment, rematchInbox } from "../inbox/ingest";
 
 /*
  * Anwesenheits-Mails von Erfolgspfad ins Portal holen.
@@ -104,7 +106,7 @@ async function mailboxCoach() {
 }
 
 const g = globalThis as unknown as { attendanceImport?: Promise<ImportResult> };
-export type ImportResult = { ok: boolean; neu: number; zugeordnet: number; error?: string };
+export type ImportResult = { ok: boolean; neu: number; zugeordnet: number; postfach?: number; error?: string };
 
 /** Postfach abrufen. Läuft höchstens einmal gleichzeitig. */
 export function importFromMailbox(opts: { full?: boolean } = {}): Promise<ImportResult> {
@@ -128,14 +130,15 @@ async function run(opts: { full?: boolean }): Promise<ImportResult> {
   client.on("error", (e: Error) => console.error("[anwesenheit] IMAP", e.message));
   let neu = 0;
   let zugeordnet = 0;
+  let postfach = 0;
   try {
     const coachId = await mailboxCoach();
     if (!coachId) throw new Error("Kein Coach-Konto gefunden.");
     zugeordnet += await rematchOpen(coachId);
     await client.connect();
     // Beim ersten Abruf (oder auf Wunsch) alles ab Coaching-Beginn, danach reichen die letzten 45 Tage
-    const state = await one<{ full_scan_at: string | null }>("SELECT full_scan_at FROM mail_import_state WHERE id = 1");
-    const full = opts.full || !state?.full_scan_at;
+    const state = await one<{ full_scan_at: string | null; inbox_scan_at: string | null }>("SELECT full_scan_at, inbox_scan_at FROM mail_import_state WHERE id = 1");
+    const full = opts.full || !state?.full_scan_at || !state?.inbox_scan_at;
     const since = full ? new Date(`${process.env.ATTENDANCE_SINCE || "2026-01-01"}T00:00:00Z`) : new Date(Date.now() - 45 * 86400_000);
     // Alle Ordner außer Papierkorb, Spam, Gesendet und Entwürfe, falls Mails einsortiert wurden
     const folders = process.env.IMAP_FOLDER
@@ -148,41 +151,60 @@ async function run(opts: { full?: boolean }): Promise<ImportResult> {
       const lock = await client.getMailboxLock(folder, { readOnly: true }).catch(() => null);
       if (!lock) continue;
       try {
-        const uids = (await client.search({ from: process.env.ATTENDANCE_FROM || "erfolgspfad", since }, { uid: true })) || [];
+        // Alle Mails der Bildungsträger (Posteingang); Anwesenheiten zusätzlich wie bisher in die Anwesenheit
+        const from = [...new Set([process.env.ATTENDANCE_FROM || "erfolgspfad", ...senders()])];
+        const uids = (await client.search(from.length > 1 ? { or: from.map((f) => ({ from: f })), since } : { from: from[0], since }, { uid: true })) || [];
         if (!uids.length) continue;
         // Erst nur die Kopfzeilen, damit bekannte Mails nicht jedes Mal neu geladen werden
         const heads: { uid: number; messageId: string; subject: string }[] = [];
         for await (const msg of client.fetch(uids, { uid: true, envelope: true }, { uid: true })) {
           heads.push({ uid: msg.uid, messageId: msg.envelope?.messageId ?? `uid:${folder}:${msg.uid}`, subject: msg.envelope?.subject ?? "" });
         }
-        const known = new Set((await query<{ message_id: string }>("SELECT message_id FROM attendance_mails WHERE message_id = ANY($1)", [heads.map((h) => h.messageId)])).map((r) => r.message_id));
-        const todo = heads.filter((h) => !known.has(h.messageId) && /anwesenheit/i.test(h.subject));
-        for (const h of todo) {
+        const ids = heads.map((h) => h.messageId);
+        const knownAttendance = new Set((await query<{ message_id: string }>("SELECT message_id FROM attendance_mails WHERE message_id = ANY($1)", [ids])).map((r) => r.message_id));
+        const knownInbox = new Set((await query<{ message_id: string }>("SELECT message_id FROM inbox_mails WHERE message_id = ANY($1)", [ids])).map((r) => r.message_id));
+        for (const h of heads) {
+          const attendance = !knownAttendance.has(h.messageId) && /anwesenheit/i.test(h.subject);
+          const inbox = !knownInbox.has(h.messageId);
+          if (!attendance && !inbox) continue;
           const msg = await client.fetchOne(String(h.uid), { source: true, envelope: true, internalDate: true }, { uid: true });
           if (!msg || !msg.source) continue;
           const mail = await simpleParser(msg.source);
           const body = mail.text || (typeof mail.html === "string" ? mail.html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, " ") : "");
-          const r = await ingestMail({
-            coachId,
-            messageId: h.messageId,
-            from: mail.from?.text ?? "",
-            subject: mail.subject ?? h.subject,
-            receivedAt: mail.date ?? (msg.internalDate ? new Date(msg.internalDate) : new Date()),
-            body,
-          });
-          if (!r.duplicate) {
-            neu++;
-            if (r.status === "zugeordnet") zugeordnet++;
+          const receivedAt = mail.date ?? (msg.internalDate ? new Date(msg.internalDate) : new Date());
+          const fromAddr = mail.from?.value?.[0]?.address ?? mail.from?.text ?? "";
+          if (attendance && /erfolgspfad/i.test(`${fromAddr} ${mail.from?.text ?? ""}`)) {
+            const r = await ingestMail({ coachId, messageId: h.messageId, from: mail.from?.text ?? "", subject: mail.subject ?? h.subject, receivedAt, body });
+            if (!r.duplicate) {
+              neu++;
+              if (r.status === "zugeordnet") zugeordnet++;
+            }
+          }
+          if (inbox) {
+            const r = await ingestInboxMail({
+              coachId,
+              messageId: h.messageId,
+              from: fromAddr,
+              fromName: mail.from?.value?.[0]?.name ?? "",
+              subject: mail.subject ?? h.subject,
+              receivedAt,
+              body,
+              attachments: (mail.attachments ?? [])
+                .filter((a) => keepAttachment({ name: a.filename ?? "", size: a.size ?? a.content.length, inline: a.contentDisposition === "inline" || Boolean(a.related) }))
+                .map((a) => ({ name: a.filename!, mime: a.contentType || "application/octet-stream", data: a.content })),
+            });
+            if (!r.duplicate) postfach++;
           }
         }
       } finally {
         lock.release();
       }
     }
-    if (full) await query("UPDATE mail_import_state SET full_scan_at = now() WHERE id = 1");
+    if (full) await query("UPDATE mail_import_state SET full_scan_at = now(), inbox_scan_at = now() WHERE id = 1");
+    await rematchInbox(coachId).catch((e) => console.error("[postfach]", e));
     await client.logout();
     await query("UPDATE mail_import_state SET last_ok = now(), last_error = NULL, last_new = $1 WHERE id = 1", [neu]);
-    return { ok: true, neu, zugeordnet };
+    return { ok: true, neu, zugeordnet, postfach };
   } catch (e) {
     client.close();
     const err = e as Error & { authenticationFailed?: boolean; code?: string; responseText?: string };

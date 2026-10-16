@@ -1,13 +1,41 @@
 import { PageHeader } from "@/components/shell/AppShell";
+import { Notice } from "@/components/ui";
+import { requireCoach } from "@/lib/auth";
+import { one } from "@/lib/db";
 import NewForm from "./NewForm";
 
 export const metadata = { title: "Neuer Coachee" };
 
-export default function NewCoacheePage() {
+type Lead = { id: string; first_name: string; last_name: string; email: string | null; phone: string | null; city: string | null; coaching_type: "job" | "gruendung" | null; source: string };
+
+export default async function NewCoacheePage({ searchParams }: PageProps<"/coach/neu">) {
+  const coach = await requireCoach();
+  const { anfrage } = await searchParams;
+  // Aus einer Anfrage: Name, Kontakt und Träger schon eingetragen
+  const lead =
+    typeof anfrage === "string" && /^[0-9a-f-]{36}$/i.test(anfrage)
+      ? await one<Lead>("SELECT id, first_name, last_name, email, phone, city, coaching_type, source FROM leads WHERE id = $1 AND coach_id = $2", [anfrage, coach.id])
+      : null;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader eyebrow="Neue Akte" title="Neuer Coachee" description="Lege die Akte an. Lebenslauf, Businessplan und alles Weitere füllt ihr danach gemeinsam." />
-      <NewForm />
+      {lead && <Notice>Aus der Anfrage von {lead.first_name} {lead.last_name} übernommen. Bitte die Angaben prüfen und ergänzen.</Notice>}
+      <NewForm
+        leadId={lead?.id}
+        defaults={
+          lead
+            ? {
+                first_name: lead.first_name,
+                last_name: lead.last_name,
+                email: lead.email ?? "",
+                phone: lead.phone,
+                city: lead.city,
+                coaching_type: lead.coaching_type ?? undefined,
+                traeger: lead.source === "avocons" || lead.source === "erfolgspfad" ? lead.source : null,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

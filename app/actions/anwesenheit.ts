@@ -147,5 +147,7 @@ export async function fetchMailboxNow(full: boolean): Promise<FormState> {
   const r = await importFromMailbox({ full });
   refresh();
   if (!r.ok) return { error: r.error };
-  return { ok: r.neu ? `${r.neu} neue Mail${r.neu > 1 ? "s" : ""}, davon ${r.zugeordnet} automatisch zugeordnet.` : "Keine neuen Anwesenheits-Mails." };
+  revalidatePath("/coach", "layout");
+  const inbox = r.postfach ? ` ${r.postfach} neue Mail${r.postfach > 1 ? "s" : ""} im Posteingang.` : "";
+  return { ok: (r.neu ? `${r.neu} neue Anwesenheits-Mail${r.neu > 1 ? "s" : ""}, davon ${r.zugeordnet} automatisch zugeordnet.` : "Keine neuen Anwesenheits-Mails.") + inbox };
 }

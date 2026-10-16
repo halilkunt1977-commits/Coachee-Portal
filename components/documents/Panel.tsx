@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { deleteDocument } from "@/app/actions/dokumente";
+import { setSignature } from "@/app/actions/postfach";
 import type { Coachee } from "@/lib/access";
 import { DOC_CATEGORIES, compareWithPortal, isReport, reportTotal, type ReportRow } from "@/lib/documents";
 import { query } from "@/lib/db";
@@ -8,7 +9,7 @@ import { ConfirmButton } from "../ConfirmButton";
 import { Empty, Notice, formatDate, formatUnits } from "../ui";
 import { EditDocument, ImportRows, UploadForm } from "./Forms";
 
-type Doc = { id: string; file_id: string; category: string; title: string; shared: boolean; extracted: ReportRow[] | null; has_text: boolean; extracted_text: string | null; name: string; size: number; created_at: string };
+type Doc = { id: string; file_id: string; category: string; title: string; shared: boolean; extracted: ReportRow[] | null; has_text: boolean; extracted_text: string | null; name: string; size: number; created_at: string; signature: "offen" | "unterschrieben" | null };
 type Att = { id: string; held_on: string; units: number; starts_at: string | null };
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -23,7 +24,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
   for (const d of stale) await reparseDocument(d);
   const [docs, attendance] = await Promise.all([
     query<Doc>(
-      `SELECT d.id, d.file_id, d.category, d.title, d.shared, d.extracted, d.extracted_text IS NOT NULL AS has_text, CASE WHEN d.category IN ('anwesenheit', 'taetigkeitsnachweis', 'coachbericht') THEN d.extracted_text END AS extracted_text, f.name, f.size, d.created_at
+      `SELECT d.id, d.file_id, d.category, d.title, d.shared, d.extracted, d.extracted_text IS NOT NULL AS has_text, CASE WHEN d.category IN ('anwesenheit', 'taetigkeitsnachweis', 'coachbericht') THEN d.extracted_text END AS extracted_text, f.name, f.size, d.created_at, d.signature
          FROM documents d JOIN files f ON f.id = d.file_id WHERE d.coachee_id = $1 ORDER BY d.created_at DESC`,
       [c.id],
     ),
@@ -52,6 +53,8 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                           <span className="text-xs text-muted"> · {formatDate(d.created_at)} · {kb(d.size)}</span>
                         </span>
                         <span className="flex flex-wrap gap-1">
+                          {d.signature === "offen" && <span className="badge bg-[#fbf1e3] text-gold">Unterschrift fehlt</span>}
+                          {d.signature === "unterschrieben" && <span className="badge bg-[#e5f2ea] text-ok">unterschrieben</span>}
                           {d.shared && <span className="badge bg-bg text-muted">für Coachee sichtbar</span>}
                           {cmp && (ok ? <span className="badge bg-[#e5f2ea] text-ok">passt zum Portal</span> : <span className="badge bg-[#fbf1e3] text-gold">Abweichungen</span>)}
                           {report && !cmp && <span className="badge bg-bg text-muted">keine Termine erkannt</span>}
@@ -61,6 +64,9 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                         <div className="flex flex-wrap gap-2">
                           <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="btn btn-sm">Öffnen</a>
                           <a href={`/api/dateien/${d.file_id}?download=1`} className="btn-ghost btn-sm">Herunterladen</a>
+                          {d.signature === "offen" && <form action={setSignature.bind(null, d.id, "unterschrieben")}><button className="btn-ghost btn-sm">Als unterschrieben markieren</button></form>}
+                          {d.signature === "unterschrieben" && <form action={setSignature.bind(null, d.id, "offen")}><button className="btn-ghost btn-sm">Unterschrift wieder offen</button></form>}
+                          {!d.signature && <form action={setSignature.bind(null, d.id, "offen")}><button className="btn-ghost btn-sm">Unterschrift nötig</button></form>}
                           <form action={deleteDocument.bind(null, c.id, d.id)}><ConfirmButton /></form>
                         </div>
                         <EditDocument coacheeId={c.id} doc={d} />
