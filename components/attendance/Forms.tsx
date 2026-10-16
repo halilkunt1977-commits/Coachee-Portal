@@ -1,5 +1,5 @@
 "use client";
-import { addAttendance, assignMail, fetchMailboxNow, pasteMail } from "@/app/actions/anwesenheit";
+import { addAttendance, assignMail, fetchMailboxNow, moveAttendance, pasteMail, updateAttendance } from "@/app/actions/anwesenheit";
 import { ActionForm } from "../akte/ActionForm";
 import { SubmitButton } from "../SubmitButton";
 import { Field, TextArea } from "../ui";
@@ -49,6 +49,36 @@ export function FetchNow() {
   return (
     <ActionForm action={fetchMailboxNow} className="space-y-2">
       <SubmitButton className="btn" pendingText="Postfach wird abgerufen …">Postfach jetzt abrufen</SubmitButton>
+    </ActionForm>
+  );
+}
+
+type Entry = { id: string; held_on: string; starts_at: string | null; ends_at: string | null; units: number; rest_units: number | null; note: string };
+
+export function EditEntry({ coacheeId, e }: { coacheeId: string; e: Entry }) {
+  return (
+    <ActionForm action={updateAttendance.bind(null, coacheeId, e.id)} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Field label="Datum" name="held_on" type="date" defaultValue={e.held_on} required />
+        <Field label="Beginn" name="starts_at" type="time" defaultValue={e.starts_at?.slice(0, 5) ?? ""} />
+        <Field label="Ende" name="ends_at" type="time" defaultValue={e.ends_at?.slice(0, 5) ?? ""} />
+        <Field label="UE" name="units" inputMode="decimal" defaultValue={String(e.units).replace(".", ",")} required />
+        <Field label="Rest-UE" name="rest_units" inputMode="decimal" defaultValue={e.rest_units != null ? String(e.rest_units).replace(".", ",") : ""} />
+      </div>
+      <Field label="Notiz" name="note" defaultValue={e.note} />
+      <SubmitButton className="btn btn-sm">Änderungen speichern</SubmitButton>
+    </ActionForm>
+  );
+}
+
+export function MoveEntry({ coacheeId, id, options }: { coacheeId: string; id: string; options: { id: string; name: string }[] }) {
+  return (
+    <ActionForm action={moveAttendance.bind(null, coacheeId, id)} className="flex flex-wrap items-start gap-2">
+      <select name="coachee_id" defaultValue="" className="input w-auto min-w-48 flex-1 py-1.5 text-sm" aria-label="Anderer Coachee">
+        <option value="">Anderem Coachee zuordnen …</option>
+        {options.filter((o) => o.id !== coacheeId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+      <SubmitButton className="btn-ghost btn-sm">Verschieben</SubmitButton>
     </ActionForm>
   );
 }

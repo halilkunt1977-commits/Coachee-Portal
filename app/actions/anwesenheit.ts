@@ -47,14 +47,53 @@ export async function addAttendance(coacheeId: string, _prev: FormState, fd: For
   return { ok: `${units.toLocaleString("de-DE")} UE am ${held_on.split("-").reverse().join(".")} eingetragen.` };
 }
 
-export async function deleteAttendance(coacheeId: string, id: string) {
+/**
+ * Eintrag löschen. Kam er aus einer Mail, landet die Mail wieder in der Liste „nicht zugeordnet“,
+ * außer bei mailToo: dann wird sie ausgeblendet (z. B. doppelte Mail).
+ */
+export async function deleteAttendance(coacheeId: string, id: string, mailToo = false) {
   const coach = await requireCoach();
   const c = await coacheeFor(coach, coacheeId);
   const row = await one<{ mail_id: string | null }>("DELETE FROM attendance WHERE id = $1 AND coachee_id = $2 RETURNING mail_id", [id, c.id]);
-  // Kam der Eintrag aus einer Mail, landet die Mail wieder in der Liste „nicht zugeordnet“
-  if (row?.mail_id) await query("UPDATE attendance_mails SET status = 'offen', coachee_id = NULL WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM attendance WHERE mail_id = $1)", [row.mail_id]);
+  if (row?.mail_id) {
+    await query("UPDATE attendance_mails SET status = $2, coachee_id = NULL WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM attendance WHERE mail_id = $1)", [row.mail_id, mailToo ? "ignoriert" : "offen"]);
+  }
   await audit(coach.id, "attendance_deleted", c.id);
   refresh(c.id);
+}
+
+export async function updateAttendance(coacheeId: string, id: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const coach = await requireCoach();
+  const c = await coacheeFor(coach, coacheeId);
+  const held_on = dateOrNull(fd, "held_on");
+  const units = numberOrNull(fd, "units");
+  if (!held_on) return { error: "Bitte ein Datum angeben." };
+  if (units == null || units <= 0 || units > 24) return { error: "Bitte gültige Unterrichtseinheiten angeben." };
+  const row = await one<{ id: string }>(
+    "UPDATE attendance SET held_on=$3, starts_at=$4, ends_at=$5, units=$6, rest_units=$7, note=$8 WHERE id=$1 AND coachee_id=$2 RETURNING id",
+    [id, c.id, held_on, timeOrNull(fd, "starts_at"), timeOrNull(fd, "ends_at"), units, numberOrNull(fd, "rest_units"), text(fd, "note", 500)],
+  );
+  if (!row) return { error: "Eintrag nicht gefunden." };
+  await audit(coach.id, "attendance_updated", c.id, { held_on, units });
+  refresh(c.id);
+  return { ok: "Gespeichert." };
+}
+
+/** Falsch zugeordneten Termin samt Mail einem anderen Coachee geben */
+export async function moveAttendance(coacheeId: string, id: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const coach = await requireCoach();
+  const from = await coacheeFor(coach, coacheeId);
+  const targetId = text(fd, "coachee_id", 40);
+  if (!targetId || targetId === from.id) return { error: "Bitte einen anderen Coachee auswählen." };
+  const to = await coacheeFor(coach, targetId);
+  const row = await one<{ mail_id: string | null }>("UPDATE attendance SET coachee_id = $3 WHERE id = $1 AND coachee_id = $2 RETURNING mail_id", [id, from.id, to.id]);
+  if (!row) return { error: "Eintrag nicht gefunden." };
+  if (row.mail_id) await query("UPDATE attendance_mails SET coachee_id = $2 WHERE id = $1", [row.mail_id, to.id]);
+  await audit(coach.id, "attendance_moved", from.id, { to: to.id });
+  await audit(coach.id, "attendance_moved", to.id, { from: from.id });
+  refresh(from.id);
+  refresh(to.id);
+  return { ok: `Zu ${to.first_name} ${to.last_name} verschoben.` };
 }
 
 // ---------- Mails von Erfolgspfad ----------
