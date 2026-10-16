@@ -19,7 +19,7 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
     <JobSearch
       coacheeId={c.id}
       coach={user.role === "coach"}
-      ai={aiEnabled()}
+      ai={aiEnabled() && user.role === "coach"}
       firstName={c.first_name}
       searches={searches}
       initialQuery={initialQuery}

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/shell/AppShell";
 import { notFound } from "next/navigation";
 import { PlanPanel } from "@/components/bp/Panels";
 import { Empty } from "@/components/ui";
@@ -13,10 +14,7 @@ export default async function MyPlan() {
   if (c.coaching_type !== "gruendung") notFound();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Mein Businessplan</h1>
-        <p className="text-muted">Abschnitt für Abschnitt, mit Leitfragen und Formulierungshilfe. Dein Coach sieht jede Änderung und arbeitet mit dir daran. Alles wird automatisch gespeichert.</p>
-      </div>
+      <PageHeader eyebrow="Meine Gründung" title="Mein Businessplan" description="Abschnitt für Abschnitt, mit Leitfragen zu jedem Kapitel. Dein Coach sieht jede Änderung und arbeitet mit dir daran. Alles wird automatisch gespeichert." />
       <PlanPanel user={user} coachee={c} links={{ plan: "/mein-bereich/businessplan", finance: "/mein-bereich/finanzplan", zahlen: null }} />
     </div>
   );

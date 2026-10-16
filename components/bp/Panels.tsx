@@ -32,7 +32,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       names={names}
       bausteine={bausteine}
       categoryLabels={Object.fromEntries(GRUENDUNG_CATEGORIES.map((k) => [k.key, k.label]))}
-      ai={aiEnabled()}
+      ai={aiEnabled() && user.role === "coach"}
       pdfHref={files(c.id).pdf}
       financeHref={links.finance}
     />

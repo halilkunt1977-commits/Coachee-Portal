@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/shell/AppShell";
 import { setMailIgnored } from "@/app/actions/anwesenheit";
 import { AssignForm, FetchNow, PasteForm } from "@/components/attendance/Forms";
 import { Empty, Notice, formatDate, formatDateTime, formatUnits } from "@/components/ui";
@@ -40,11 +41,7 @@ export default async function AttendanceInbox({ searchParams }: PageProps<"/coac
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/coach/coachees" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
-        <h1 className="h1 mt-2">Anwesenheit</h1>
-        <p className="text-muted">Bestätigte Termine von Erfolgspfad werden automatisch beim passenden Coachee eingetragen. Was sich nicht eindeutig zuordnen lässt, steht hier.</p>
-      </div>
+      <PageHeader eyebrow="Postfach und Termine" title="Anwesenheit" description="Bestätigte Termine von Erfolgspfad werden automatisch beim passenden Coachee eingetragen. Was sich nicht eindeutig zuordnen lässt, steht hier." />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">

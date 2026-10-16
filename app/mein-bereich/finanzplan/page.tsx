@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/shell/AppShell";
 import { notFound } from "next/navigation";
 import { FinancePanel } from "@/components/bp/Panels";
 import { Empty } from "@/components/ui";
@@ -13,10 +14,7 @@ export default async function MyFinance() {
   if (c.coaching_type !== "gruendung") notFound();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Mein Finanzplan</h1>
-        <p className="text-muted">Kapitalbedarf, Finanzierung, Umsatz und Kosten eintragen. Rentabilität und Liquidität für drei Jahre rechnen sich sofort mit, als Excel oder zusammen mit dem Businessplan als PDF.</p>
-      </div>
+      <PageHeader eyebrow="Meine Gründung" title="Mein Finanzplan" description="Kapitalbedarf, Finanzierung, Umsatz und Kosten eintragen. Rentabilität und Liquidität für drei Jahre rechnen sich sofort mit, als Excel oder zusammen mit dem Businessplan als PDF." />
       <FinancePanel user={user} coachee={c} links={{ plan: "/mein-bereich/businessplan", finance: "/mein-bereich/finanzplan", zahlen: null }} />
     </div>
   );

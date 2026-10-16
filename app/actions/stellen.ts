@@ -197,7 +197,7 @@ export async function suggestSearches(coacheeId: string): Promise<{ ideas?: Sear
   const user = await requireUser();
   const c = await jobCoachee(user, coacheeId);
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { coachOnly: true });
     const profile = await profileForAi(c);
     if (profile.empty) return { error: "Für Vorschläge braucht es ein Kompetenzprofil oder einen Lebenslauf. Beides fehlt noch." };
     const out = await jsonResponse<{ suchen: { was: string; wo: string; umkreis: number; arbeitszeit: string[]; warum: string }[] }>({
@@ -252,7 +252,7 @@ export async function rateJobs(coacheeId: string, jobs: Pick<Job, "refnr" | "tit
   const list = (Array.isArray(jobs) ? jobs : []).slice(0, 40);
   if (!list.length) return { fits: {} };
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { coachOnly: true });
     const profile = await profileForAi(c);
     if (profile.empty) return { error: "Für die Einschätzung braucht es ein Kompetenzprofil oder einen Lebenslauf." };
     const anzeigen = list.map((j, i) => `${i + 1}. ${clip(j.title, 160)}${j.beruf ? ` (Beruf: ${clip(j.beruf, 100)})` : ""} – ${clip(j.employer, 120)}, ${clip(j.location, 80)}`).join("\n");

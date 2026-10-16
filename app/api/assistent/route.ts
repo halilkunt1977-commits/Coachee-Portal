@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session || (session.user.totp_enabled && !session.mfaPassed)) return NextResponse.json({ error: "Bitte neu anmelden." }, { status: 401 });
   const { user } = session;
-  if (user.role === "coach" && !user.totp_enabled) return NextResponse.json({ error: "Bitte zuerst die Zwei-Faktor-Anmeldung einrichten." }, { status: 403 });
+  // Den Assistenten gibt es nur für den Coach
+  if (user.role !== "coach") return NextResponse.json({ error: "Diese Funktion steht nur deinem Coach zur Verfügung." }, { status: 403 });
+  if (!user.totp_enabled) return NextResponse.json({ error: "Bitte zuerst die Zwei-Faktor-Anmeldung einrichten." }, { status: 403 });
 
   const body = (await request.json().catch(() => ({}))) as { chatId?: string; coacheeId?: string; text?: string };
   const text = String(body.text ?? "").trim().slice(0, 20_000);
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { coachOnly: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof AiError ? e.message : "Der Assistent ist gerade nicht erreichbar." }, { status: 429 });
   }

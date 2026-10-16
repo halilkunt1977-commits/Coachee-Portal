@@ -14,6 +14,22 @@ import { setCoacheeCity } from "@/app/actions/dashboard";
 import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
 import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
 import { greeting, todayLong } from "@/components/dashboard/Hero";
+import { Ring } from "@/components/dashboard/Charts";
+import { Icon } from "@/components/shell/icons";
+
+function NextStep({ label, hint, href }: { label: string; hint: string; href: string }) {
+  return (
+    <Link href={href} className="group flex max-w-xl items-center gap-4 rounded-2xl bg-gradient-to-r from-[#f3d9a6] to-[#d6a35b] p-4 text-night shadow-[0_18px_40px_-20px_rgba(214,163,91,.9)] transition hover:brightness-105">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night/90 text-[#f3d9a6]"><Icon name="flag" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-night/60">Dein nächster Schritt</span>
+        <span className="block font-[family-name:var(--font-display)] text-lg leading-tight font-bold">{label}</span>
+        <span className="block truncate text-xs text-night/70">{hint}</span>
+      </span>
+      <span className="transition group-hover:translate-x-1"><Icon name="arrow" /></span>
+    </Link>
+  );
+}
 
 export const metadata = { title: "Mein Bereich" };
 
@@ -46,41 +62,74 @@ export default async function MyArea() {
     attendance: "#gespraeche",
   };
   const openTasks = tasks.filter((t) => !t.done_at).length;
+  const next = progress.milestones.find((m) => !m.done);
+  const STEP_LINK: Record<string, string> = {
+    idee: links.plan, businessplan: links.plan, finanzplan: links.finance, lebenslauf: links.cv, erfahrung: links.survey,
+    profil: "#profil", bewerbung: links.jobs, gespraech: links.jobs, zusage: links.jobs, anschreiben: "/mein-bereich/lebenslauf",
+  };
+  const nextHref = next ? STEP_LINK[next.key] ?? "#etappen" : "#etappen";
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
   return (
     <div className="space-y-6">
-      <section className="-mx-4 overflow-hidden bg-gradient-to-br from-accent via-[#24456f] to-[#2f5683] px-4 py-6 text-white sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8">
-        <div className="grid gap-6 md:grid-cols-[1fr_minmax(260px,340px)] md:items-center">
-          <div className="min-w-0 space-y-3">
-            <p className="text-sm text-white/70">{todayLong()}</p>
-            <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">{greeting()}, {c.first_name}!</h1>
-            <p className="text-white/80">
-              {typeLabel[c.coaching_type]} mit {coach?.name ?? "deinem Coach"}
-              {c.end_date ? ` · bis ${formatDate(c.end_date)}` : ""}
-            </p>
-            {c.goal && (
-              <div className="max-w-xl rounded-2xl bg-white/10 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60">Unser Ziel</p>
-                <p className="mt-0.5 whitespace-pre-wrap">{c.goal}</p>
+      <section className="rise night relative -mx-4 -mt-6 overflow-hidden px-5 pt-8 pb-7 sm:mx-0 sm:mt-0 sm:rounded-[28px] sm:px-9 sm:py-9">
+        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_320px] lg:items-center">
+          <div className="min-w-0 space-y-5">
+            <div className="space-y-2">
+              <p className="text-sm text-white/60">{todayLong()}</p>
+              <h1 className="font-[family-name:var(--font-display)] text-[34px] leading-[1.05] font-bold tracking-tight text-balance sm:text-5xl">
+                {greeting()}, <span className="text-gradient-gold">{c.first_name}</span>!
+              </h1>
+              <p className="text-white/70">
+                {typeLabel[c.coaching_type]} mit {coach?.name ?? "deinem Coach"}
+                {c.end_date ? ` · bis ${formatDate(c.end_date)}` : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-stretch gap-3">
+              <div className="glass flex items-center gap-4 py-3 pr-5 pl-3">
+                <Ring pct={progress.overall} size={76} stroke={8} tone="white" track="rgba(255,255,255,.15)">
+                  <span className="font-[family-name:var(--font-display)] text-lg font-bold">{progress.overall}%</span>
+                </Ring>
+                <div>
+                  <p className="text-xs text-white/55">Dein Fortschritt</p>
+                  <p className="font-semibold">{progress.milestones.filter((m) => m.done).length} von {progress.milestones.length} Etappen</p>
+                </div>
               </div>
+              {progress.units.rest != null && (
+                <div className="glass flex flex-col justify-center px-5 py-3">
+                  <p className="text-xs text-white/55">Noch für dich</p>
+                  <p className="font-[family-name:var(--font-display)] text-2xl font-bold tabular-nums">{progress.units.rest.toLocaleString("de-DE", { maximumFractionDigits: 1 })} <span className="text-sm font-medium text-white/60">Einheiten</span></p>
+                </div>
+              )}
+            </div>
+            {next && (
+              <NextStep label={next.action} hint={next.hint} href={nextHref} />
             )}
-            <div className="flex flex-wrap gap-2 pt-1 text-sm">
-              {openTasks > 0 && <a href="#aufgaben" className="rounded-full bg-white/15 px-3 py-1 font-medium hover:bg-white/25">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</a>}
-              {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-gold px-3 py-1 font-medium hover:opacity-90">{progress.jobs?.proposals} neue Stelle{progress.jobs?.proposals === 1 ? "" : "n"} für dich</Link>}
-              {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-white px-3 py-1 font-medium text-danger">Heute nachfassen: {progress.jobs?.due}</Link>}
+            <div className="flex flex-wrap gap-2 text-sm">
+              {openTasks > 0 && <a href="#aufgaben" className="rounded-full bg-white/10 px-3 py-1 font-medium transition hover:bg-white/20">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</a>}
+              {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-gold px-3 py-1 font-semibold text-night transition hover:brightness-110">{progress.jobs?.proposals} neue Stelle{progress.jobs?.proposals === 1 ? "" : "n"} für dich</Link>}
+              {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-white px-3 py-1 font-semibold text-danger">Heute nachfassen: {progress.jobs?.due}</Link>}
             </div>
           </div>
-          <div className="rounded-2xl bg-white/10 p-4">
-            <Suspense fallback={<WeatherSkeleton />}>
-              <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder="Dein Wohnort" />} />
-            </Suspense>
+          <div className="space-y-3">
+            <div className="glass p-4">
+              <Suspense fallback={<WeatherSkeleton />}>
+                <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder="Dein Wohnort" />} />
+              </Suspense>
+            </div>
+            {c.goal && (
+              <div className="glass px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">Unser Ziel</p>
+                <p className="mt-1 whitespace-pre-wrap text-[15px] leading-snug">{c.goal}</p>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      <PartsGrid p={progress} links={links} />
+      <PartsGrid p={progress} links={links} overall={false} />
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="min-w-0 space-y-6">

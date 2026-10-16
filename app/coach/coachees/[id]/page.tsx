@@ -24,6 +24,9 @@ import { unitsUsedSql } from "@/lib/attendance/units";
 import { deleteFinanceItem, deleteProfileItem, rejectAllSuggestions } from "@/app/actions/profil";
 import { resendInvite, setAccess } from "../../actions";
 import DeleteCoachee from "./DeleteCoachee";
+import { Avatar } from "@/components/shell/AppShell";
+import { Icon } from "@/components/shell/icons";
+import { Ring } from "@/components/dashboard/Charts";
 import InviteLink from "./InviteLink";
 import StammdatenForm from "./StammdatenForm";
 import { progressFor, type Links } from "@/lib/dashboard/progress";
@@ -33,23 +36,30 @@ import type { Coachee } from "@/lib/access";
 type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null };
 
 const TABS = [
-  { key: "uebersicht", label: "Übersicht" },
-  { key: "gespraeche", label: "Gespräche" },
-  { key: "anwesenheit", label: "Anwesenheit" },
-  { key: "dokumente", label: "Dokumente" },
-  { key: "wissen", label: "Kompetenzprofil" },
-  { key: "stellen", label: "Stellen" },
-  { key: "bewerbungen", label: "Bewerbungen" },
-  { key: "zahlen", label: "Zahlen" },
-  { key: "businessplan", label: "Businessplan" },
-  { key: "finanzplan", label: "Finanzplan" },
-  { key: "lebenslauf", label: "Lebenslauf" },
-  { key: "erfahrung", label: "Erfahrungsbogen" },
-  { key: "assistent", label: "KI-Assistent" },
-  { key: "aufgaben", label: "Aufgaben" },
-  { key: "nachrichten", label: "Nachrichten" },
-  { key: "stammdaten", label: "Stammdaten" },
-  { key: "verlauf", label: "Zugriffe" },
+  { key: "uebersicht", label: "Übersicht", group: "ueberblick" },
+  { key: "gespraeche", label: "Gespräche", group: "coaching" },
+  { key: "anwesenheit", label: "Anwesenheit", group: "coaching" },
+  { key: "aufgaben", label: "Aufgaben", group: "coaching" },
+  { key: "nachrichten", label: "Nachrichten", group: "coaching" },
+  { key: "assistent", label: "KI-Assistent", group: "coaching" },
+  { key: "wissen", label: "Kompetenzprofil", group: "ziel" },
+  { key: "stellen", label: "Stellen", group: "ziel" },
+  { key: "bewerbungen", label: "Bewerbungen", group: "ziel" },
+  { key: "zahlen", label: "Zahlen", group: "ziel" },
+  { key: "businessplan", label: "Businessplan", group: "ziel" },
+  { key: "finanzplan", label: "Finanzplan", group: "ziel" },
+  { key: "lebenslauf", label: "Lebenslauf", group: "unterlagen" },
+  { key: "erfahrung", label: "Erfahrungsbogen", group: "unterlagen" },
+  { key: "dokumente", label: "Dokumente", group: "unterlagen" },
+  { key: "stammdaten", label: "Stammdaten", group: "verwaltung" },
+  { key: "verlauf", label: "Zugriffe", group: "verwaltung" },
+] as const;
+const GROUPS = [
+  { key: "ueberblick", label: "Überblick", icon: "grid" },
+  { key: "coaching", label: "Coaching", icon: "chat" },
+  { key: "ziel", label: "", icon: "flag" },
+  { key: "unterlagen", label: "Unterlagen", icon: "folder" },
+  { key: "verwaltung", label: "Verwaltung", icon: "settings" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -101,31 +111,86 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
   const bpLinks = { plan: "?tab=businessplan", finance: "?tab=finanzplan", zahlen: "?tab=zahlen" };
   const pct = c.units_total ? Math.min(100, Math.round((used / c.units_total) * 100)) : null;
 
+  const activeGroup = tabs.find((t) => t.key === tab)!.group;
+  const badge = (key: string) =>
+    key === "nachrichten" ? stats?.unread : key === "bewerbungen" ? stats?.due : key === "wissen" ? stats?.suggestions : key === "erfahrung" ? stats?.survey_new : 0;
+  const groupBadge = (g: string) => tabs.filter((t) => t.group === g).reduce((a, t) => a + (badge(t.key) ?? 0), 0);
+  const done = c.status === "abgeschlossen";
+
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/coach/coachees" className="text-sm text-muted hover:text-ink">← Alle Coachees</Link>
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="h1">{fullName(c)}</h1>
-            <p className="mt-1 flex flex-wrap gap-2 text-sm">
-              <span className="badge">{typeLabel[c.coaching_type]}</span>
-              <span className="badge bg-bg text-muted">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
-              <span className={`badge ${c.status === "abgeschlossen" ? "bg-[#e5f2ea] text-ok" : "bg-bg text-muted"}`}>{c.status === "abgeschlossen" ? "✓ " : ""}{statusLabel[c.status]}</span>
-              {account && !account.has_password && <span className="badge bg-[#fbf1e3] text-gold">Einladung offen</span>}
-              {account && !account.active && <span className="badge bg-[#f8e6e3] text-danger">Zugang gesperrt</span>}
+      <Link href="/coach/coachees" className="rise inline-flex items-center gap-1.5 text-sm font-medium text-muted transition hover:text-accent">
+        <span className="rotate-180"><Icon name="arrow" className="size-4" /></span> Alle Coachees
+      </Link>
+
+      <section className={`rise relative overflow-hidden rounded-[24px] px-5 py-6 sm:px-8 sm:py-7 ${done ? "bg-gradient-to-br from-[#1f6b45] to-[#123f29] text-white" : "night"}`}>
+        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative flex flex-wrap items-center gap-6">
+          <Avatar name={fullName(c)} size="size-16 sm:size-20" className="!text-xl ring-4 ring-white/10" />
+          <div className="min-w-0 flex-1 basis-64 space-y-2">
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight sm:text-3xl">{fullName(c)}</h1>
+            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+              <span className="rounded-full bg-white/15 px-2.5 py-1">{typeLabel[c.coaching_type]}</span>
+              <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/75">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
+              <span className={`rounded-full px-2.5 py-1 ${done ? "bg-white text-ok" : "bg-white/10 text-white/75"}`}>{done ? "✓ " : ""}{statusLabel[c.status]}</span>
+              {account && !account.has_password && <span className="rounded-full bg-gold px-2.5 py-1 text-night">Einladung offen</span>}
+              {account && !account.active && <span className="rounded-full bg-danger px-2.5 py-1">Zugang gesperrt</span>}
+            </div>
+            <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/65">
+              <span className="inline-flex items-center gap-1.5"><Icon name="mail" className="size-4" />{c.email}</span>
+              {c.phone && <span>{c.phone}</span>}
+              {(c.start_date || c.end_date) && <span className="inline-flex items-center gap-1.5"><Icon name="calendar" className="size-4" />{formatDate(c.start_date)} bis {formatDate(c.end_date)}</span>}
             </p>
           </div>
-          <div className="min-w-56">
-            <Link href="?tab=anwesenheit" className="text-xs text-muted hover:text-ink">Unterrichtseinheiten</Link>
-            <p className="font-semibold">{formatUnits(used)}{c.units_total ? ` von ${c.units_total}` : ""}</p>
-            {pct !== null && <div className="mt-1 h-2 rounded-full bg-line-soft"><div className={`h-2 rounded-full ${c.status === "abgeschlossen" ? "bg-ok" : "bg-accent"}`} style={{ width: `${pct}%` }} /></div>}
-            <form action={setCoachingStatus.bind(null, c.id, c.status === "abgeschlossen" ? "aktiv" : "abgeschlossen")} className="mt-2 text-right">
-              <button className={`text-xs hover:underline ${c.status === "abgeschlossen" ? "text-muted" : "text-ok"}`}>{c.status === "abgeschlossen" ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
-            </form>
+          <div className="glass flex items-center gap-4 p-4">
+            <Ring pct={pct ?? 0} size={68} stroke={7} tone="white" track="rgba(255,255,255,.18)">
+              <span className="text-sm font-bold">{pct != null ? `${pct}%` : "–"}</span>
+            </Ring>
+            <div className="space-y-0.5">
+              <p className="text-xs text-white/60">Unterrichtseinheiten</p>
+              <p className="font-[family-name:var(--font-display)] text-xl font-bold tabular-nums">{formatUnits(used)}</p>
+              <p className="text-xs text-white/60">{c.units_total ? `von ${c.units_total} · ${(Math.max(0, c.units_total - used)).toLocaleString("de-DE", { maximumFractionDigits: 2 })} übrig` : "kein Kontingent"}</p>
+            </div>
           </div>
         </div>
-      </div>
+        <div className="relative mt-5 flex flex-wrap gap-2">
+          <Link href="?tab=nachrichten" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="chat" className="size-4" />Nachricht schreiben</Link>
+          <Link href="?tab=gespraeche" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="plus" className="size-4" />Gespräch erfassen</Link>
+          <Link href="?tab=anwesenheit" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="clock" className="size-4" />Anwesenheit</Link>
+          <form action={setCoachingStatus.bind(null, c.id, done ? "aktiv" : "abgeschlossen")} className="ml-auto">
+            <button className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${done ? "bg-white/15 hover:bg-white/25" : "bg-ok/90 hover:bg-ok"}`}>{done ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
+          </form>
+        </div>
+      </section>
+
+      <nav className="rise sticky top-[57px] z-20 -mx-4 space-y-2 bg-bg/90 px-4 py-2 backdrop-blur-xl sm:mx-0 sm:px-0 lg:top-0" style={{ ["--i" as string]: 1 }}>
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+          {GROUPS.map((g) => {
+            const first = tabs.find((t) => t.group === g.key);
+            if (!first) return null;
+            const active = g.key === activeGroup;
+            const n = groupBadge(g.key);
+            return (
+              <Link key={g.key} href={`?tab=${first.key}`} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${active ? "bg-accent text-white shadow-[0_6px_14px_-8px_rgba(29,58,102,.8)]" : "bg-surface text-muted ring-1 ring-line-soft hover:text-ink"}`}>
+                <Icon name={g.icon} className="size-4" />
+                {g.label || (c.coaching_type === "gruendung" ? "Gründung" : "Bewerbung")}
+                {n > 0 && <span className={`rounded-full px-1.5 text-[11px] ${active ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span>}
+              </Link>
+            );
+          })}
+        </div>
+        {tabs.filter((t) => t.group === activeGroup).length > 1 && (
+          <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line-soft">
+            {tabs.filter((t) => t.group === activeGroup).map((t) => (
+              <Link key={t.key} href={`?tab=${t.key}`} className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition ${tab === t.key ? "text-accent" : "text-muted hover:text-ink"}`}>
+                {t.label}
+                {(badge(t.key) ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-danger px-1.5 text-[11px] text-white">{t.key === "erfahrung" ? "neu" : badge(t.key)}</span>}
+                {tab === t.key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" />}
+              </Link>
+            ))}
+          </div>
+        )}
+      </nav>
 
       {sp.eingeladen === "1" && <Notice tone="ok">Die Einladung ist per E-Mail an {c.email} unterwegs.</Notice>}
       {typeof sp.eingeladen === "string" && sp.eingeladen !== "1" && (
@@ -134,17 +199,6 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
         </Notice>
       )}
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-line-soft">
-        {tabs.map((t) => (
-          <Link key={t.key} href={`?tab=${t.key}`} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}>
-            {t.label}
-            {t.key === "nachrichten" && (stats?.unread ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 text-[11px] text-white">{stats?.unread}</span>}
-            {t.key === "bewerbungen" && (stats?.due ?? 0) > 0 && <span title="Nachfassen fällig" className="ml-1.5 rounded-full bg-danger px-1.5 text-[11px] text-white">{stats?.due}</span>}
-            {t.key === "erfahrung" && (stats?.survey_new ?? 0) > 0 && <span title="Neu ausgefüllt" className="ml-1.5 rounded-full bg-ok px-1.5 text-[11px] text-white">neu</span>}
-            {t.key === "wissen" && (stats?.suggestions ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-gold px-1.5 text-[11px] text-white">{stats?.suggestions}</span>}
-          </Link>
-        ))}
-      </nav>
 
       {tab === "uebersicht" && <Overview coachee={c} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}

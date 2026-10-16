@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import { setCoachCity } from "@/app/actions/dashboard";
 import { Meter, Ring, WeekBars, toneFor } from "@/components/dashboard/Charts";
 import { greeting, todayLong } from "@/components/dashboard/Hero";
+import { Avatar } from "@/components/shell/AppShell";
+import { Icon } from "@/components/shell/icons";
 import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
 import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { fullName, typeLabel, type Coachee } from "@/lib/access";
@@ -118,12 +120,13 @@ export default async function CoachDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="-mx-4 overflow-hidden bg-gradient-to-br from-accent via-[#24456f] to-[#2f5683] px-4 py-6 text-white sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8">
-        <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+      <section className="rise night relative -mx-4 -mt-6 overflow-hidden px-5 pt-8 pb-7 sm:mx-0 sm:mt-0 sm:rounded-[28px] sm:px-9 sm:py-9">
+        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative grid gap-8 xl:grid-cols-[1fr_330px]">
           <div className="min-w-0 space-y-6">
             <div>
               <p className="text-sm text-white/70">{todayLong()}</p>
-              <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight sm:text-4xl">{greeting()}, {firstName}!</h1>
+              <h1 className="font-[family-name:var(--font-display)] text-[34px] leading-[1.05] font-bold tracking-tight sm:text-5xl">{greeting()}, <span className="text-gradient-gold">{firstName}</span>!</h1>
               <p className="mt-1 text-white/80">
                 {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} heute deinen Blick.` : "Alles im grünen Bereich."}
               </p>
@@ -134,26 +137,22 @@ export default async function CoachDashboard() {
                 { label: "UE diese Woche", value: de(thisWeek), sub: lastWeek ? `Vorwoche ${de(lastWeek)}` : "Vorwoche –" },
                 { label: "UE im " + new Date().toLocaleDateString("de-DE", { month: "long", timeZone: "Europe/Berlin" }), value: de(month?.units ?? 0), sub: `${closed?.n ?? 0} Coachings abgeschlossen` },
                 { label: "UE noch offen", value: de(restAll), sub: "über alle aktiven" },
-              ].map((k) => (
-                <div key={k.label} className="rounded-2xl bg-white/10 px-4 py-3">
+              ].map((k, i) => (
+                <div key={k.label} className="rise glass px-4 py-3" style={{ ["--i" as string]: i + 1 }}>
                   <dt className="text-xs text-white/70">{k.label}</dt>
-                  <dd className="font-[family-name:var(--font-display)] text-3xl font-bold tabular-nums">{k.value}</dd>
+                  <dd className="font-[family-name:var(--font-display)] text-[34px] leading-tight font-bold tabular-nums">{k.value}</dd>
                   <dd className="text-[11px] text-white/60">{k.sub}</dd>
                 </div>
               ))}
             </dl>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">Unterrichtseinheiten pro Kalenderwoche</p>
-              <WeekBars weeks={weeks} height={110} light />
-            </div>
           </div>
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white/10 p-4">
+            <div className="glass p-4">
               <Suspense fallback={<WeatherSkeleton />}>
                 <WeatherBox city={me?.city ?? null} edit={<CityForm action={setCoachCity} city={me?.city ?? null} placeholder="Dein Ort, z. B. Köln" />} />
               </Suspense>
             </div>
-            <div className="flex items-center gap-4 rounded-2xl bg-white/10 p-4">
+            <div className="glass flex items-center gap-4 p-4">
               <Ring pct={avg} size={76} stroke={8} tone="white" track="rgba(255,255,255,.2)">
                 <span className="text-lg font-bold">{avg}%</span>
               </Ring>
@@ -164,20 +163,26 @@ export default async function CoachDashboard() {
             </div>
           </div>
         </div>
+        <div className="relative mt-8">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">Unterrichtseinheiten pro Kalenderwoche</p>
+          <WeekBars weeks={weeks} height={110} light />
+        </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <section className="card space-y-3">
-          <h2 className="h2">Heute wichtig</h2>
+        <section className="rise card space-y-3" style={{ ["--i" as string]: 2 }}>
+          <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-danger-soft text-danger"><Icon name="flag" className="size-4" /></span><h2 className="h2">Heute wichtig</h2>{alerts.length > 0 && <span className="ml-auto rounded-full bg-danger px-2 text-xs font-bold text-white">{alerts.length}</span>}</div>
           {alerts.length === 0 ? (
             <Empty>Nichts Dringendes. Gute Arbeit!</Empty>
           ) : (
             <ul className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
               {alerts.map((a, i) => (
                 <li key={i}>
-                  <Link href={a.href} className="flex items-start gap-3 rounded-xl px-2 py-2 text-sm hover:bg-bg">
+                  <Link href={a.href} className="group flex items-start gap-3 rounded-xl px-2.5 py-2 text-sm transition hover:bg-surface-2">
                     <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: `var(--${a.tone === "accent" ? "accent" : a.tone})` }} />
-                    <span>{a.text}</span>
+                    {a.c ? <Avatar name={fullName(a.c)} size="size-6" className="!text-[9px]" /> : null}
+                    <span className="min-w-0 flex-1">{a.text}</span>
+                    <span className="text-muted opacity-0 transition group-hover:opacity-100"><Icon name="arrow" className="size-4" /></span>
                   </Link>
                 </li>
               ))}
@@ -185,10 +190,8 @@ export default async function CoachDashboard() {
           )}
         </section>
 
-        <section className="card space-y-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <h2 className="h2">Schlagzeilen</h2>
-          </div>
+        <section className="rise card space-y-3" style={{ ["--i" as string]: 3 }}>
+          <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-tint text-accent"><Icon name="doc" className="size-4" /></span><h2 className="h2">Schlagzeilen</h2></div>
           <Suspense fallback={<NewsSkeleton />}>
             <NewsBox max={4} />
           </Suspense>
@@ -215,9 +218,14 @@ export default async function CoachDashboard() {
               const left = daysUntil(c.end_date);
               const low = p.units.rest != null && p.units.total ? p.units.rest / p.units.total <= 0.1 : false;
               return (
-                <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card group block space-y-3 !p-4 transition hover:border-accent ${c.status === "pausiert" ? "opacity-70" : ""}`}>
+                <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card card-hover group block space-y-3 !p-4 ${c.status === "pausiert" ? "opacity-70" : ""}`}>
                   <div className="flex items-center gap-3">
-                    <Ring pct={p.overall} size={52} stroke={6} tone={toneFor(p.overall)} />
+                    <div className="relative">
+                      <Ring pct={p.overall} size={52} stroke={5} tone={toneFor(p.overall)} track="var(--line-soft)">
+                        <Avatar name={fullName(c)} size="size-9" className="!text-[11px]" />
+                      </Ring>
+                      <span className="absolute -right-1 -bottom-1 rounded-full bg-surface px-1 text-[10px] font-bold tabular-nums shadow ring-1 ring-line-soft">{p.overall}%</span>
+                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold group-hover:text-accent">{fullName(c)}</p>
                       <p className="text-xs text-muted">{typeLabel[c.coaching_type]}{c.status === "pausiert" ? " · pausiert" : ""}{left != null ? ` · ${left >= 0 ? `noch ${left} Tage` : "Ende überschritten"}` : ""}</p>
@@ -242,7 +250,7 @@ export default async function CoachDashboard() {
                     ))}
                   </div>
                   <p className="text-xs text-muted">
-                    {next ? <>Als Nächstes: <span className="font-medium text-ink">{next.label}</span></> : "Alle Etappen erledigt"}
+                    {next ? <>Als Nächstes: <span className="font-medium text-ink">{next.action}</span></> : "Alle Etappen erledigt"}
                     {p.lastContact ? ` · zuletzt ${formatDate(p.lastContact)}` : ""}
                   </p>
                 </Link>
@@ -262,11 +270,11 @@ function Pipeline({ title, stages, items }: { title: string; stages: { key: stri
     <section className="card space-y-3">
       <h2 className="h2">{title}</h2>
       <div className="-mx-1 overflow-x-auto pb-1">
-        <div className="flex min-w-max gap-2 px-1">
+        <div className="flex gap-2 px-1">
           {stages.map((s, i) => {
             const list = by.get(s.key) ?? [];
             return (
-              <div key={s.key} className={`w-40 shrink-0 rounded-xl p-3 ${list.length ? "bg-tint/70" : "bg-bg"}`}>
+              <div key={s.key} className={`min-w-[132px] flex-1 rounded-xl p-3 ${list.length ? "bg-tint/70" : "bg-bg"}`}>
                 <div className="mb-2 flex items-baseline justify-between gap-1">
                   <p className="text-xs font-semibold leading-tight text-accent">{i + 1}. {s.label}</p>
                   <span className="text-sm font-bold tabular-nums">{list.length}</span>

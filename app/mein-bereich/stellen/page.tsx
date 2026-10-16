@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/shell/AppShell";
 import { notFound } from "next/navigation";
 import { StellenPanel } from "@/components/jobs/Panels";
 import { Empty } from "@/components/ui";
@@ -13,10 +14,7 @@ export default async function MyJobs() {
   if (c.coaching_type !== "job") notFound();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="h1">Stellen finden</h1>
-        <p className="text-muted">Aktuelle Stellen aus der Jobbörse der Arbeitsagentur. Merk dir, was dich interessiert, dann landet es in deinen Bewerbungen.</p>
-      </div>
+      <PageHeader eyebrow="Meine Jobsuche" title="Stellen finden" description="Aktuelle Stellen aus der Jobbörse der Arbeitsagentur. Merk dir, was dich interessiert, dann landet es in deinen Bewerbungen." />
       <StellenPanel user={user} coachee={c} links={{ search: "/mein-bereich/stellen", tracker: "/mein-bereich/bewerbungen" }} />
     </div>
   );

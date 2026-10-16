@@ -69,7 +69,7 @@ export async function draftSection(coacheeId: string, key: string): Promise<{ te
   const def = SECTIONS.find((s) => s.key === key);
   if (!def) return { error: "Unbekannter Abschnitt." };
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { coachOnly: true });
     const input = await draftContext(user, c, key);
     const out = await jsonResponse<{ text: string }>({
       coacheeId: c.id,

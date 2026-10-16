@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Avatar, PageHeader } from "@/components/shell/AppShell";
+import { Icon } from "@/components/shell/icons";
 import { Empty, Notice, formatDate, formatUnits } from "@/components/ui";
 import { requireCoach } from "@/lib/auth";
 import { fullName, statusLabel, typeLabel, type Coachee } from "@/lib/access";
@@ -44,16 +46,10 @@ export default async function CoacheeList({ searchParams }: PageProps<"/coach/co
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="h1">Coachees</h1>
-          <p className="text-muted">{rows.length} {rows.length === 1 ? "Eintrag" : "Einträge"}</p>
-        </div>
-        <Link href="/coach/neu" className="btn">+ Neuer Coachee</Link>
-      </div>
+      <PageHeader eyebrow={`${rows.length} ${rows.length === 1 ? "Eintrag" : "Einträge"}`} title="Coachees" description="Alle Akten auf einen Blick. Suchen, filtern, öffnen." actions={<Link href="/coach/neu" className="btn"><Icon name="plus" className="size-4" />Neuer Coachee</Link>} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <form className="mr-2"><input name="q" defaultValue={q} placeholder="Name oder E-Mail suchen" className="input w-64" />{typ && <input type="hidden" name="typ" value={typ} />}<input type="hidden" name="status" value={status} /></form>
+        <form className="mr-2"><input name="q" defaultValue={q} placeholder="Name oder E-Mail suchen" className="input w-full sm:w-72" />{typ && <input type="hidden" name="typ" value={typ} />}<input type="hidden" name="status" value={status} /></form>
         <Link href={filterLink({ typ: "" })} className={chip(!typ)}>Alle</Link>
         <Link href={filterLink({ typ: "job" })} className={chip(typ === "job")}>Jobcoaching</Link>
         <Link href={filterLink({ typ: "gruendung" })} className={chip(typ === "gruendung")}>Gründungscoaching</Link>
@@ -76,11 +72,14 @@ export default async function CoacheeList({ searchParams }: PageProps<"/coach/co
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {rows.map((c) => (
-            <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card block transition hover:border-accent ${c.status === "abgeschlossen" ? "!border-ok/40 !bg-[#eef6f0]" : ""}`}>
-              <div className="mb-2 flex items-start justify-between gap-2">
-                <div>
+            <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card card-hover block ${c.status === "abgeschlossen" ? "!border-ok/40 !bg-[#eef6f0]" : ""}`}>
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                <Avatar name={fullName(c)} />
+                <div className="min-w-0">
                   <p className="font-semibold">{fullName(c)}</p>
                   <p className="text-sm text-muted">{typeLabel[c.coaching_type]}</p>
+                </div>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   {c.status === "abgeschlossen" && <span className="badge bg-ok text-white">✓ Abgeschlossen</span>}

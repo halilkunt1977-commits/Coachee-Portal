@@ -151,7 +151,7 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
   const { cv, coachee } = await cvFor(user, cvId);
   if (!(field in FIELD_TASK)) return { ok: false, error: "Unbekanntes Feld." };
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { coachOnly: true });
     const data = normalizeCv(context);
     // Das Kompetenzprofil liefert dem Kurzprofil Belege (nur freigegebene Einträge, nie interne)
     const profile =
