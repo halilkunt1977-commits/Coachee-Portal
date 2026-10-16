@@ -499,7 +499,7 @@ function AiHelp({ cvId, ai, field, data, value, onApply, children }: { cvId: str
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (!ai) return <>{children}</>;
-  const label = value.trim() ? "Mit KI verbessern" : "Mit KI schreiben";
+  const label = value.trim() ? "Verbessern lassen" : "Formulieren lassen";
   return (
     <div className="space-y-2">
       {children}
@@ -510,18 +510,18 @@ function AiHelp({ cvId, ai, field, data, value, onApply, children }: { cvId: str
         onClick={async () => {
           setBusy(true);
           setError(null);
-          const res = await improveWithAi(cvId, field, value, data).catch(() => ({ ok: false as const, error: "Keine Verbindung zur KI." }));
+          const res = await improveWithAi(cvId, field, value, data).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
           setBusy(false);
           if (res.ok) setSuggestion(res.text);
           else setError(res.error);
         }}
       >
-        <span aria-hidden>✦</span> {busy ? "KI schreibt …" : label}
+        <span aria-hidden>✦</span> {busy ? "Wird geschrieben …" : label}
       </button>
       {error && <p className="text-sm text-danger">{error}</p>}
       {suggestion && (
         <div className="space-y-2 rounded-xl border border-gold/40 bg-[#fbf6ee] p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gold">Vorschlag der KI</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gold">Vorschlag</p>
           <p className="whitespace-pre-line text-sm">{suggestion}</p>
           <div className="flex gap-2">
             <button type="button" className="btn btn-sm" onClick={() => { onApply(suggestion); setSuggestion(null); }}>Übernehmen</button>

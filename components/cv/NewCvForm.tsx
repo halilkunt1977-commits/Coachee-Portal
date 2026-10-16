@@ -8,7 +8,7 @@ export function NewCvForm({ coacheeId, ai, coach, first }: { coacheeId: string; 
   const [state, action] = useActionState(createCv.bind(null, coacheeId), undefined);
   const [start, setStart] = useState(ai ? "datei" : "akte");
   const options = [
-    ai && { key: "datei", title: "Bisherigen Lebenslauf hochladen", text: "PDF oder Word. Die KI überträgt alles in die Felder, danach wird gemeinsam verbessert." },
+    ai && { key: "datei", title: "Bisherigen Lebenslauf hochladen", text: coach ? "PDF oder Word. Die KI überträgt alles in die Felder, danach wird gemeinsam verbessert." : "PDF oder Word. Alles wird in die Felder übertragen, danach verbessert ihr ihn gemeinsam." },
     { key: "akte", title: coach ? "Mit den Daten aus der Akte" : "Mit meinen Daten starten", text: "Name, Kontakt und die Kenntnisse aus dem Kompetenzprofil sind schon eingetragen." },
     { key: "leer", title: "Leer beginnen", text: "Nur der Name ist eingetragen." },
   ].filter(Boolean) as { key: string; title: string; text: string }[];
@@ -33,7 +33,7 @@ export function NewCvForm({ coacheeId, ai, coach, first }: { coacheeId: string; 
         <label className="block">
           <span className="label">Datei</span>
           <input type="file" name="datei" required accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="input file:mr-3 file:rounded-lg file:border-0 file:bg-tint file:px-3 file:py-1 file:text-sm file:font-semibold file:text-accent" />
-          <span className="hint block">Name, E-Mail und Telefon werden vor der KI entfernt und danach wieder eingesetzt.</span>
+          {coach && <span className="hint block">Name, E-Mail und Telefon werden vor der KI entfernt und danach wieder eingesetzt.</span>}
         </label>
       )}
       <SubmitButton pendingText={start === "datei" ? "Lebenslauf wird gelesen …" : "Wird angelegt …"}>Lebenslauf anlegen</SubmitButton>

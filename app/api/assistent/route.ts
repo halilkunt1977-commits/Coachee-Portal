@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   try {
     await assertAiAllowed(user);
   } catch (e) {
-    return NextResponse.json({ error: e instanceof AiError ? e.message : "Die KI ist gerade nicht erreichbar." }, { status: 429 });
+    return NextResponse.json({ error: e instanceof AiError ? e.message : "Der Assistent ist gerade nicht erreichbar." }, { status: 429 });
   }
 
   await query("INSERT INTO ai_messages (chat_id, role, content) VALUES ($1, 'user', $2)", [chatId, text]);
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         if (!abort.signal.aborted) {
           if (!(e instanceof AiError)) console.error("KI-Assistent", e);
-          const msg = e instanceof AiError ? e.message : "Die KI hat gerade nicht geantwortet. Bitte noch einmal senden.";
+          const msg = e instanceof AiError ? e.message : "Gerade kam keine Antwort. Bitte noch einmal senden.";
           try {
             controller.enqueue(encoder.encode(`\n\n⚠️ ${msg}`));
           } catch {}

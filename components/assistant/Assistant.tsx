@@ -55,7 +55,7 @@ export function Assistant(p: Props) {
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) {
-        const j = await res.json().catch(() => ({ error: "Die KI ist gerade nicht erreichbar." }));
+        const j = await res.json().catch(() => ({ error: "Der Assistent ist gerade nicht erreichbar." }));
         setMessages((m) => m.slice(0, -2));
         setInput(t);
         setError(j.error);
@@ -166,7 +166,7 @@ export function Assistant(p: Props) {
           }}
         >
           {error && <p className="rounded-lg bg-[#f8e6e3] px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
-          {!p.ai && <p className="rounded-lg bg-tint px-3 py-2 text-sm text-accent">Die KI ist noch nicht eingerichtet.</p>}
+          {!p.ai && <p className="rounded-lg bg-tint px-3 py-2 text-sm text-accent">{p.coach ? "Die KI ist noch nicht eingerichtet." : "Der Assistent ist gerade nicht verfügbar."}</p>}
           <div className="flex items-end gap-2">
             <textarea
               ref={field}
@@ -190,7 +190,7 @@ export function Assistant(p: Props) {
               <button type="submit" className="btn shrink-0" disabled={!input.trim() || !p.ai}>Senden</button>
             )}
           </div>
-          <p className="text-[11px] text-muted">Enter sendet, Umschalt+Enter macht eine neue Zeile. Die KI kann sich irren, bitte Fakten prüfen.</p>
+          <p className="text-[11px] text-muted">Enter sendet, Umschalt+Enter macht eine neue Zeile. {p.coach ? "Die KI kann sich irren, bitte Fakten prüfen." : "Antworten können Fehler enthalten, bitte Fakten prüfen."}</p>
         </form>
       </section>
     </div>

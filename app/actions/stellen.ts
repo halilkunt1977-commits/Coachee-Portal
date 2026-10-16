@@ -199,7 +199,7 @@ export async function suggestSearches(coacheeId: string): Promise<{ ideas?: Sear
   try {
     await assertAiAllowed(user);
     const profile = await profileForAi(c);
-    if (profile.empty) return { error: "Für Vorschläge braucht die KI ein Kompetenzprofil oder einen Lebenslauf. Beides fehlt noch." };
+    if (profile.empty) return { error: "Für Vorschläge braucht es ein Kompetenzprofil oder einen Lebenslauf. Beides fehlt noch." };
     const out = await jsonResponse<{ suchen: { was: string; wo: string; umkreis: number; arbeitszeit: string[]; warum: string }[] }>({
       coacheeId: c.id,
       userId: user.id,
@@ -224,7 +224,7 @@ Regeln:
     return { ideas };
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Suchvorschläge", e);
-    return { error: e instanceof AiError ? e.message : "Die KI hat gerade nicht geantwortet. Bitte gleich noch einmal versuchen." };
+    return { error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
   }
 }
 
@@ -254,7 +254,7 @@ export async function rateJobs(coacheeId: string, jobs: Pick<Job, "refnr" | "tit
   try {
     await assertAiAllowed(user);
     const profile = await profileForAi(c);
-    if (profile.empty) return { error: "Für die Einschätzung braucht die KI ein Kompetenzprofil oder einen Lebenslauf." };
+    if (profile.empty) return { error: "Für die Einschätzung braucht es ein Kompetenzprofil oder einen Lebenslauf." };
     const anzeigen = list.map((j, i) => `${i + 1}. ${clip(j.title, 160)}${j.beruf ? ` (Beruf: ${clip(j.beruf, 100)})` : ""} – ${clip(j.employer, 120)}, ${clip(j.location, 80)}`).join("\n");
     const out = await jsonResponse<{ bewertungen: { nr: number; passung: Fit["level"]; grund: string }[] }>({
       coacheeId: c.id,
@@ -280,6 +280,6 @@ Regeln:
     return { fits };
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Passung", e);
-    return { error: e instanceof AiError ? e.message : "Die KI hat gerade nicht geantwortet. Bitte gleich noch einmal versuchen." };
+    return { error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
   }
 }

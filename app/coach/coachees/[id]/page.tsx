@@ -7,6 +7,7 @@ import { TaskForm } from "@/components/akte/TaskForm";
 import { CvList } from "@/components/cv/CvList";
 import { AttendancePanel } from "@/components/attendance/Panel";
 import { DocumentsPanel } from "@/components/documents/Panel";
+import { SurveyPanel } from "@/components/survey/Panel";
 import { setCoachingStatus } from "@/app/actions/dokumente";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
@@ -39,6 +40,7 @@ const TABS = [
   { key: "businessplan", label: "Businessplan" },
   { key: "finanzplan", label: "Finanzplan" },
   { key: "lebenslauf", label: "Lebenslauf" },
+  { key: "erfahrung", label: "Erfahrungsbogen" },
   { key: "assistent", label: "KI-Assistent" },
   { key: "aufgaben", label: "Aufgaben" },
   { key: "nachrichten", label: "Nachrichten" },
@@ -77,13 +79,14 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
   await audit(coach.id, "akte_viewed", c.id, { tab });
 
   const [stats, account] = await Promise.all([
-    one<{ units_used: number; meetings: number; open_tasks: number; unread: number; suggestions: number; due: number }>(
+    one<{ units_used: number; meetings: number; open_tasks: number; unread: number; suggestions: number; due: number; survey_new: number }>(
       `SELECT ${unitsUsedSql("$1")} AS units_used,
               (SELECT count(*) FROM meetings WHERE coachee_id = $1)::int AS meetings,
               (SELECT count(*) FROM tasks WHERE coachee_id = $1 AND done_at IS NULL)::int AS open_tasks,
               (SELECT count(*) FROM messages WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2)::int AS unread,
               (SELECT count(*) FROM ai_suggestions WHERE coachee_id = $1 AND status = 'offen')::int AS suggestions,
-              (SELECT count(*) FROM applications WHERE coachee_id = $1 AND next_on <= CURRENT_DATE AND status IN ('vorschlag', 'gemerkt', 'beworben', 'gespraech'))::int AS due`,
+              (SELECT count(*) FROM applications WHERE coachee_id = $1 AND next_on <= CURRENT_DATE AND status IN ('vorschlag', 'gemerkt', 'beworben', 'gespraech'))::int AS due,
+              (SELECT count(*) FROM experience_surveys WHERE coachee_id = $1 AND status = 'eingereicht')::int AS survey_new`,
       [c.id, coach.id],
     ),
     c.user_id ? one<{ active: boolean; has_password: boolean; last_login_at: string | null; totp_enabled: boolean }>("SELECT active, password_hash IS NOT NULL AS has_password, last_login_at, totp_enabled FROM users WHERE id = $1", [c.user_id]) : null,
@@ -132,6 +135,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
             {t.label}
             {t.key === "nachrichten" && (stats?.unread ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 text-[11px] text-white">{stats?.unread}</span>}
             {t.key === "bewerbungen" && (stats?.due ?? 0) > 0 && <span title="Nachfassen fällig" className="ml-1.5 rounded-full bg-danger px-1.5 text-[11px] text-white">{stats?.due}</span>}
+            {t.key === "erfahrung" && (stats?.survey_new ?? 0) > 0 && <span title="Neu ausgefüllt" className="ml-1.5 rounded-full bg-ok px-1.5 text-[11px] text-white">neu</span>}
             {t.key === "wissen" && (stats?.suggestions ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-gold px-1.5 text-[11px] text-white">{stats?.suggestions}</span>}
           </Link>
         ))}
@@ -148,6 +152,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "businessplan" && <PlanPanel user={coach} coachee={c} links={bpLinks} />}
       {tab === "finanzplan" && <FinancePanel user={coach} coachee={c} links={bpLinks} />}
       {tab === "lebenslauf" && <CvList coacheeId={c.id} coach />}
+      {tab === "erfahrung" && <SurveyPanel coachee={c} coach />}
       {tab === "assistent" && <AssistantPanel user={coach} coachee={c} chatId={typeof sp.chat === "string" ? sp.chat : null} base={{ chat: "?tab=assistent&chat=", fresh: "?tab=assistent" }} />}
       {tab === "aufgaben" && <Tasks coacheeId={c.id} />}
       {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
