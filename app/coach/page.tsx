@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Empty, formatDate, formatUnits } from "@/components/ui";
+import { Empty, Notice, formatDate, formatUnits } from "@/components/ui";
 import { requireCoach } from "@/lib/auth";
 import { fullName, statusLabel, typeLabel, type Coachee } from "@/lib/access";
 import { query } from "@/lib/db";
@@ -62,6 +62,8 @@ export default async function CoachHome({ searchParams }: PageProps<"/coach">) {
           <Link key={s} href={filterLink({ status: s })} className={chip(status === s)}>{s === "alle" ? "Alle Status" : statusLabel[s]}</Link>
         ))}
       </div>
+
+      {typeof sp.geloescht === "string" && <Notice tone="ok">{sp.geloescht.slice(0, 200)} wurde gelöscht.</Notice>}
 
       {openMails > 0 && (
         <Link href="/coach/anwesenheit" className="block rounded-xl bg-[#fbf1e3] px-4 py-3 text-sm text-gold hover:underline">

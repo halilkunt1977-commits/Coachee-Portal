@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { saveSurvey, submitSurvey, suggestStationTasks } from "@/app/actions/erfahrung";
-import { LEVELS, newStationKey, period, progress, type Choice, type Level, type Station, type SurveyData } from "@/lib/survey/types";
+import { LEVELS, YES_NO, asksDetail, newStationKey, period, progress, type Choice, type Level, type Station, type SurveyData } from "@/lib/survey/types";
 import { Notice } from "../ui";
 
 type Props = { id: string; initial: SurveyData; submittedAt: string | null; coach?: boolean };
@@ -46,7 +46,7 @@ export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
 
       {!coach && (
         <p className="text-sm text-muted">
-          Geh deine Stationen der Reihe nach durch und kreuz an, was du dort gemacht hast: <b>Oft</b> für deine Hauptaufgaben, <b>Manchmal</b> für Gelegentliches. Was fehlt, schreibst du einfach dazu. Alles wird automatisch gespeichert, du kannst jederzeit aufhören und später weitermachen.
+          Geh deine Stationen der Reihe nach durch und kreuz an, was du dort gemacht hast: <b>Oft</b> für deine Hauptaufgaben, <b>Manchmal</b> für Gelegentliches. Wo in Klammern eine Frage steht, z. B. „(welcher?)“, trägst du die Antwort ein. Was fehlt, schreibst du einfach dazu. Aus deinen Antworten machen wir danach gemeinsam deinen neuen Lebenslauf und einen kurzen Pitch für deine Bewerbungen. Alles wird automatisch gespeichert, du kannst jederzeit aufhören und später weitermachen.
         </p>
       )}
 
@@ -57,7 +57,7 @@ export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
       <button
         type="button"
         className="btn-ghost w-full"
-        onClick={() => setD((x) => ({ ...x, stations: [...x.stations, { key: newStationKey(), title: "", company: "", location: "", start: "", end: "", current: false, tasks: [], tools: [], ownTasks: "", leadership: "", success: "", liked: "" }] }))}
+        onClick={() => setD((x) => ({ ...x, stations: [...x.stations, { key: newStationKey(), kind: "arbeit", title: "", company: "", location: "", start: "", end: "", current: false, tasks: [], tools: [], ownTasks: "", leadership: "", success: "", liked: "" }] }))}
       >
         + Weitere Station ergänzen (z. B. Nebenjob, Praktikum, Ehrenamt)
       </button>
@@ -66,7 +66,9 @@ export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
         <h2 className="h2">Was dich ausmacht</h2>
         <ChipGroup label="Deine Stärken: Was würden Kollegen über dich sagen?" items={d.strengths} onChange={(strengths) => setD({ ...d, strengths })} />
         <ChipGroup label="Programme, mit denen du arbeiten kannst" items={d.software} onChange={(software) => setD({ ...d, software })} addLabel="Weiteres Programm" levels />
+        <ChipGroup label="Sprachen (außer Deutsch)" items={d.languages} onChange={(languages) => setD({ ...d, languages })} addLabel="Weitere Sprache" />
         <ChipGroup label="Führerscheine und Nachweise" items={d.licences} onChange={(licences) => setD({ ...d, licences })} addLabel="Weiterer Nachweis" />
+        <ChipGroup label="Wie kannst du arbeiten?" items={d.availability} onChange={(availability) => setD({ ...d, availability })} addLabel="Weiteres" />
         <Area label="Welche Arbeit wünschst du dir als Nächstes?" value={d.wish} onChange={(wish) => setD({ ...d, wish })} placeholder="z. B. Lagerleitung in Vollzeit, gern im Raum Hannover" />
         <Area label="Möchtest du sonst noch etwas sagen?" value={d.notes} onChange={(notes) => setD({ ...d, notes })} />
       </section>
@@ -86,8 +88,10 @@ function StationCard({ id, index, st, onChange, onRemove }: { id: string; index:
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
-  const manual = !st.tasks.length;
-  const setTask = (i: number, level: Level) => onChange({ tasks: st.tasks.map((t, j) => (j === i ? { ...t, level } : t)) });
+  const manual = !st.tasks.length && st.kind !== "luecke";
+  const gap = st.kind === "luecke";
+  const edu = st.kind === "ausbildung";
+  const setTask = (i: number, patch: Partial<Choice>) => onChange({ tasks: st.tasks.map((t, j) => (j === i ? { ...t, ...patch } : t)) });
 
   async function suggest() {
     setLoading(true);
@@ -102,18 +106,22 @@ function StationCard({ id, index, st, onChange, onRemove }: { id: string; index:
     <section className="card space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-accent">Station {index + 1}</p>
-          {manual && !st.title ? null : <h2 className="h2">{st.title || "Neue Station"}</h2>}
-          <p className="text-sm text-muted">{[st.company, st.location, period(st)].filter(Boolean).join(" · ")}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-accent">{gap ? "Zeit ohne Eintrag im Lebenslauf" : edu ? `Station ${index + 1} · Aus- und Weiterbildung` : `Station ${index + 1}`}</p>
+          {gap ? <h2 className="h2">Was hast du {st.current ? `seit ${period({ ...st, current: false })}` : `von ${period(st)}`} gemacht?</h2> : manual && !st.title ? null : <h2 className="h2">{st.title || "Neue Station"}</h2>}
+          {!gap && <p className="text-sm text-muted">{[st.company, st.location, period(st)].filter(Boolean).join(" · ")}</p>}
         </div>
-        {manual && <button type="button" className="text-xs text-muted hover:text-danger" onClick={onRemove}>Entfernen</button>}
+        {(manual || gap) && <button type="button" className="text-xs text-muted hover:text-danger" onClick={onRemove}>{gap ? "Trifft nicht zu" : "Entfernen"}</button>}
       </div>
 
       {manual && (
         <div className="space-y-3">
+          <select className="input" aria-label="Art" value={st.kind} onChange={(e) => onChange({ kind: e.target.value === "ausbildung" ? "ausbildung" : "arbeit" })}>
+            <option value="arbeit">Stelle, Nebenjob, Praktikum oder Ehrenamt</option>
+            <option value="ausbildung">Ausbildung, Weiterbildung oder Kurs</option>
+          </select>
           <div className="grid gap-3 sm:grid-cols-2">
-            <input className="input" placeholder="Tätigkeit / Beruf, z. B. Lagerhelfer" value={st.title} onChange={(e) => onChange({ title: e.target.value })} />
-            <input className="input" placeholder="Firma" value={st.company} onChange={(e) => onChange({ company: e.target.value })} />
+            <input className="input" placeholder={edu ? "Ausbildung / Kurs, z. B. CNC-Fachkraft" : "Tätigkeit / Beruf, z. B. Lagerhelfer"} value={st.title} onChange={(e) => onChange({ title: e.target.value })} />
+            <input className="input" placeholder={edu ? "Schule / Bildungsträger" : "Firma"} value={st.company} onChange={(e) => onChange({ company: e.target.value })} />
             <input className="input" type="month" aria-label="Von" value={st.start} onChange={(e) => onChange({ start: e.target.value })} />
             <input className="input" type="month" aria-label="Bis" value={st.end} disabled={st.current} onChange={(e) => onChange({ end: e.target.value })} />
           </div>
@@ -125,12 +133,17 @@ function StationCard({ id, index, st, onChange, onRemove }: { id: string; index:
 
       {st.tasks.length > 0 && (
         <div>
-          <p className="mb-2 text-sm font-medium">Was hast du dort gemacht?</p>
+          <p className="mb-2 text-sm font-medium">{gap ? "Was trifft zu?" : edu ? "Was hast du dort gelernt und gemacht?" : "Was hast du dort gemacht?"}</p>
           <ul className="divide-y divide-line-soft">
             {st.tasks.map((t, i) => (
-              <li key={`${t.text}${i}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className={`min-w-0 flex-1 text-sm ${t.level ? "font-medium" : ""}`}>{t.text}</span>
-                <LevelPicker value={t.level} onChange={(l) => setTask(i, l)} />
+              <li key={`${t.text}${i}`} className="space-y-2 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={`min-w-0 flex-1 text-sm ${t.level ? "font-medium" : ""}`}>{t.text}</span>
+                  <LevelPicker value={t.level} options={gap || edu ? YES_NO : LEVELS} onChange={(level) => setTask(i, { level })} />
+                </div>
+                {t.level > 0 && asksDetail(t.text) && (
+                  <input className="input py-1.5 text-sm" placeholder="Bitte ergänzen" value={t.detail ?? ""} onChange={(e) => setTask(i, { detail: e.target.value.slice(0, 200) })} />
+                )}
               </li>
             ))}
           </ul>
@@ -142,22 +155,26 @@ function StationCard({ id, index, st, onChange, onRemove }: { id: string; index:
         </div>
       )}
 
-      {st.tools.length > 0 && <ChipGroup label="Womit hast du gearbeitet?" items={st.tools} onChange={(tools) => onChange({ tools })} addLabel="Weiteres" />}
+      {!gap && st.tools.length > 0 && <ChipGroup label="Womit hast du gearbeitet?" items={st.tools} onChange={(tools) => onChange({ tools })} addLabel="Weiteres" />}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <Area label="Was hast du sonst noch gemacht?" value={st.ownTasks} onChange={(ownTasks) => onChange({ ownTasks })} />
-        <Area label="Hattest du Verantwortung? Für wie viele Leute, welche Kunden, wie viel Geld?" value={st.leadership} onChange={(leadership) => onChange({ leadership })} placeholder="z. B. 12 Mitarbeitende, Schichtplanung" />
-        <Area label="Worauf bist du dort stolz?" value={st.success} onChange={(success) => onChange({ success })} placeholder="z. B. Inventurdifferenz halbiert, neue Kollegen eingearbeitet" />
-        <Area label="Was hat dir dort gefallen?" value={st.liked} onChange={(liked) => onChange({ liked })} />
-      </div>
+      {gap ? (
+        <Area label="Bitte kurz aufschreiben" value={st.ownTasks} onChange={(ownTasks) => onChange({ ownTasks })} />
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          <Area label={edu ? "Was hast du sonst noch gelernt?" : "Was hast du sonst noch gemacht?"} value={st.ownTasks} onChange={(ownTasks) => onChange({ ownTasks })} />
+          {!edu && <Area label="Hattest du Verantwortung? Für wie viele Leute, welche Kunden, wie viel Geld?" value={st.leadership} onChange={(leadership) => onChange({ leadership })} placeholder="z. B. 12 Mitarbeitende, Schichtplanung" />}
+          <Area label="Worauf bist du dort stolz?" value={st.success} onChange={(success) => onChange({ success })} placeholder={edu ? "z. B. Note, Prüfungsstück, Projekt" : "z. B. Inventurdifferenz halbiert, neue Kollegen eingearbeitet"} />
+          <Area label="Was hat dir dort gefallen?" value={st.liked} onChange={(liked) => onChange({ liked })} />
+        </div>
+      )}
     </section>
   );
 }
 
-function LevelPicker({ value, onChange }: { value: Level; onChange: (l: Level) => void }) {
+function LevelPicker({ value, options, onChange }: { value: Level; options: { value: Level; label: string }[]; onChange: (l: Level) => void }) {
   return (
     <span className="inline-flex shrink-0 overflow-hidden rounded-lg border border-line text-xs">
-      {LEVELS.map((l) => (
+      {options.map((l) => (
         <button key={l.value} type="button" onClick={() => onChange(l.value)}
           className={`px-2.5 py-1.5 ${value === l.value ? (l.value === 0 ? "bg-line-soft font-semibold" : "bg-accent font-semibold text-white") : "bg-surface text-muted hover:text-ink"}`}>
           {l.label}
@@ -189,6 +206,15 @@ function ChipGroup({ label, items, onChange, addLabel, levels = false }: { label
           </span>
         )}
       </div>
+      {items.some((c) => c.level > 0 && asksDetail(c.text)) && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {items.map((c, i) =>
+            c.level > 0 && asksDetail(c.text) ? (
+              <input key={`d${c.text}${i}`} className="input py-1.5 text-sm" placeholder={c.text} value={c.detail ?? ""} onChange={(e) => onChange(items.map((x, j) => (j === i ? { ...x, detail: e.target.value.slice(0, 200) } : x)))} />
+            ) : null,
+          )}
+        </div>
+      )}
     </div>
   );
 }

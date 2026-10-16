@@ -37,7 +37,7 @@ export const extOf = (name: string) => name.toLowerCase().match(/\.([a-z0-9]+)$/
 export function guessCategory(name: string): DocCategory {
   const n = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   if (/tatigkeit|taetigkeit|leistungsnachweis|nachweis/.test(n)) return "taetigkeitsnachweis";
-  if (/anwesenheit|teilnahme|stundenzettel|stundennachweis/.test(n)) return "anwesenheit";
+  if (/anwesenheit|teilnahme|stundenzettel|stundennachweis|beratungsdoku|dokumentation.?coach/.test(n)) return "anwesenheit";
   if (/coach.?bericht|abschlussbericht|zwischenbericht|bericht/.test(n)) return "coachbericht";
   if (/finanz|liquiditat|rentabilitat|kapitalbedarf/.test(n)) return "finanzplan";
   if (/businessplan|business.plan|geschaftsplan|konzept/.test(n)) return "businessplan";
@@ -45,6 +45,16 @@ export function guessCategory(name: string): DocCategory {
   if (/anschreiben|bewerbung|zeugnis/.test(n)) return "bewerbung";
   if (/avgs|gutschein|bewilligung|bescheid/.test(n)) return "gutschein";
   return "sonstiges";
+}
+
+/** Steht am Dateinamen nichts Eindeutiges, hilft der Inhalt (z. B. Kopf des AVOCONS-Formulars) */
+export function guessCategoryFromText(text: string): DocCategory | null {
+  const head = text.slice(0, 3000);
+  if (/Tätigkeitsnachweis/i.test(head)) return "taetigkeitsnachweis";
+  if (/Beratungsdokumentation|Anwesenheits(liste|nachweis|bericht)/i.test(head)) return "anwesenheit";
+  if (/Coachingbericht|Abschlussbericht|Coachbericht/i.test(head)) return "coachbericht";
+  if (/Lebenslauf/i.test(head) && !/Businessplan/i.test(head)) return "lebenslauf";
+  return null;
 }
 
 export type ReportRow = { held_on: string; starts_at: string | null; ends_at: string | null; units: number | null };
@@ -69,14 +79,8 @@ export function extractReportRows(text: string): ReportRow[] {
     );
     if (row) rows.push(row);
   }
-  // Doppelte Zeilen (Kopf- und Fußzeilen) nur einmal
-  const seen = new Set<string>();
-  return rows.filter((r) => {
-    const k = `${r.held_on}|${r.starts_at}|${r.units}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  // Keine Doppelten entfernen: zwei Termine am selben Tag mit gleichen UE sind in Nachweisen üblich
+  return rows;
 }
 
 function parseLine(raw: string): ReportRow | null {
@@ -87,12 +91,22 @@ function parseLine(raw: string): ReportRow | null {
   const held_on = `${year}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}`;
   if (Number(year) < 2015 || Number(year) > 2100 || Number(d[2]) > 12 || Number(d[1]) > 31) return null;
   const rest = line.slice(line.indexOf(d[0]) + d[0].length);
+  // Zeiträume wie „10.08.2026 bis 02.10.2026“ sind keine Termine
+  if (/\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/.test(rest)) return null;
   // Uhrzeit von–bis, auch als zwei Tabellenspalten ohne Strich dazwischen („15:30 16:30“)
   const t = rest.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\s*(?:Uhr)?(?:\s*(?:-|–|bis)\s*|\s+)(\d{1,2}):(\d{2})/) ?? rest.match(/\b(\d{1,2})\.(\d{2})\s*(?:Uhr)?\s*(?:-|–|bis)\s*(\d{1,2})\.(\d{2})/);
   const starts_at = t ? `${t[1].padStart(2, "0")}:${t[2]}` : null;
   const ends_at = t ? `${t[3].padStart(2, "0")}:${t[4]}` : null;
   const restNoTime = t ? rest.replace(t[0], " ") : rest;
   let units = num(restNoTime.match(/(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:UE|Unterrichtseinheit|Einheit)/i)?.[1] ?? "");
+  // Mehr als 12 UE an einem Termin ist eine Summe oder ein Kontingent (z. B. „04-ORC (40 UE)“)
+  if (units != null && units > 12) units = null;
+  if (units == null) {
+    // Tabellenspalte „UE“ direkt nach dem Datum, z. B. Erfolgspfad: „24.04.2026 2,00 Businessplan …“
+    const first = restNoTime.match(/^\s*(\d{1,2}(?:,\d{1,2})?)(?=\s|$)/)?.[1];
+    const n = first ? num(first) : null;
+    if (n != null && n > 0 && n <= 12) units = n;
+  }
   if (units == null) {
     // Zeitstunden in UE umrechnen (1 Stunde = 60/45 UE)
     const h = num(restNoTime.match(/(\d{1,2}(?:[.,]\d{1,2})?)\s*(?:Std|Stunde|h\b)/i)?.[1] ?? "");
@@ -110,6 +124,12 @@ function parseLine(raw: string): ReportRow | null {
   }
   if (units == null && !t) return null;
   return { held_on, starts_at, ends_at, units };
+}
+
+/** Summe, die das Dokument selbst angibt, z. B. „Summe UE 100,30“ oder „Gesamtstundenanzahl auf diesem Blatt: 14“ */
+export function reportTotal(text: string | null): number | null {
+  const m = text?.match(/(?:Summe|Gesamt)[^\n\d]{0,80}?(\d{1,3}(?:,\d{1,2})?)\s*(?:UE)?\s*$/im);
+  return m ? num(m[1]) : null;
 }
 
 export type Compared = {

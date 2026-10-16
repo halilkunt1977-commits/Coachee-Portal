@@ -2,9 +2,12 @@
 
 /** 0 = nicht gemacht, 1 = manchmal, 2 = oft / Hauptaufgabe */
 export type Level = 0 | 1 | 2;
-export type Choice = { text: string; level: Level };
+export type Choice = { text: string; level: Level; detail?: string };
+/** arbeit = Stelle, ausbildung = Aus-/Weiterbildung oder Maßnahme (nur Ja/Nein), luecke = Zeit ohne Station im Lebenslauf */
+export type StationKind = "arbeit" | "ausbildung" | "luecke";
 export type Station = {
   key: string;
+  kind: StationKind;
   title: string;
   company: string;
   location: string;
@@ -18,7 +21,7 @@ export type Station = {
   success: string;
   liked: string;
 };
-export type SurveyData = { stations: Station[]; strengths: Choice[]; software: Choice[]; licences: Choice[]; wish: string; notes: string };
+export type SurveyData = { stations: Station[]; strengths: Choice[]; software: Choice[]; languages: Choice[]; licences: Choice[]; availability: Choice[]; wish: string; notes: string };
 
 export const LEVELS: { value: Level; label: string }[] = [
   { value: 0, label: "Nein" },
@@ -31,6 +34,20 @@ export const STRENGTHS = [
   "Selbstständiges Arbeiten", "Lernbereitschaft", "Genauigkeit", "Flexibilität", "Führungsstärke", "Problemlösung",
   "Durchsetzungsvermögen", "Einfühlungsvermögen", "Technisches Verständnis", "Kreativität", "Pünktlichkeit", "Verhandlungsgeschick",
 ];
+/** Bei Aus- und Weiterbildungen und Lücken genügt Ja/Nein */
+export const YES_NO: { value: Level; label: string }[] = [
+  { value: 0, label: "Nein" },
+  { value: 2, label: "Ja" },
+];
+
+/** Antworten für Zeiten ohne Station. „Gesundheitliche Gründe“ bleibt beim Coach und geht nie an die KI. */
+export const GAP_CHOICES = ["Bewerbungen geschrieben", "Arbeitsuchend gemeldet", "Minijob / Aushilfsjob (welcher?)", "Familie / Pflege von Angehörigen", "Gesundheitliche Gründe", "Eigenes Lernen oder Kurs (was?)", "Ehrenamt (wo?)", "Praktikum (wo?)"];
+export const HEALTH = /gesundheit|krank|reha/i;
+export const LANGUAGES = ["Englisch Grundkenntnisse", "Englisch gut", "Türkisch", "Russisch", "Arabisch", "Polnisch"];
+export const AVAILABILITY = ["Vollzeit", "Teilzeit", "Bereit zu Schichtarbeit", "Bereit zu Wochenendarbeit", "Bereit zu Montage / Reisen", "Mobil mit eigenem Auto", "Mobil mit Bus und Bahn"];
+/** Zeile mit Lücke zum Ausfüllen, z. B. „Schweißschein abgelegt (welcher?)“ */
+export const asksDetail = (text: string) => /\((welche[rsn]?|wo|was|wie viele|wie lange)\?\)\s*$/i.test(text);
+
 export const LICENCES = [
   "Führerschein Klasse B", "Führerschein Klasse C/CE", "Staplerschein", "Ersthelfer", "Brandschutzhelfer", "Ausbildereignung (AEVO)",
   "Sachkunde § 34a", "Gesundheitszeugnis", "Schweißerpass", "Elektrofachkraft",
@@ -43,7 +60,7 @@ const choices = (v: unknown, max = 40): Choice[] =>
   Array.isArray(v)
     ? v
         .slice(0, max)
-        .map((x) => (typeof x === "string" ? { text: x, level: 0 as Level } : { text: s((x as Choice)?.text, 200), level: lvl((x as Choice)?.level) }))
+        .map((x) => (typeof x === "string" ? { text: x, level: 0 as Level } : { text: s((x as Choice)?.text, 200), level: lvl((x as Choice)?.level), ...((x as Choice)?.detail ? { detail: s((x as Choice).detail, 200) } : {}) }))
         .filter((c) => c.text.trim())
     : [];
 
@@ -63,6 +80,7 @@ export function normalizeSurvey(raw: unknown): SurveyData {
         const st = (x ?? {}) as Record<string, unknown>;
         return {
           key: s(st.key, 20) || newStationKey(),
+          kind: (st.kind === "ausbildung" || st.kind === "luecke" ? st.kind : "arbeit") as StationKind,
           title: s(st.title, 200),
           company: s(st.company, 200),
           location: s(st.location, 120),
@@ -82,7 +100,9 @@ export function normalizeSurvey(raw: unknown): SurveyData {
     stations,
     strengths: r.strengths ? choices(r.strengths) : toChoices(STRENGTHS),
     software: r.software ? choices(r.software) : toChoices(BASE_SOFTWARE),
+    languages: r.languages ? choices(r.languages) : toChoices(LANGUAGES),
     licences: r.licences ? choices(r.licences) : toChoices(LICENCES),
+    availability: r.availability ? choices(r.availability) : toChoices(AVAILABILITY),
     wish: s(r.wish, 1000),
     notes: s(r.notes, 2000),
   };

@@ -23,6 +23,7 @@ import { one, query } from "@/lib/db";
 import { unitsUsedSql } from "@/lib/attendance/units";
 import { deleteFinanceItem, deleteProfileItem, rejectAllSuggestions } from "@/app/actions/profil";
 import { resendInvite, setAccess } from "../../actions";
+import DeleteCoachee from "./DeleteCoachee";
 import InviteLink from "./InviteLink";
 import StammdatenForm from "./StammdatenForm";
 
@@ -66,6 +67,7 @@ const actionLabel: Record<string, string> = {
   document_uploaded: "Dokument hochgeladen", document_updated: "Dokument geändert", document_deleted: "Dokument gelöscht",
   attendance_from_document: "Anwesenheit aus Dokument übernommen", coaching_closed: "Coaching abgeschlossen", coaching_reopened: "Coaching wieder aufgenommen",
   attendance_updated: "Anwesenheit geändert", attendance_moved: "Anwesenheit verschoben",
+  coachee_deleted: "Coachee gelöscht",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -177,6 +179,10 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
               ) : (
                 <p className="text-sm text-muted">Kein Zugang verknüpft.</p>
               )}
+            </div>
+            <div className="card space-y-3 border-danger/30">
+              <h2 className="h2">Löschen</h2>
+              <DeleteCoachee coacheeId={c.id} lastName={c.last_name} />
             </div>
             <div className="card text-sm text-muted">
               <p>Angelegt am {formatDate(c.created_at)}</p>

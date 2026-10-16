@@ -62,7 +62,7 @@ export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormD
       if (!cv.skills.length) cv.skills = (await cvFromAkte(c)).skills;
       sourceId = await storeFile({ coacheeId: c.id, kind: "cv_vorlage", name: file.name, mime: file.type || "application/octet-stream", data: buffer, userId: user.id });
     }
-    if (!cv.experience.length) return { error: "Im Lebenslauf haben wir keine beruflichen Stationen gefunden. Du kannst sie im Bogen auch selbst eintragen." };
+    if (!cv.experience.length && !cv.education.length) return { error: "Im Lebenslauf haben wir keine Stationen gefunden. Du kannst sie im Bogen auch selbst eintragen." };
     const data = await surveyFromCv(cv, { coacheeId: c.id, userId: user.id });
     await query("INSERT INTO experience_surveys (coachee_id, data, cv, source_file_id, created_by) VALUES ($1,$2,$3,$4,$5)", [c.id, JSON.stringify(data), JSON.stringify(cv), sourceId, user.id]);
   } catch (e) {
