@@ -18,7 +18,7 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, used, profile, plan] = await Promise.all([
+  const [meetings, tasks, messages, coach, used, profile, plan, jobs] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
@@ -28,6 +28,16 @@ export default async function MyArea() {
     // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
     query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
     c.coaching_type === "gruendung" ? one<{ sections: unknown }>("SELECT sections FROM business_plans WHERE coachee_id = $1", [c.id]) : null,
+    c.coaching_type === "job"
+      ? one<{ proposals: number; applied: number; talks: number; due: number }>(
+          `SELECT count(*) FILTER (WHERE status = 'vorschlag')::int AS proposals,
+                  count(*) FILTER (WHERE status IN ('beworben', 'gespraech', 'zusage', 'absage'))::int AS applied,
+                  count(*) FILTER (WHERE status IN ('gespraech', 'zusage'))::int AS talks,
+                  count(*) FILTER (WHERE next_on <= CURRENT_DATE AND status IN ('gemerkt', 'beworben', 'gespraech'))::int AS due
+             FROM applications WHERE coachee_id = $1`,
+          [c.id],
+        )
+      : null,
   ]);
   const sections = normalizeSections(plan?.sections);
   const written = SECTIONS.filter((s) => sectionDone(sections[s.key])).length;
@@ -58,6 +68,23 @@ export default async function MyArea() {
           <div className="flex flex-wrap gap-2">
             <Link href="/mein-bereich/finanzplan" className="btn-ghost">Finanzplan</Link>
             <Link href="/mein-bereich/businessplan" className="btn">Weiterschreiben</Link>
+          </div>
+        </div>
+      )}
+
+      {jobs && (
+        <div className="card flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1 basis-60">
+            <h2 className="h2">Meine Bewerbungen</h2>
+            <p className="text-sm text-muted">
+              {jobs.applied ? `${jobs.applied} ${jobs.applied === 1 ? "Bewerbung" : "Bewerbungen"}${jobs.talks ? `, ${jobs.talks} ${jobs.talks === 1 ? "Gespräch" : "Gespräche"}` : ""}` : "Noch keine Bewerbung eingetragen"}
+            </p>
+            {jobs.proposals > 0 && <p className="mt-1 text-sm font-semibold text-gold">{jobs.proposals} {jobs.proposals === 1 ? "neue Stelle" : "neue Stellen"} von {coach?.name ?? "deinem Coach"} für dich</p>}
+            {jobs.due > 0 && <p className="mt-1 text-sm font-semibold text-danger">Heute nachfassen: {jobs.due}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/mein-bereich/stellen" className="btn-ghost">Stellen finden</Link>
+            <Link href="/mein-bereich/bewerbungen" className="btn">{jobs.proposals ? "Vorschläge ansehen" : "Zu den Bewerbungen"}</Link>
           </div>
         </div>
       )}

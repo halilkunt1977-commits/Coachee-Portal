@@ -7,6 +7,7 @@ import { TaskForm } from "@/components/akte/TaskForm";
 import { CvList } from "@/components/cv/CvList";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
+import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
 import { AnalyzeButton, FinanceItemForm, ProfileItemForm, SuggestionCard } from "@/components/akte/Wissen";
 import { aiEnabled } from "@/lib/ai";
 import { FINANCE_SECTIONS, PERIOD_LABEL, categoriesFor, euro, monthly, type FinanceItem, type ProfileItem } from "@/lib/profile";
@@ -25,6 +26,8 @@ const TABS = [
   { key: "uebersicht", label: "Übersicht" },
   { key: "gespraeche", label: "Gespräche" },
   { key: "wissen", label: "Kompetenzprofil" },
+  { key: "stellen", label: "Stellen" },
+  { key: "bewerbungen", label: "Bewerbungen" },
   { key: "zahlen", label: "Zahlen" },
   { key: "businessplan", label: "Businessplan" },
   { key: "finanzplan", label: "Finanzplan" },
@@ -45,6 +48,9 @@ const actionLabel: Record<string, string> = {
   task_created: "Aufgabe angelegt", task_toggled: "Aufgabe abgehakt", task_deleted: "Aufgabe gelöscht", message_sent: "Nachricht gesendet",
   cv_created: "Lebenslauf angelegt", cv_imported: "Lebenslauf aus Datei übernommen", cv_duplicated: "Lebenslauf kopiert", cv_deleted: "Lebenslauf gelöscht",
   assistant_used: "KI-Assistent gefragt", bp_saved: "Businessplan bearbeitet", bp_draft: "KI-Entwurf für den Businessplan", bp_pdf: "Businessplan als PDF geladen",
+  job_search_saved: "Stellensuche gespeichert", job_proposed: "Stelle vorgeschlagen", job_saved: "Stelle gemerkt", application_created: "Bewerbung eingetragen",
+  application_status: "Bewerbungsstand geändert", application_deleted: "Bewerbung gelöscht", applications_pdf: "Bewerbungsnachweis als PDF geladen",
+  applications_excel: "Bewerbungen als Excel geladen", jobs_ai_searches: "KI-Vorschläge für Stellensuchen", jobs_ai_rated: "KI-Einschätzung zu Stellen",
   finance_saved: "Finanzplan bearbeitet", finance_imported: "Zahlen in den Finanzplan übernommen", finance_excel: "Finanzplan als Excel geladen", assistant_deleted: "KI-Unterhaltung gelöscht",
   cv_saved: "Lebenslauf bearbeitet", cv_opened: "Lebenslauf geöffnet", cv_photo: "Foto hochgeladen", cv_pdf: "Lebenslauf als PDF geladen",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
@@ -55,22 +61,24 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
   const { id } = await params;
   const sp = await searchParams;
   const c = await coacheeFor(coach, id);
-  const tabs = TABS.filter((t) => !["zahlen", "businessplan", "finanzplan"].includes(t.key) || c.coaching_type === "gruendung").map((t) => (t.key === "wissen" && c.coaching_type === "gruendung" ? { ...t, label: "Businessplan-Bausteine" } : t));
+  const tabs = TABS.filter((t) => (["zahlen", "businessplan", "finanzplan"].includes(t.key) ? c.coaching_type === "gruendung" : ["stellen", "bewerbungen"].includes(t.key) ? c.coaching_type === "job" : true)).map((t) => (t.key === "wissen" && c.coaching_type === "gruendung" ? { ...t, label: "Businessplan-Bausteine" } : t));
   const tab: Tab = tabs.some((t) => t.key === sp.tab) ? (sp.tab as Tab) : "uebersicht";
   await audit(coach.id, "akte_viewed", c.id, { tab });
 
   const [stats, account] = await Promise.all([
-    one<{ units_used: number; meetings: number; open_tasks: number; unread: number; suggestions: number }>(
+    one<{ units_used: number; meetings: number; open_tasks: number; unread: number; suggestions: number; due: number }>(
       `SELECT COALESCE((SELECT sum(units) FROM meetings WHERE coachee_id = $1), 0) AS units_used,
               (SELECT count(*) FROM meetings WHERE coachee_id = $1)::int AS meetings,
               (SELECT count(*) FROM tasks WHERE coachee_id = $1 AND done_at IS NULL)::int AS open_tasks,
               (SELECT count(*) FROM messages WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2)::int AS unread,
-              (SELECT count(*) FROM ai_suggestions WHERE coachee_id = $1 AND status = 'offen')::int AS suggestions`,
+              (SELECT count(*) FROM ai_suggestions WHERE coachee_id = $1 AND status = 'offen')::int AS suggestions,
+              (SELECT count(*) FROM applications WHERE coachee_id = $1 AND next_on <= CURRENT_DATE AND status IN ('vorschlag', 'gemerkt', 'beworben', 'gespraech'))::int AS due`,
       [c.id, coach.id],
     ),
     c.user_id ? one<{ active: boolean; has_password: boolean; last_login_at: string | null; totp_enabled: boolean }>("SELECT active, password_hash IS NOT NULL AS has_password, last_login_at, totp_enabled FROM users WHERE id = $1", [c.user_id]) : null,
   ]);
   const used = stats?.units_used ?? 0;
+  const jobLinks = { search: "?tab=stellen", tracker: "?tab=bewerbungen" };
   const bpLinks = { plan: "?tab=businessplan", finance: "?tab=finanzplan", zahlen: "?tab=zahlen" };
   const pct = c.units_total ? Math.min(100, Math.round((used / c.units_total) * 100)) : null;
 
@@ -105,17 +113,17 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
           <Link key={t.key} href={`?tab=${t.key}`} className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}>
             {t.label}
             {t.key === "nachrichten" && (stats?.unread ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-accent px-1.5 text-[11px] text-white">{stats?.unread}</span>}
+            {t.key === "bewerbungen" && (stats?.due ?? 0) > 0 && <span title="Nachfassen fällig" className="ml-1.5 rounded-full bg-danger px-1.5 text-[11px] text-white">{stats?.due}</span>}
             {t.key === "wissen" && (stats?.suggestions ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-gold px-1.5 text-[11px] text-white">{stats?.suggestions}</span>}
           </Link>
-        ))}
-        {(c.coaching_type === "job" ? ["Stellen", "Bewerbungen"] : []).map((l) => (
-          <span key={l} title="Kommt im nächsten Schritt" className="cursor-default whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-line">{l}</span>
         ))}
       </nav>
 
       {tab === "uebersicht" && <Overview coacheeId={c.id} goal={c.goal} note={c.internal_note} stats={stats} />}
       {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
+      {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
+      {tab === "bewerbungen" && <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />}
       {tab === "zahlen" && <Zahlen coacheeId={c.id} />}
       {tab === "businessplan" && <PlanPanel user={coach} coachee={c} links={bpLinks} />}
       {tab === "finanzplan" && <FinancePanel user={coach} coachee={c} links={bpLinks} />}
