@@ -1,6 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
-import { query } from "./db";
+import type { User } from "./auth";
+import { one, query } from "./db";
 
 /*
  * KI über OpenAI (wie bei gründarium.de). OPENAI_API_KEY in Coolify, Modelle über OPENAI_MODEL und
@@ -22,6 +23,15 @@ export function pseudonymize(text: string, names: string[]) {
     out = out.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), "[Name]");
   }
   return out;
+}
+
+/** Coachees dürfen die KI nur begrenzt nutzen (AI_COACHEE_MONTHLY_LIMIT Aufrufe pro Monat, Standard 40). */
+export async function assertAiAllowed(user: User) {
+  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (user.role === "coach") return;
+  const limit = Number(process.env.AI_COACHEE_MONTHLY_LIMIT || 40);
+  const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now())", [user.id]);
+  if ((row?.n ?? 0) >= limit) throw new AiError("Die KI-Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
 }
 
 type Usage = { coacheeId: string | null; userId: string; purpose: string };
