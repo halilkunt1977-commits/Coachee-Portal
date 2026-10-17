@@ -3,6 +3,7 @@ import { one, query, transaction } from "../db";
 import { DOC_TYPES, extOf } from "../documents";
 import { vaultRead, vaultWrite } from "../vault";
 import { namesMatch } from "../attendance/parse";
+import { notify } from "../push";
 import { classify, findCoachee, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
 
 /*
@@ -18,7 +19,7 @@ export type RawMail = { coachId: string; messageId: string | null; from: string;
 
 export type Parsed = { bookings?: Booking[]; location?: string | null; contact?: Contact; grant?: Grant };
 /** suggest: vermuteter Coachee für eine Buchung ohne Namen (z. B. Regus), nur als Vorschlag */
-export type Applied = { appointments?: string[]; cancelled?: string[]; documents?: string[]; lead?: string; suggest?: string; filled?: boolean };
+export type Applied = { appointments?: string[]; cancelled?: string[]; documents?: string[]; lead?: string; suggest?: string; filled?: boolean; created?: boolean; pushed?: boolean };
 
 type MailRecord = {
   id: string;
@@ -110,6 +111,7 @@ export async function applyMail(mailId: string) {
   if (!coachee && !isReply(m.subject) && (m.category === "projektvertrag" || m.category === "coachbericht")) {
     const created = await autoCoachee(m, applied);
     if (created) {
+      applied.created = true;
       await query("UPDATE inbox_mails SET coachee_id = $2, applied = $3 WHERE id = $1", [m.id, created, applied]);
       return applyMail(m.id);
     }
@@ -160,6 +162,26 @@ export async function applyMail(mailId: string) {
             read_at = CASE WHEN $3 THEN COALESCE(read_at, now()) ELSE read_at END WHERE id = $1`,
     [m.id, applied, handled, m.category === "nachricht"],
   );
+  await pushFor(m, coachee, applied);
+}
+
+const SOURCE: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", regus: "Regus" };
+
+/** Eine Sofort-Meldung pro neuer Mail, nur Name und Anlass; alte Mails (erster Abruf, Nachholen) melden nichts */
+async function pushFor(m: MailRecord, coachee: Person | null, applied: Applied) {
+  if (applied.pushed || Date.now() - new Date(m.received_at).getTime() > 2 * 86_400_000) return;
+  const from = SOURCE[m.source] ?? "Postfach";
+  const name = coachee ? `${coachee.first_name} ${coachee.last_name}` : [m.parsed.contact?.first_name, m.parsed.contact?.last_name].filter(Boolean).join(" ");
+  let msg: { title: string; body: string; url: string } | null = null;
+  if (coachee && applied.created) msg = { title: `Neue Akte: ${name}`, body: `Aus ${from} automatisch angelegt.`, url: `/coach/coachees/${coachee.id}` };
+  else if (coachee && m.category === "nachricht") msg = { title: `Nachricht von ${from}`, body: `Zu ${name}. Liegt in der Akte.`, url: `/coach/coachees/${coachee.id}?tab=mails` };
+  else if (m.category === "anfrage" && applied.lead) msg = { title: `Neue Anfrage: ${name || from}`, body: `Über ${from}. Bitte melden.`, url: `/coach/anfragen?anfrage=${applied.lead}` };
+  else if (m.category === "buerobuchung" && applied.appointments?.length) msg = { title: "Büro gebucht", body: coachee ? `Termin für ${name} im Kalender.` : "Termin im Kalender.", url: "/coach/kalender" };
+  else if (!coachee && m.category !== "anwesenheit") msg = { title: `Mail von ${from}`, body: "Konnte keinem Coachee zugeordnet werden.", url: "/coach/posteingang" };
+  if (!msg) return;
+  applied.pushed = true;
+  await query("UPDATE inbox_mails SET applied = applied || '{\"pushed\": true}'::jsonb WHERE id = $1", [m.id]);
+  await notify([m.coach_id], { ...msg, tag: `mail-${m.id}` });
 }
 
 /** Neue Akte aus Projektvertrag oder AVOCONS-Startmail, ohne Einladung (die verschickst du, wenn du so weit bist) */

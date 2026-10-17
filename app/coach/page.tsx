@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AppSetup } from "@/components/app/AppSetup";
+import { pushPublicKey } from "@/lib/push";
 import { Suspense } from "react";
 import { setCoachCity } from "@/app/actions/dashboard";
 import { Meter, Ring, WeekBars, toneFor } from "@/components/dashboard/Charts";
@@ -198,6 +200,7 @@ export default async function CoachDashboard() {
           <WeekBars weeks={weeks} height={110} light />
         </div>
       </section>
+      <AppSetup publicKey={await pushPublicKey()} what="bei neuen Anfragen, Nachrichten und Mails" compact />
 
       <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <section className="rise card space-y-3" style={{ ["--i" as string]: 1 }}>
