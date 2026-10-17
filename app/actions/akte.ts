@@ -5,6 +5,7 @@ import { audit, requireCoach, requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { dateOrNull, numberOrNull, text, type FormState } from "@/lib/forms";
 import { noticeMail, sendMail } from "@/lib/mail";
+import { notify } from "@/lib/push";
 
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
@@ -73,6 +74,7 @@ export async function addTask(coacheeId: string, _prev: FormState, fd: FormData)
   await audit(user.id, "task_created", coacheeId);
   if (user.role === "coach" && c.user_id && fd.get("notify") === "on") {
     await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.") }).catch(() => false);
+    await notify([c.user_id], { title: "Neue Aufgabe", body: "Dein Coach hat dir eine Aufgabe gegeben.", url: "/mein-bereich/aufgaben", tag: "aufgabe" });
   }
   refresh(coacheeId);
   return { ok: "Aufgabe angelegt." };
@@ -106,7 +108,9 @@ export async function sendMessage(coacheeId: string, _prev: FormState, fd: FormD
   // Benachrichtigung ohne Inhalt
   if (user.role === "coach" && c.user_id) {
     await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Nachricht von deinem Coach.") }).catch(() => false);
+    await notify([c.user_id], { title: "Neue Nachricht", body: "Von deinem Coach. Öffnen zum Lesen.", url: "/mein-bereich#nachrichten", tag: "nachricht" });
   } else if (user.role === "coachee") {
+    await notify([c.coach_id], { title: `${c.first_name} ${c.last_name} hat geschrieben`, body: "Neue Nachricht im Portal.", url: `/coach/coachees/${c.id}?tab=nachrichten`, tag: `nachricht-${c.id}` });
     const coach = await one<{ email: string; name: string }>("SELECT email, name FROM users WHERE id = $1", [c.coach_id]);
     if (coach) await sendMail({ to: coach.email, ...noticeMail(coach.name.split(" ")[0], `${c.first_name} ${c.last_name} hat dir eine Nachricht geschrieben.`) }).catch(() => false);
   }

@@ -6,6 +6,8 @@ import { ownCoachee, typeLabel } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { categoriesFor, type ProfileItem } from "@/lib/profile";
 import Link from "next/link";
+import { AppSetup } from "@/components/app/AppSetup";
+import { pushPublicKey } from "@/lib/push";
 import { Suspense } from "react";
 import { one, query } from "@/lib/db";
 import { categoryLabel } from "@/lib/documents";
@@ -158,6 +160,7 @@ export default async function MyArea() {
           </div>
         </div>
       </section>
+      <AppSetup publicKey={await pushPublicKey()} what="bei Nachrichten, Aufgaben und Terminen von deinem Coach" compact />
 
       <PartsGrid p={progress} links={links} overall={false} />
 
@@ -192,7 +195,7 @@ export default async function MyArea() {
             <div className="pt-3"><TaskForm coacheeId={c.id} coach={false} /></div>
           </details>
         </section>
-        <section className="card space-y-4">
+        <section id="nachrichten" className="card scroll-mt-24 space-y-4">
           <h2 className="h2">Nachrichten</h2>
           <div className="max-h-96 overflow-y-auto"><MessageList messages={messages} selfId={user.id} /></div>
           <MessageForm coacheeId={c.id} />
