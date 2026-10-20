@@ -6,9 +6,13 @@ import { renderCvHtml } from "@/lib/cv/render";
 import { COLORS, TEMPLATES, TIPS, type CvData, type CvPhoto, type TemplateKey } from "@/lib/cv/types";
 import { CvPreview } from "./CvPreview";
 import { PhotoDialog } from "./PhotoDialog";
+import { SignatureField } from "./SignatureField";
 
 type Props = {
   cvId: string;
+  coacheeId: string;
+  /** Datei der digitalen Unterschrift (gehört zur Akte, gilt für alle Lebensläufe) */
+  signatureId: string | null;
   initial: { name: string; template: TemplateKey; color: string; data: CvData; version: number; photoId: string | null };
   ai: boolean;
   backHref: string;
@@ -22,12 +26,13 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const LEVELS = ["ohne Stufe", "Grundkenntnisse", "Erweitert", "Gut", "Sehr gut", "Experte"];
 const LANGUAGE_LEVELS = ["Muttersprache", "Verhandlungssicher", "Fließend", "Gute Kenntnisse", "Grundkenntnisse", "C2", "C1", "B2", "B1", "A2", "A1"];
 
-export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
+export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel }: Props) {
   const [name, setName] = useState(initial.name);
   const [template, setTemplate] = useState<TemplateKey>(initial.template);
   const [color, setColor] = useState(initial.color);
   const [data, setData] = useState<CvData>(initial.data);
   const [photoId, setPhotoId] = useState(initial.photoId);
+  const [signatureId, setSignatureId] = useState(initialSignature);
   const [save, setSave] = useState<SaveState>({ kind: "saved" });
   const [view, setView] = useState<"form" | "preview">("form");
   const [designOpen, setDesignOpen] = useState(false);
@@ -106,7 +111,8 @@ export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
   const deferred = useDeferredValue(data);
   const photoUrl = photoId ? `/api/dateien/${photoId}` : null;
   const [layout, setLayout] = useState({ pages: 1, fit: 1 });
-  const html = useMemo(() => renderCvHtml(deferred, { template, color, photo: photoUrl, fontCss: PREVIEW_FONTS }), [deferred, template, color, photoUrl]);
+  const signatureUrl = signatureId ? `/api/dateien/${signatureId}` : null;
+  const html = useMemo(() => renderCvHtml(deferred, { template, color, photo: photoUrl, signature: signatureUrl, fontCss: PREVIEW_FONTS }), [deferred, template, color, photoUrl, signatureUrl]);
 
   // ---------- Hilfen zum Ändern ----------
   const set = <K extends keyof CvData>(key: K, value: CvData[K]) => setData((d) => ({ ...d, [key]: value }));
@@ -357,7 +363,15 @@ export function CvEditor({ cvId, initial, ai, backHref, backLabel }: Props) {
               <Area label="Interessen" value={data.interests} onChange={(v) => set("interests", v)} rows={2} />
             </AiHelp>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={data.signature} onChange={(e) => set("signature", e.target.checked)} className="size-4 accent-[var(--accent)]" /> Zeile für Ort, Datum und Unterschrift</label>
-            {data.signature && <In label="Ort für die Unterschrift" value={data.place} onChange={(v) => set("place", v)} placeholder={data.personal.city || "z. B. Nürnberg"} hint="Das Datum wird beim Herunterladen automatisch eingesetzt." />}
+            {data.signature && (
+              <>
+                <In label="Ort für die Unterschrift" value={data.place} onChange={(v) => set("place", v)} placeholder={data.personal.city || "z. B. Nürnberg"} hint="Das Datum wird beim Herunterladen automatisch eingesetzt." />
+                <SignatureField coacheeId={coacheeId} value={signatureId} onChange={setSignatureId} />
+                {signatureId && (
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={data.signatureImage} onChange={(e) => set("signatureImage", e.target.checked)} className="size-4 accent-[var(--accent)]" /> Unterschrift in diesem Lebenslauf zeigen</label>
+                )}
+              </>
+            )}
           </Step>
         </div>
 

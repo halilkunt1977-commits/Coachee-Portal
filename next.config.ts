@@ -12,7 +12,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["pg", "playwright-core", "unpdf", "mammoth", "exceljs", "imapflow", "mailparser"],
+  serverExternalPackages: ["pg", "playwright-core", "unpdf", "mammoth", "exceljs", "imapflow", "mailparser", "docx"],
   // Fotos, Lebensläufe und Dokumente (bis 25 MB je Datei) werden über Server Actions hochgeladen
   experimental: { serverActions: { bodySizeLimit: "26mb" } },
   turbopack: {

@@ -10,7 +10,7 @@ const PAGE_H = 1123; // 297 mm
  * der Inhalt wird direkt hineingeschrieben, damit beim Tippen nichts flackert. Die Seiten werden mit
  * derselben Funktion aufgeteilt wie im PDF, die Umbrüche in der Vorschau sind also die echten.
  */
-export function CvPreview({ html, width, showBreaks = true, className = "", onLayout }: { html: string; width?: number; showBreaks?: boolean; className?: string; onLayout?: (info: { pages: number; fit: number }) => void }) {
+export function CvPreview({ html, width, showBreaks = true, className = "", title = "Vorschau des Lebenslaufs", onLayout }: { html: string; width?: number; showBreaks?: boolean; className?: string; title?: string; onLayout?: (info: { pages: number; fit: number }) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [boxW, setBoxW] = useState(width ?? 0);
@@ -60,13 +60,13 @@ export function CvPreview({ html, width, showBreaks = true, className = "", onLa
   }, [html, showBreaks]);
 
   const scale = boxW ? boxW / PAGE_W : 0.5;
-  const pages = Math.max(1, Math.round(height / PAGE_H) || 1);
+  const pages = Math.max(1, Math.ceil(height / PAGE_H - 0.01) || 1);
   return (
     <div ref={box} className={className} style={width ? { width } : undefined}>
       <div className="relative overflow-hidden rounded-md bg-white shadow-[0_1px_3px_rgba(22,24,29,.12),0_8px_24px_rgba(22,24,29,.08)]" style={{ height: pages * PAGE_H * scale }}>
         <iframe
           ref={frame}
-          title="Vorschau des Lebenslaufs"
+          title={title}
           sandbox="allow-same-origin"
           tabIndex={-1}
           className="pointer-events-none absolute left-0 top-0 origin-top-left border-0"

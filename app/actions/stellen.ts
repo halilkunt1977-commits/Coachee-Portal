@@ -4,7 +4,7 @@ import { AiError, assertAiAllowed, jsonResponse } from "@/lib/ai";
 import { audit, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { JobSearchError, searchJobs } from "@/lib/jobs/ba";
-import { CHANNELS, STATUSES, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { CHANNELS, SALUTATIONS, STATUSES, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import { getApplication, hiddenRefs, normalizeQuery, profileForAi } from "@/lib/jobs/store";
 
 async function jobCoachee(user: User, coacheeId: string) {
@@ -17,8 +17,13 @@ const isDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{
 const clip = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const safeUrl = (v: unknown) => {
   const u = clip(v, 600);
-  return /^https?:\/\/[^\s]+$/i.test(u) ? u : "";
+  // „www.firma.de“ ohne https:// ist im Alltag die Regel
+  const full = /^www\./i.test(u) ? `https://${u}` : u;
+  return /^https?:\/\/[^\s]+$/i.test(full) ? full : "";
 };
+const salutation = (v: unknown) => (SALUTATIONS.some((s) => s.key === v) ? (v as string) : "");
+// Doppelte Referenznummer: Postgres meldet 23505 (applications_refnr)
+const isDuplicate = (e: unknown) => (e as { code?: string })?.code === "23505";
 
 // ---------- Suchen ----------
 
@@ -112,17 +117,29 @@ export async function addApplication(coacheeId: string, raw: Partial<Application
   const employer = clip(raw.employer, 200);
   if (!title && !employer) return { error: "Bitte Stelle oder Arbeitgeber eintragen." };
   const status: Status = STATUSES.some((s) => s.key === raw.status) && raw.status !== "vorschlag" ? (raw.status as Status) : "beworben";
-  const applied = isDate(raw.applied_on) ? raw.applied_on : status === "gemerkt" ? null : today();
-  const row = await one<{ id: string }>(
-    `INSERT INTO applications (coachee_id, title, employer, location, url, status, channel, applied_on, note, history, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-    [c.id, title || "Initiativbewerbung", employer, clip(raw.location, 120), safeUrl(raw.url), status, CHANNELS.some((x) => x.key === raw.channel) ? raw.channel : "", applied, clip(raw.note, 4000), historyEntry(status, user), user.id],
-  );
+  // Gemerkt heißt: noch nicht beworben, auch wenn im Formular schon ein Datum vorbelegt ist
+  const applied = status === "gemerkt" ? null : isDate(raw.applied_on) ? raw.applied_on : today();
+  let row: { id: string } | null;
+  try {
+    row = await one<{ id: string }>(
+      `INSERT INTO applications (coachee_id, refnr, title, employer, location, street, zip, contact, salutation, url, published_on, status, channel, applied_on, next_on, note, history, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+      [
+        c.id, clip(raw.refnr, 80) || null, title || "Initiativbewerbung", employer, clip(raw.location, 120), clip(raw.street, 160), clip(raw.zip, 10), clip(raw.contact, 300), salutation(raw.salutation),
+        safeUrl(raw.url), isDate(raw.published_on) ? raw.published_on : null, status, CHANNELS.some((x) => x.key === raw.channel) ? raw.channel : "", applied, isDate(raw.next_on) ? raw.next_on : null, clip(raw.note, 4000), historyEntry(status, user), user.id,
+      ],
+    );
+  } catch (e) {
+    if (isDuplicate(e)) return { error: "Eine Stelle mit dieser Referenznummer ist schon eingetragen." };
+    throw e;
+  }
   await audit(user.id, "application_created", c.id);
   return { application: (await getApplication(c.id, row!.id))! };
 }
 
-type Patch = Partial<Pick<Application, "status" | "channel" | "applied_on" | "next_on" | "next_note" | "contact" | "note" | "reason" | "title" | "employer" | "location" | "url">>;
+type Patch = Partial<
+  Pick<Application, "status" | "channel" | "applied_on" | "next_on" | "next_note" | "contact" | "salutation" | "street" | "zip" | "note" | "reason" | "title" | "employer" | "location" | "url" | "refnr" | "published_on">
+>;
 
 export async function updateApplication(coacheeId: string, id: string, patch: Patch): Promise<{ application?: Application; error?: string }> {
   const user = await requireUser();
@@ -147,12 +164,20 @@ export async function updateApplication(coacheeId: string, id: string, patch: Pa
   if (patch.channel !== undefined) set("channel", CHANNELS.some((x) => x.key === patch.channel) ? patch.channel : "");
   if (patch.applied_on !== undefined) set("applied_on", isDate(patch.applied_on) ? patch.applied_on : null);
   if (patch.next_on !== undefined) set("next_on", isDate(patch.next_on) ? patch.next_on : null);
-  for (const [k, n] of [["next_note", 200], ["contact", 300], ["note", 4000], ["reason", 600], ["location", 120]] as const) if (patch[k] !== undefined) set(k, clip(patch[k], n));
+  if (patch.published_on !== undefined) set("published_on", isDate(patch.published_on) ? patch.published_on : null);
+  for (const [k, n] of [["next_note", 200], ["contact", 300], ["note", 4000], ["reason", 600], ["location", 120], ["street", 160], ["zip", 10]] as const) if (patch[k] !== undefined) set(k, clip(patch[k], n));
+  if (patch.salutation !== undefined) set("salutation", salutation(patch.salutation));
+  if (patch.refnr !== undefined) set("refnr", clip(patch.refnr, 80) || null);
   if (patch.title !== undefined) set("title", clip(patch.title, 200) || cur.title);
   if (patch.employer !== undefined) set("employer", clip(patch.employer, 200));
   if (patch.url !== undefined) set("url", safeUrl(patch.url));
   if (!sets.length) return { application: cur };
-  await query(`UPDATE applications SET ${sets.join(", ")}, updated_at = now() WHERE coachee_id = $1 AND id = $2`, vals);
+  try {
+    await query(`UPDATE applications SET ${sets.join(", ")}, updated_at = now() WHERE coachee_id = $1 AND id = $2`, vals);
+  } catch (e) {
+    if (isDuplicate(e)) return { error: "Eine andere Stelle hat schon diese Referenznummer." };
+    throw e;
+  }
   if (patch.status !== undefined && patch.status !== cur.status) await audit(user.id, "application_status", c.id, { status: patch.status });
   return { application: (await getApplication(c.id, id))! };
 }

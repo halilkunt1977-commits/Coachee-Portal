@@ -19,6 +19,8 @@ export type CvData = {
   interests: string;
   place: string;
   signature: boolean;
+  /** Digitale Unterschrift (gehört zur Akte, nicht zum Lebenslauf) über der Linie zeigen */
+  signatureImage: boolean;
   photo: CvPhoto;
 };
 
@@ -33,6 +35,7 @@ export const emptyCv = (p?: Partial<CvData["personal"]>): CvData => ({
   interests: "",
   place: "",
   signature: true,
+  signatureImage: true,
   photo: { zoom: 1, x: 50, y: 50 },
 });
 
@@ -56,6 +59,7 @@ export function normalizeCv(raw: unknown): CvData {
     interests: s(r.interests, 500),
     place: s(r.place, 100),
     signature: r.signature === undefined ? true : Boolean(r.signature),
+    signatureImage: r.signatureImage === undefined ? true : Boolean(r.signatureImage),
     photo: { zoom: clamp(ph.zoom, 1, 3, 1), x: clamp(ph.x, 0, 100, 50), y: clamp(ph.y, 0, 100, 50) },
   };
 }

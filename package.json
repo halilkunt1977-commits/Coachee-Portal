@@ -11,6 +11,7 @@
   "dependencies": {
     "@fontsource/source-sans-3": "^5.3.1",
     "@fontsource/source-serif-4": "^5.3.1",
+    "docx": "^9.8.1",
     "exceljs": "^4.4.0",
     "imapflow": "^2.5.0",
     "mailparser": "^3.9.39",
