@@ -1,11 +1,13 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { coacheeFor } from "@/lib/access";
 import { audit, requireCoach, requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { dateOrNull, numberOrNull, text, type FormState } from "@/lib/forms";
 import { noticeMail, sendMail } from "@/lib/mail";
 import { notify } from "@/lib/push";
+import { isAvocons, refreshDoku, writeDocText } from "@/lib/doku/store";
 
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
@@ -26,21 +28,36 @@ function readMeeting(fd: FormData) {
     next_steps: text(fd, "next_steps", 20000),
     internal_note: text(fd, "internal_note", 20000),
     shared: fd.get("shared") === "on",
+    // nur beim Bearbeiten im Formular; leer = wieder automatisch aus den Notizen schreiben
+    doc_text: fd.has("doc_text") ? text(fd, "doc_text", 600) : null,
   };
 }
 
 export async function saveMeeting(coacheeId: string, meetingId: string | null, _prev: FormState, fd: FormData): Promise<FormState> {
   const coach = await requireCoach();
-  await coacheeFor(coach, coacheeId);
+  const c = await coacheeFor(coach, coacheeId);
   const m = readMeeting(fd);
   if (!m.held_on) return { error: "Bitte das Datum des Gesprächs angeben." };
   if (!m.title) return { error: "Bitte ein Thema angeben, zum Beispiel „Erstgespräch“." };
   if (m.units > 24) return { error: "Mehr als 24 Unterrichtseinheiten an einem Termin? Bitte prüfen." };
+  let id = meetingId;
+  let rewrite = true;
   if (meetingId) {
+    const before = await one<{ title: string; notes: string; results: string; next_steps: string; doc_text: string; doc_auto: boolean }>(
+      "SELECT title, notes, results, next_steps, doc_text, doc_auto FROM meetings WHERE id = $1 AND coachee_id = $2",
+      [meetingId, coacheeId],
+    );
+    if (!before) return { error: "Dieses Gespräch gibt es nicht mehr." };
+    // Selbst geänderter Dokumentationstext bleibt; leeres Feld schaltet zurück auf automatisch
+    const ownText = m.doc_text !== null && m.doc_text !== before.doc_text && m.doc_text !== "";
+    const auto = m.doc_text === "" ? true : ownText ? false : before.doc_auto;
+    const changed = before.title !== m.title || before.notes !== m.notes || before.results !== m.results || before.next_steps !== m.next_steps;
+    rewrite = auto && (changed || !before.doc_text || m.doc_text === "");
     await query(
-      `UPDATE meetings SET held_on=$3, units=$4, format=$5, title=$6, notes=$7, results=$8, next_steps=$9, internal_note=$10, shared=$11, updated_at=now()
+      `UPDATE meetings SET held_on=$3, units=$4, format=$5, title=$6, notes=$7, results=$8, next_steps=$9, internal_note=$10, shared=$11,
+              doc_text = CASE WHEN $12 THEN $13 ELSE doc_text END, doc_auto = $14, updated_at=now()
         WHERE id=$1 AND coachee_id=$2`,
-      [meetingId, coacheeId, m.held_on, m.units, m.format, m.title, m.notes, m.results, m.next_steps, m.internal_note, m.shared],
+      [meetingId, coacheeId, m.held_on, m.units, m.format, m.title, m.notes, m.results, m.next_steps, m.internal_note, m.shared, ownText, m.doc_text ?? "", auto],
     );
     await audit(coach.id, "meeting_updated", coacheeId, { meetingId });
   } else {
@@ -49,17 +66,22 @@ export async function saveMeeting(coacheeId: string, meetingId: string | null, _
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [coacheeId, m.held_on, m.units, m.format, m.title, m.notes, m.results, m.next_steps, m.internal_note, m.shared, coach.id],
     );
-    await audit(coach.id, "meeting_created", coacheeId, { meetingId: row?.id });
+    id = row?.id ?? null;
+    await audit(coach.id, "meeting_created", coacheeId, { meetingId: id });
   }
+  // Eintrag für die Beratungsdokumentation gleich mitschreiben, das PDF danach im Hintergrund erneuern
+  if (id && rewrite) await writeDocText(id, coach.id);
+  if (isAvocons(c.traeger)) after(() => refreshDoku(coacheeId, coach.id).catch((e) => console.error("[doku]", e)));
   refresh(coacheeId);
-  return { ok: "Gespräch gespeichert." };
+  return { ok: isAvocons(c.traeger) ? "Gespräch gespeichert. Die Beratungsdokumentation wird aktualisiert." : "Gespräch gespeichert." };
 }
 
 export async function deleteMeeting(coacheeId: string, meetingId: string) {
   const coach = await requireCoach();
-  await coacheeFor(coach, coacheeId);
+  const c = await coacheeFor(coach, coacheeId);
   await query("DELETE FROM meetings WHERE id = $1 AND coachee_id = $2", [meetingId, coacheeId]);
   await audit(coach.id, "meeting_deleted", coacheeId, { meetingId });
+  if (isAvocons(c.traeger)) after(() => refreshDoku(coacheeId, coach.id).catch((e) => console.error("[doku]", e)));
   refresh(coacheeId);
 }
 

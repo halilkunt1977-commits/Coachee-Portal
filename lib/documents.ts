@@ -6,6 +6,7 @@ export const DOC_CATEGORIES = [
   { key: "anwesenheit", label: "Anwesenheitsbericht", hint: "z. B. von AVOCONS", report: true },
   { key: "taetigkeitsnachweis", label: "Tätigkeitsnachweis", hint: "z. B. von Erfolgspfad", report: true },
   { key: "coachbericht", label: "Coachbericht", hint: "Abschluss- oder Zwischenbericht", report: true },
+  { key: "dokumentation", label: "Beratungsdokumentation", hint: "für AVOCONS, entsteht aus den Gesprächen", report: false },
   { key: "vertrag", label: "Vertrag", hint: "z. B. Projektvertrag von Erfolgspfad", report: false },
   { key: "businessplan", label: "Businessplan", hint: "", report: false },
   { key: "finanzplan", label: "Finanzplan", hint: "", report: false },

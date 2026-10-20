@@ -21,7 +21,8 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
           <option value="selbstzahler">Selbstzahler</option>
           <option value="sonstiges">Sonstiges</option>
         </Select>
-        <Field label="Gutschein- / Aktenzeichen" name="voucher_number" defaultValue={c?.voucher_number ?? ""} />
+        <Field label="Gutschein- / Kunden-Nummer" name="voucher_number" defaultValue={c?.voucher_number ?? ""} hint="Steht im Kopf der Beratungsdokumentation." />
+        <Field label="Maßnahmeart" name="measure_type" defaultValue={c?.measure_type ?? ""} placeholder="z. B. 04-ORC (40 UE)" />
         <Field label="Bewilligte Unterrichtseinheiten" name="units_total" inputMode="decimal" defaultValue={c?.units_total ?? ""} hint="Zum Beispiel 40. Wird mit der Anwesenheit verrechnet." />
         <Select label="Bildungsträger" name="traeger" defaultValue={c?.traeger ?? ""} >
           <option value="">–</option>

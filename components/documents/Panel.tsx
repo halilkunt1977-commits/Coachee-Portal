@@ -18,7 +18,7 @@ const time = (r: { starts_at: string | null; ends_at?: string | null }) => (r.st
 export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
   // Mit älterer Erkennung gelesene Dokumente einmal neu auslesen
   const stale = await query<{ id: string; file_id: string; category: string; name: string }>(
-    "SELECT d.id, d.file_id, d.category, f.name FROM documents d JOIN files f ON f.id = d.file_id WHERE d.coachee_id = $1 AND d.parser_version < $2",
+    "SELECT d.id, d.file_id, d.category, f.name FROM documents d JOIN files f ON f.id = d.file_id WHERE d.coachee_id = $1 AND d.parser_version < $2 AND d.generated IS NULL",
     [c.id, PARSER_VERSION],
   );
   for (const d of stale) await reparseDocument(d);

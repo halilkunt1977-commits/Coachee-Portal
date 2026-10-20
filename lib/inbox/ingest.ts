@@ -4,6 +4,7 @@ import { DOC_TYPES, extOf } from "../documents";
 import { vaultRead, vaultWrite } from "../vault";
 import { namesMatch } from "../attendance/parse";
 import { notify } from "../push";
+import { afterFormFiled } from "../doku/store";
 import { classify, findCoachee, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
 
 /*
@@ -134,8 +135,8 @@ export async function applyMail(mailId: string) {
   if (coachee && g && !applied.filled && (g.units_total || g.start_date || g.voucher_number)) {
     await query(
       `UPDATE coachees SET units_total = COALESCE(units_total, $2), start_date = COALESCE(start_date, $3::date), end_date = COALESCE(end_date, $4::date),
-              voucher_number = COALESCE(NULLIF(voucher_number, ''), $5), updated_at = now() WHERE id = $1`,
-      [coachee.id, g.units_total ?? null, g.start_date ?? null, g.end_date ?? null, g.voucher_number ?? null],
+              voucher_number = COALESCE(NULLIF(voucher_number, ''), $5), measure_type = COALESCE(NULLIF(measure_type, ''), $6), updated_at = now() WHERE id = $1`,
+      [coachee.id, g.units_total ?? null, g.start_date ?? null, g.end_date ?? null, g.voucher_number ?? null, measureOf(g)],
     );
     applied.filled = true;
   }
@@ -184,6 +185,9 @@ async function pushFor(m: MailRecord, coachee: Person | null, applied: Applied) 
   await notify([m.coach_id], { ...msg, tag: `mail-${m.id}` });
 }
 
+/** Maßnahmeart für den Kopf der Beratungsdokumentation, z. B. „04-ORC (40 UE)“ */
+const measureOf = (g: Grant) => (g.code ? `${g.code}${g.units_total && !/\bUE\b/.test(g.code) ? ` (${g.units_total} UE)` : ""}` : null);
+
 /** Neue Akte aus Projektvertrag oder AVOCONS-Startmail, ohne Einladung (die verschickst du, wenn du so weit bist) */
 async function autoCoachee(m: MailRecord, applied: Applied): Promise<string | null> {
   const lead = await upsertLead(m);
@@ -201,11 +205,11 @@ async function autoCoachee(m: MailRecord, applied: Applied): Promise<string | nu
     const taken = email ? await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email]) : null;
     const user = email && !taken?.rows.length ? await db.query<{ id: string }>("INSERT INTO users (email, name, role) VALUES ($1,$2,'coachee') RETURNING id", [email, `${c.first_name} ${c.last_name}`]) : null;
     const row = await db.query<{ id: string }>(
-      `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, traeger, city, internal_note)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, traeger, city, internal_note, measure_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
       [user?.rows[0].id ?? null, m.coach_id, c.first_name, c.last_name, email, c.phone ?? leadRow?.phone ?? null, type, "avgs",
        g.voucher_number ?? null, g.start_date ?? null, g.end_date ?? null, g.units_total ?? null, traeger, c.city ?? leadRow?.city ?? null,
-       `Automatisch angelegt aus der Mail „${m.subject.slice(0, 120)}“${g.code ? `, Coachingart ${g.code}` : ""}.`],
+       `Automatisch angelegt aus der Mail „${m.subject.slice(0, 120)}“${g.code ? `, Coachingart ${g.code}` : ""}.`, measureOf(g)],
     );
     await db.query("INSERT INTO audit_log (user_id, coachee_id, action, detail) VALUES ($1,$2,'coachee_created',$3)", [m.coach_id, row.rows[0].id, { auto: "postfach", mailId: m.id }]);
     if (lead) {
@@ -298,6 +302,7 @@ async function fileDocuments(m: MailRecord, coachee: Person, applied: Applied) {
       return d.rows[0].id;
     });
     docs.add(docId);
+    await afterFormFiled(coachee.id, a.name, m.coach_id);
   }
   applied.documents = [...docs];
 }
