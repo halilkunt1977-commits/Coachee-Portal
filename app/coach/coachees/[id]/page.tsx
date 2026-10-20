@@ -13,6 +13,7 @@ import { setCoachingStatus } from "@/app/actions/dokumente";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
+import { StellenAnalysen } from "@/components/jobs/Analysen";
 import { AnalyzeButton, FinanceItemForm, ProfileItemForm, SuggestionCard } from "@/components/akte/Wissen";
 import { aiEnabled } from "@/lib/ai";
 import { MAIL_PROBLEM_TEXT } from "@/lib/mail";
@@ -35,7 +36,7 @@ import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "
 import type { Coachee } from "@/lib/access";
 import { AkteTermine } from "@/components/calendar/AkteTermine";
 
-type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null };
+type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null; doc_text: string; doc_auto: boolean };
 
 const TABS = [
   { key: "uebersicht", label: "Übersicht", group: "ueberblick" },
@@ -73,7 +74,7 @@ const actionLabel: Record<string, string> = {
   coachee_created: "Akte angelegt", coachee_updated: "Stammdaten geändert", invite_sent: "Einladung verschickt", invite_link_created: "Einladungslink erzeugt",
   invite_accepted: "Einladung angenommen", meeting_created: "Gespräch angelegt", meeting_updated: "Gespräch geändert", meeting_deleted: "Gespräch gelöscht",
   mail_category: "Mail neu eingeordnet", mail_coachee: "Mail zugeordnet", document_from_mail: "Dokument aus Mail übernommen", document_signature: "Unterschrift-Status geändert",
-  task_created: "Aufgabe angelegt", task_toggled: "Aufgabe abgehakt", task_deleted: "Aufgabe gelöscht", message_sent: "Nachricht gesendet",
+  task_created: "Aufgabe angelegt", task_toggled: "Aufgabe abgehakt", task_deleted: "Aufgabe gelöscht", message_sent: "Nachricht gesendet", doku_pdf: "Beratungsdokumentation geöffnet", job_analyzed: "Stelle analysiert", job_report_filed: "Stellenbericht abgelegt",
   cv_created: "Lebenslauf angelegt", cv_imported: "Lebenslauf aus Datei übernommen", cv_duplicated: "Lebenslauf kopiert", cv_deleted: "Lebenslauf gelöscht",
   assistant_used: "KI-Assistent gefragt", bp_saved: "Businessplan bearbeitet", bp_draft: "KI-Entwurf für den Businessplan", bp_pdf: "Businessplan als PDF geladen",
   job_search_saved: "Stellensuche gespeichert", job_proposed: "Stelle vorgeschlagen", job_saved: "Stelle gemerkt", application_created: "Bewerbung eingetragen",
@@ -209,12 +210,17 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
 
       {tab === "uebersicht" && <Overview coachee={c} stats={stats} />}
       {tab === "termine" && <AkteTermine coach={coach} coachee={c} sp={sp} />}
-      {tab === "gespraeche" && <Meetings coacheeId={c.id} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
+      {tab === "gespraeche" && <Meetings coachee={c} edit={typeof sp.bearbeiten === "string" ? sp.bearbeiten : null} />}
       {tab === "anwesenheit" && <AttendancePanel coachee={c} used={used} oldestFirst={sp.sortierung === "alt"} />}
       {tab === "dokumente" && <DocumentsPanel coachee={c} />}
       {tab === "wissen" && <Wissen coacheeId={c.id} type={c.coaching_type} healthConsent={Boolean(c.consent_special_at)} fresh={typeof sp.neu === "string" ? Number(sp.neu) : null} />}
       {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
-      {tab === "bewerbungen" && <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />}
+      {tab === "bewerbungen" && (
+        <div className="space-y-8">
+          <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />
+          <StellenAnalysen coachee={c} coachId={coach.id} />
+        </div>
+      )}
       {tab === "zahlen" && <Zahlen coacheeId={c.id} />}
       {tab === "businessplan" && <PlanPanel user={coach} coachee={c} links={bpLinks} />}
       {tab === "finanzplan" && <FinancePanel user={coach} coachee={c} links={bpLinks} />}
@@ -315,11 +321,28 @@ async function Overview({ coachee, stats }: { coachee: Coachee; stats: { meeting
   );
 }
 
-async function Meetings({ coacheeId, edit }: { coacheeId: string; edit: string | null }) {
+async function Meetings({ coachee, edit }: { coachee: Coachee; edit: string | null }) {
+  const coacheeId = coachee.id;
   const meetings = await query<Meeting>("SELECT * FROM meetings WHERE coachee_id = $1 ORDER BY held_on DESC, created_at DESC", [coacheeId]);
   const editing = edit ? meetings.find((m) => m.id === edit) : undefined;
   const ai = aiEnabled();
+  const counted = meetings.filter((m) => Number(m.units) > 0);
+  const missing = [!coachee.voucher_number && "Kunden-Nummer", !coachee.measure_type && "Maßnahmeart", !coachee.start_date && "Bewilligungszeitraum"].filter(Boolean);
   return (
+    <div className="space-y-6">
+    <section className="card flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="min-w-0 flex-1">
+        <h2 className="h2">Beratungsdokumentation {coachee.traeger === "avocons" ? "für AVOCONS" : "(Formular AVOCONS)"}</h2>
+        <p className="text-sm text-muted">
+          {counted.length
+            ? `${counted.length} ${counted.length === 1 ? "Termin" : "Termine"} auf ${Math.ceil(counted.length / 4)} ${Math.ceil(counted.length / 4) === 1 ? "Blatt" : "Blättern"}. `
+            : "Noch keine Gespräche mit UE. "}
+          {coachee.traeger === "avocons" ? "Wird nach jedem Gespräch neu erzeugt und liegt unter „Dokumente“ zum Unterschreiben." : "Entsteht aus den Gesprächen mit UE."}
+          {missing.length > 0 && <> Im Kopf fehlt noch: {missing.join(", ")} (unter <Link href="?tab=stammdaten" className="link">Stammdaten</Link>).</>}
+        </p>
+      </div>
+      {counted.length > 0 && <a href={`/api/dokumentation/${coacheeId}`} target="_blank" className="btn-ghost btn-sm"><Icon name="doc" className="size-4" /> PDF ansehen</a>}
+    </section>
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
       <div className="card space-y-4 lg:sticky lg:top-20 lg:self-start">
         <div className="flex items-center justify-between">
@@ -340,6 +363,9 @@ async function Meetings({ coacheeId, edit }: { coacheeId: string; edit: string |
             {m.results && <p className="whitespace-pre-wrap text-sm"><span className="font-semibold">Ergebnisse: </span>{m.results}</p>}
             {m.next_steps && <p className="whitespace-pre-wrap text-sm"><span className="font-semibold">Nächste Schritte: </span>{m.next_steps}</p>}
             {m.internal_note && <p className="whitespace-pre-wrap rounded-lg bg-bg p-2 text-sm text-muted"><span className="font-semibold">Intern: </span>{m.internal_note}</p>}
+            {m.doc_text && Number(m.units) > 0 && (
+              <p className="rounded-lg border border-line-soft p-2 text-sm"><span className="font-semibold">Dokumentation{m.doc_auto ? "" : " (von dir angepasst)"}: </span>{m.doc_text}</p>
+            )}
             {m.ai_questions.length > 0 && (
               <div className="rounded-lg bg-tint/60 p-3 text-sm">
                 <p className="mb-1 font-semibold text-accent">Fragen fürs nächste Gespräch</p>
@@ -354,6 +380,7 @@ async function Meetings({ coacheeId, edit }: { coacheeId: string; edit: string |
           </article>
         ))}
       </div>
+    </div>
     </div>
   );
 }

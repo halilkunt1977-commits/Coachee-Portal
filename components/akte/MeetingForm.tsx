@@ -6,7 +6,7 @@ import { Field, Select, TextArea } from "../ui";
 import { ActionForm } from "./ActionForm";
 import { Recorder } from "./Recorder";
 
-type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean };
+type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; doc_text?: string };
 
 export function MeetingForm({ coacheeId, meeting, ai }: { coacheeId: string; meeting?: Meeting; ai: boolean }) {
   const notes = useRef<HTMLTextAreaElement>(null);
@@ -42,6 +42,15 @@ export function MeetingForm({ coacheeId, meeting, ai }: { coacheeId: string; mee
         <TextArea label="Ergebnisse" name="results" defaultValue={meeting?.results} rows={3} />
         <TextArea label="Nächste Schritte" name="next_steps" defaultValue={meeting?.next_steps} rows={3} />
       </div>
+      {meeting && (
+        <TextArea
+          label="Text für die Beratungsdokumentation"
+          name="doc_text"
+          defaultValue={meeting.doc_text}
+          rows={3}
+          hint="Entsteht automatisch aus den Notizen. Änderst du ihn, bleibt deine Fassung; leer lassen schreibt ihn neu."
+        />
+      )}
       <TextArea label="Interne Notiz (nur für dich)" name="internal_note" defaultValue={meeting?.internal_note} rows={2} />
       <label className="flex items-center gap-3 text-sm">
         <input type="checkbox" name="shared" defaultChecked={meeting?.shared ?? true} className="size-4 accent-[var(--accent)]" />

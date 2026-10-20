@@ -14,6 +14,7 @@ export type Coachee = {
   coaching_type: "job" | "gruendung";
   funding: "avgs" | "selbstzahler" | "sonstiges";
   voucher_number: string | null;
+  measure_type: string | null;
   start_date: string | null;
   end_date: string | null;
   units_total: number | null;

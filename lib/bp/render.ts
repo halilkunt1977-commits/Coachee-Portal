@@ -151,6 +151,8 @@ h2 span { color: #b88a4a; font-size: 13pt; }
 h3 { font-size: 12pt; margin: 6mm 0 2mm; }
 h4 { font-size: 10pt; margin: 4mm 0 1mm; color: #5d6068; text-transform: uppercase; letter-spacing: .04em; }
 p { margin: 0 0 2.6mm; orphans: 3; widows: 3; }
+/* Fließtext im Blocksatz mit Silbentrennung, wie in eingereichten Businessplänen üblich */
+.sec p, .sec li { text-align: justify; hyphens: auto; }
 ul, ol { margin: 0 0 2.6mm; padding-left: 5mm; }
 li { margin-bottom: .8mm; }
 mark { background: #fbeec8; color: inherit; padding: 0 .5mm; border-radius: 1mm; }
