@@ -1,10 +1,12 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { coacheeFor } from "@/lib/access";
 import { audit, requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { DOC_CATEGORIES, DOC_TYPES, MAX_DOC_BYTES, categoryLabel, extOf, extractReportRows, guessCategory, guessCategoryFromText, isReport, type ReportRow } from "@/lib/documents";
 import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
+import { afterFormFiled } from "@/lib/doku/store";
 import { removeFile, storeFile } from "@/lib/files";
 import { autoImportDocument } from "@/lib/bp/apply-import";
 import { text, type FormState } from "@/lib/forms";
@@ -41,6 +43,7 @@ export async function uploadDocument(coacheeId: string, fd: FormData): Promise<{
   await audit(coach.id, "document_uploaded", c.id, { category, name: file.name.slice(0, 120) });
   // Businessplan (.docx) oder Finanzplan (.xlsx) einer Gründung: übernehmen, solange der Plan im Portal noch leer ist
   const imported = await autoImportDocument(coach, c, { id: doc!.id, category, name: file.name }, data);
+  after(() => afterFormFiled(c.id, file.name, coach.id));
   refresh(c.id);
   return { ok: `${file.name}: als ${categoryLabel(category)} gespeichert${rows?.length ? `, ${rows.length} Termine erkannt` : ""}.${imported ? ` ${imported}` : ""}`, category, rows: rows?.length ?? 0 };
 }

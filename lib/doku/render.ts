@@ -9,7 +9,7 @@ export const ROWS_PER_SHEET = 4;
 /** So viel Text passt in das Feld „Inhalt des Coachings“ einer Zeile */
 export const DOC_TEXT_MAX = 340;
 
-export type DokuRow = { held_on: string; units: number; text: string; online: boolean };
+export type DokuRow = { held_on: string; units: number; text: string; online: boolean; time?: string };
 export type DokuHead = { name: string; customerNo: string; measure: string; from: string | null; to: string | null; coach: string };
 
 const day = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join(".") : "");

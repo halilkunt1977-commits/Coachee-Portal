@@ -21,6 +21,11 @@ import { Icon } from "@/components/shell/icons";
 import { TeamsMark } from "@/components/calendar/AppointmentDetail";
 import { dayMedium, KINDS, msUntil, relativeDay, todayBerlin } from "@/lib/calendar/dates";
 import { upcomingAppointments, type Appointment } from "@/lib/calendar/store";
+import { BruttoNetto } from "@/components/dashboard/BruttoNetto";
+import { JobTips, JobTipsSkeleton } from "@/components/dashboard/JobTips";
+import { GruenderWissen, HebesatzCard } from "@/components/dashboard/Gruender";
+import { findeHebesatz } from "@/lib/tax/hebesaetze";
+import { BUNDESLAENDER, type Bundesland } from "@/lib/tax/lohnsteuer";
 
 function NextStep({ label, hint, href }: { label: string; hint: string; href: string }) {
   return (
@@ -99,6 +104,9 @@ export default async function MyArea() {
     profil: "#profil", bewerbung: links.jobs, gespraech: links.jobs, zusage: links.jobs, anschreiben: "/mein-bereich/lebenslauf",
   };
   const nextHref = next ? STEP_LINK[next.key] ?? "#etappen" : "#etappen";
+  // Bundesland für den Brutto-Netto-Rechner aus dem Wohnort vorbelegen (Kirchensteuer, Pflegeversicherung in Sachsen)
+  const land = findeHebesatz(progress.city)?.treffer.land;
+  const defaultLand = BUNDESLAENDER.find((b) => b.key === land)?.key as Bundesland | undefined;
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
@@ -171,6 +179,23 @@ export default async function MyArea() {
         </div>
         <MilestonesCard coacheeId={c.id} p={progress} you />
       </div>
+
+      {c.coaching_type === "job" ? (
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr] lg:items-start">
+          <section id="stellen-tipps" className="card min-w-0 scroll-mt-24 space-y-3">
+            <h2 className="h2">Stellen, die zu dir passen</h2>
+            <Suspense fallback={<JobTipsSkeleton />}>
+              <JobTips c={c} />
+            </Suspense>
+          </section>
+          <BruttoNetto defaultLand={defaultLand} />
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr] lg:items-start">
+          <HebesatzCard city={progress.city} action={setCoacheeCity.bind(null, c.id)} />
+          <GruenderWissen />
+        </div>
+      )}
 
       {docs.length > 0 && (
         <section className="card space-y-3">
