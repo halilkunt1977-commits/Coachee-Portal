@@ -1,7 +1,8 @@
 "use client";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { addApplication, deleteApplication, updateApplication } from "@/app/actions/stellen";
-import { APPLIED, CHANNELS, STATUSES, STATUS_TONE, channelLabel, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
+import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string } };
 
@@ -77,11 +78,8 @@ export function Tracker(p: Props) {
 
       {adding && (
         <form action={add} className="card grid gap-3 sm:grid-cols-2">
-          <p className="text-sm text-muted sm:col-span-2">Für Initiativbewerbungen oder Stellen aus anderen Börsen. Stellen aus der Suche kommen mit einem Klick hierher.</p>
-          <In name="title" label="Stelle" placeholder="z. B. Initiativbewerbung Lager" />
-          <In name="employer" label="Arbeitgeber" />
-          <In name="location" label="Ort" />
-          <In name="url" label="Link zur Anzeige (optional)" type="url" />
+          <p className="text-sm text-muted sm:col-span-2">Für Initiativbewerbungen oder Stellen aus anderen Börsen und der Zeitung. Stellen aus der Suche kommen mit einem Klick hierher. Mit Anschrift und Ansprechperson ist das Anschreiben gleich fertig ausgefüllt.</p>
+          <JobFields />
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted">Stand</span>
             <select name="status" className="input !py-2" defaultValue="beworben">
@@ -124,7 +122,7 @@ export function Tracker(p: Props) {
                   </div>
                   <p className="text-sm">{[a.employer, a.location].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">
-                    {[a.applied_on && `beworben am ${fmt(a.applied_on)}${a.channel ? ` per ${channelLabel(a.channel)}` : ""}`, a.status === "vorschlag" && a.proposed_by_name && `vorgeschlagen von ${a.proposed_by_name}`].filter(Boolean).join(" · ")}
+                    {[a.refnr && `Ref. ${a.refnr}`, a.applied_on && `beworben am ${fmt(a.applied_on)}${a.channel ? ` per ${channelLabel(a.channel)}` : ""}`, a.status === "vorschlag" && a.proposed_by_name && `vorgeschlagen von ${a.proposed_by_name}`].filter(Boolean).join(" · ")}
                   </p>
                   {a.reason && <p className="mt-1.5 rounded-lg bg-tint/50 px-3 py-1.5 text-sm"><span className="font-semibold text-accent">Warum es passt: </span>{a.reason}</p>}
                   {a.next_on && ACTIVE.includes(a.status) && (
@@ -149,6 +147,7 @@ export function Tracker(p: Props) {
                       {STATUSES.filter((s) => s.key !== "vorschlag" || p.coach || a.status === "vorschlag").map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </select>
                   )}
+                  {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm">Anschreiben</Link>}
                   <button type="button" aria-expanded={isOpen} className="btn-ghost btn-sm" onClick={() => setOpen(isOpen ? null : a.id)}>{isOpen ? "Zuklappen" : "Details"}</button>
                 </div>
               </div>
@@ -163,11 +162,38 @@ export function Tracker(p: Props) {
 
 function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boolean; onPatch: (c: Parameters<typeof updateApplication>[2]) => void; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false);
-  const blur = (key: "contact" | "note" | "next_note" | "reason") => (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const [editing, setEditing] = useState(false);
+  const blur = (key: "note" | "next_note" | "reason") => (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (e.target.value !== a[key]) onPatch({ [key]: e.target.value });
   };
+  const person = [SALUTATIONS.find((s) => s.key === a.salutation && s.key)?.label, a.contact].filter(Boolean).join(" ");
+  const address = [a.employer, person, a.street, [a.zip, a.location].filter(Boolean).join(" ")].filter(Boolean);
   return (
     <div className="grid gap-3 border-t border-line-soft p-4 sm:grid-cols-2">
+      {editing ? (
+        <form
+          className="grid gap-3 rounded-xl bg-bg p-3 sm:col-span-2 sm:grid-cols-2"
+          action={(fd) => {
+            onPatch(Object.fromEntries(fd) as Parameters<typeof updateApplication>[2]);
+            setEditing(false);
+          }}
+        >
+          <p className="text-sm font-semibold sm:col-span-2">Stelle und Arbeitgeber bearbeiten</p>
+          <JobFields a={a} />
+          <div className="flex justify-end gap-2 sm:col-span-2">
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Abbrechen</button>
+            <button className="btn btn-sm">Speichern</button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-bg px-3.5 py-3 text-sm sm:col-span-2">
+          <div className="min-w-0 space-y-0.5">
+            {address.length ? address.map((l, i) => <p key={i} className={i === 0 ? "font-semibold" : ""}>{l}</p>) : <p className="text-muted">Noch keine Anschrift eingetragen.</p>}
+            <p className="text-xs text-muted">{[a.refnr && `Referenznummer ${a.refnr}`, a.published_on && `ausgeschrieben am ${fmt(a.published_on)}`].filter(Boolean).join(" · ")}</p>
+          </div>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(true)}>Angaben bearbeiten</button>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Beworben am</span>
@@ -180,10 +206,6 @@ function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boole
           </select>
         </label>
       </div>
-      <label className="block">
-        <span className="mb-1 block text-xs font-medium text-muted">Ansprechperson</span>
-        <input className="input !py-2" maxLength={300} defaultValue={a.contact} placeholder="Name, Telefon, E-Mail" onBlur={blur("contact")} />
-      </label>
       <div className="grid grid-cols-[minmax(0,10rem)_1fr] gap-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">Nachfassen am</span>
@@ -238,6 +260,35 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
     <button type="button" aria-pressed={on} onClick={onClick} className={`rounded-full border px-3 py-1 text-sm ${on ? "border-accent bg-tint text-accent" : "border-line-soft text-muted hover:border-accent"}`}>
       {children}
     </button>
+  );
+}
+
+/** Angaben zur Stelle, gleich beim Eintragen und Bearbeiten. Feldnamen = Spalten in applications. */
+function JobFields({ a }: { a?: Application }) {
+  return (
+    <>
+      <In name="title" label="Stelle" defaultValue={a?.title} placeholder="z. B. Fachkraft für Lagerlogistik" required={Boolean(a)} />
+      <In name="employer" label="Arbeitgeber" defaultValue={a?.employer} placeholder="Firma" />
+      <div className="grid grid-cols-[5.5rem_1fr] gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-muted">Anrede</span>
+          <select name="salutation" className="input !py-2" defaultValue={a?.salutation ?? ""}>
+            {SALUTATIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
+        <In name="contact" label="Ansprechperson" defaultValue={a?.contact} placeholder="z. B. Anna Müller" maxLength={300} />
+      </div>
+      <In name="street" label="Straße und Hausnummer" defaultValue={a?.street} maxLength={160} />
+      <div className="grid grid-cols-[6rem_1fr] gap-3">
+        <In name="zip" label="PLZ" defaultValue={a?.zip} inputMode="numeric" maxLength={10} />
+        <In name="location" label="Ort" defaultValue={a?.location} maxLength={120} />
+      </div>
+      <In name="url" label="Link zur Anzeige" defaultValue={a?.url} placeholder="https://" />
+      <div className="grid grid-cols-2 gap-3">
+        <In name="refnr" label="Referenznummer" defaultValue={a?.refnr ?? ""} placeholder="Kennziffer" maxLength={80} />
+        <In name="published_on" label="Ausgeschrieben am" type="date" defaultValue={a?.published_on ?? ""} />
+      </div>
+    </>
   );
 }
 

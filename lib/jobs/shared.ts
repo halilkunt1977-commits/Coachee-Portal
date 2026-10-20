@@ -85,6 +85,9 @@ export type Application = {
   next_on: string | null;
   next_note: string;
   contact: string;
+  salutation: Salutation;
+  street: string;
+  zip: string;
   note: string;
   reason: string;
   history: { at: string; status: Status; by: string }[];
@@ -92,6 +95,14 @@ export type Application = {
   created_at: string;
   updated_at: string;
 };
+
+/** Anrede der Ansprechperson, für die Briefanrede im Anschreiben */
+export const SALUTATIONS = [
+  { key: "", label: "–" },
+  { key: "frau", label: "Frau" },
+  { key: "herr", label: "Herr" },
+] as const;
+export type Salutation = (typeof SALUTATIONS)[number]["key"];
 
 export const describeQuery = (q: JobQuery) =>
   [q.was, q.wo && `in ${q.wo}${q.umkreis ? ` +${q.umkreis} km` : ""}`, q.arbeitszeit && q.arbeitszeit.split(";").map((k) => ARBEITSZEIT.find((a) => a.key === k)?.label ?? k).join(", ")].filter(Boolean).join(" · ");

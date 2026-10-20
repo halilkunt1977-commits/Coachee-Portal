@@ -3,6 +3,7 @@ import { aiEnabled } from "@/lib/ai";
 import { fullName } from "@/lib/access";
 import { audit, requireUser } from "@/lib/auth";
 import { cvFor } from "@/lib/cv/store";
+import { signatureId } from "@/lib/signature";
 
 export const metadata = { title: "Lebenslauf bearbeiten" };
 
@@ -16,6 +17,8 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
     <CvEditor
       key={`${cv.id}-${cv.version}`}
       cvId={cv.id}
+      coacheeId={coachee.id}
+      signatureId={await signatureId(coachee.id)}
       initial={{ name: cv.name, template: cv.template, color: cv.color, data: cv.data, version: cv.version, photoId: cv.photo_file_id }}
       ai={aiEnabled() && coach}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=lebenslauf` : "/mein-bereich/lebenslauf"}
