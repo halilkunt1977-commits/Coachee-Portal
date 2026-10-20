@@ -4,6 +4,7 @@ import { DOC_TYPES, extOf } from "../documents";
 import { vaultRead, vaultWrite } from "../vault";
 import { namesMatch } from "../attendance/parse";
 import { notify } from "../push";
+import { afterFormFiled } from "../doku/store";
 import { classify, findCoachee, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
 
 /*
@@ -301,6 +302,7 @@ async function fileDocuments(m: MailRecord, coachee: Person, applied: Applied) {
       return d.rows[0].id;
     });
     docs.add(docId);
+    await afterFormFiled(coachee.id, a.name, m.coach_id);
   }
   applied.documents = [...docs];
 }

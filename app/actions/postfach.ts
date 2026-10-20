@@ -1,10 +1,12 @@
 "use server";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { coacheeFor } from "@/lib/access";
 import { audit, requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { DOC_TYPES, extOf, guessCategory } from "@/lib/documents";
 import { isCategory, parseBookings, parseContact, parseLocation } from "@/lib/inbox/classify";
+import { afterFormFiled } from "@/lib/doku/store";
 import { applyMail } from "@/lib/inbox/ingest";
 import { vaultRead, vaultWrite } from "@/lib/vault";
 import { text } from "@/lib/forms";
@@ -86,6 +88,8 @@ export async function attachmentToDocuments(attachmentId: string) {
   );
   await query("UPDATE inbox_attachments SET document_id = $2 WHERE id = $1", [a.id, d!.id]);
   await audit(coach.id, "document_from_mail", a.coachee_id, { name: a.name.slice(0, 120) });
+  const coacheeId = a.coachee_id;
+  after(() => afterFormFiled(coacheeId, a.name, coach.id));
   refresh(a.coachee_id);
 }
 

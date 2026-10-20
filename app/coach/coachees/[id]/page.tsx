@@ -327,6 +327,10 @@ async function Meetings({ coachee, edit }: { coachee: Coachee; edit: string | nu
   const editing = edit ? meetings.find((m) => m.id === edit) : undefined;
   const ai = aiEnabled();
   const counted = meetings.filter((m) => Number(m.units) > 0);
+  const formSheets = await query<{ generated: string; signature: string | null }>(
+    "SELECT generated, signature FROM documents WHERE coachee_id = $1 AND generated LIKE 'avocons\\_doku\\_%' ORDER BY length(generated), generated",
+    [coacheeId],
+  );
   const missing = [!coachee.voucher_number && "Kunden-Nummer", !coachee.measure_type && "Maßnahmeart", !coachee.start_date && "Bewilligungszeitraum"].filter(Boolean);
   return (
     <div className="space-y-6">
@@ -337,11 +341,28 @@ async function Meetings({ coachee, edit }: { coachee: Coachee; edit: string | nu
           {counted.length
             ? `${counted.length} ${counted.length === 1 ? "Termin" : "Termine"} auf ${Math.ceil(counted.length / 4)} ${Math.ceil(counted.length / 4) === 1 ? "Blatt" : "Blättern"}. `
             : "Noch keine Gespräche mit UE. "}
-          {coachee.traeger === "avocons" ? "Wird nach jedem Gespräch neu erzeugt und liegt unter „Dokumente“ zum Unterschreiben." : "Entsteht aus den Gesprächen mit UE."}
+          {coachee.traeger === "avocons"
+            ? formSheets.length
+              ? "Das Original-Formular von AVOCONS wird nach jedem Gespräch ausgefüllt, jedes Blatt liegt unter „Dokumente“ zum Unterschreiben."
+              : "Wird nach jedem Gespräch neu erzeugt und liegt unter „Dokumente“ zum Unterschreiben. Sobald das Formular von AVOCONS unter „Dokumente“ liegt, wird es im Original ausgefüllt."
+            : "Entsteht aus den Gesprächen mit UE."}
           {missing.length > 0 && <> Im Kopf fehlt noch: {missing.join(", ")} (unter <Link href="?tab=stammdaten" className="link">Stammdaten</Link>).</>}
         </p>
       </div>
-      {counted.length > 0 && <a href={`/api/dokumentation/${coacheeId}`} target="_blank" className="btn-ghost btn-sm"><Icon name="doc" className="size-4" /> PDF ansehen</a>}
+      {formSheets.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {formSheets.map((d) => {
+            const n = d.generated.replace("avocons_doku_", "");
+            return (
+              <a key={n} href={`/api/dokumentation/${coacheeId}?blatt=${n}`} target="_blank" className="btn-ghost btn-sm">
+                <Icon name="doc" className="size-4" /> Blatt {n}{d.signature === "unterschrieben" && " ✓"}
+              </a>
+            );
+          })}
+        </div>
+      ) : (
+        counted.length > 0 && <a href={`/api/dokumentation/${coacheeId}`} target="_blank" className="btn-ghost btn-sm"><Icon name="doc" className="size-4" /> PDF ansehen</a>
+      )}
     </section>
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
       <div className="card space-y-4 lg:sticky lg:top-20 lg:self-start">
