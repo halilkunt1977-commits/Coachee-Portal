@@ -5,6 +5,11 @@ import type { Coachee } from "@/lib/access";
 import { DOC_CATEGORIES, compareWithPortal, isReport, reportTotal, type ReportRow } from "@/lib/documents";
 import { query } from "@/lib/db";
 import { PARSER_VERSION, reparseDocument } from "@/lib/documents-text";
+import { importTarget } from "@/lib/bp/apply-import";
+import { financeIsEmpty } from "@/lib/bp/finance";
+import { planIsEmpty } from "@/lib/bp/sections";
+import { financeTouched, planFor } from "@/lib/bp/store";
+import { ImportDocumentButton } from "../bp/ImportButtons";
 import { ConfirmButton } from "../ConfirmButton";
 import { Empty, Notice, formatDate, formatUnits } from "../ui";
 import { EditDocument, ImportRows, UploadForm } from "./Forms";
@@ -30,6 +35,14 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
     ),
     query<Att>("SELECT id, to_char(held_on, 'YYYY-MM-DD') AS held_on, units::float AS units, to_char(starts_at, 'HH24:MI') AS starts_at FROM attendance WHERE coachee_id = $1", [c.id]),
   ]);
+  // Gründung: Word-Businessplan und Excel-Finanzplan lassen sich in den Plan im Portal übernehmen
+  const importable = c.coaching_type === "gruendung" && docs.some((d) => importTarget(d.category, d.name));
+  const plan = importable ? await planFor(c) : null;
+  const filled = plan ? { plan: !planIsEmpty(plan.sections, plan.glance), finance: financeTouched(plan) && !financeIsEmpty(plan.finance) } : null;
+  const doneText = (target: "plan" | "finance", id: string) => {
+    const imp = plan?.imports[target];
+    return imp?.document === id ? `Übernommen am ${formatDate(imp.at)}` : null;
+  };
   const groups = DOC_CATEGORIES.map((cat) => ({ ...cat, docs: docs.filter((d) => d.category === cat.key) })).filter((g) => g.docs.length);
 
   return (
@@ -43,6 +56,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
               {g.docs.map((d) => {
                 const report = isReport(d.category);
                 const cmp = report && d.extracted?.length ? compareWithPortal(d.extracted, attendance) : null;
+                const target = importTarget(d.category, d.name);
                 const ok = cmp && !cmp.differs.length && !cmp.missing.length && !cmp.extra.length;
                 return (
                   <li key={d.id} className="py-2">
@@ -69,6 +83,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                           {!d.signature && <form action={setSignature.bind(null, d.id, "offen")}><button className="btn-ghost btn-sm">Unterschrift nötig</button></form>}
                           <form action={deleteDocument.bind(null, c.id, d.id)}><ConfirmButton /></form>
                         </div>
+                        {filled && target && <ImportDocumentButton coacheeId={c.id} docId={d.id} target={target} filled={filled[target]} done={doneText(target, d.id)} />}
                         <EditDocument coacheeId={c.id} doc={d} />
                         {cmp && <Comparison coacheeId={c.id} docId={d.id} rows={d.extracted!} cmp={cmp} total={reportTotal(d.extracted_text)} />}
                         {report && !cmp && (

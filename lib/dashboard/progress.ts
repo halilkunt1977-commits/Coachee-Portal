@@ -48,16 +48,16 @@ export function cvScore(cv: CvData | null) {
   return clampPct(s);
 }
 
-/** Wie weit der Finanzplan ausgefüllt ist (Kapitalbedarf, Finanzierung, Umsatz, Kosten, privater Bedarf) */
+/** Wie weit der Finanzplan ausgefüllt ist (Investitionen, Finanzierung, Umsatz, Kosten/Personal, privater Bedarf) */
 export function financeScore(raw: unknown) {
   const f = normalizeFinance(raw);
   const r = calculate(f);
   const checks = [
-    f.investments.length > 0 || f.startup.length > 0,
-    f.financing.length > 0 || f.grants.length > 0,
-    f.revenues.length > 0,
-    f.fixed.length > 0,
-    f.privateMonthly > 0,
+    f.investments.length > 0,
+    f.financing.length > 0 || f.grants.length > 0 || f.openingCash > 0,
+    f.revenues.some((r) => r.price > 0 && r.qty.some((q) => q > 0)),
+    f.costs.length > 0 || f.staff.length > 0,
+    f.privateDraw.some((x) => x > 0),
   ];
   const done = checks.filter(Boolean).length;
   return { pct: clampPct((done / checks.length) * 100), done, total: checks.length, liquid: f.revenues.length > 0 && r.minBalance.value >= 0 && r.gap >= 0 };

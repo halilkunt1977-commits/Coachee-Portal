@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/busines
   if (c.coaching_type !== "gruendung") return new NextResponse("Nicht gefunden", { status: 404 });
   const plan = await planFor(c);
   const coach = await one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]);
-  const html = renderPlanHtml(plan.sections, plan.finance, {
+  const html = renderPlanHtml(plan.sections, plan.glance, plan.finance, {
     title: plan.title,
     name: fullName(c),
     email: c.email,

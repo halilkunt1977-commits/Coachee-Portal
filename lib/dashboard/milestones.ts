@@ -6,7 +6,7 @@ export type MilestoneState = Milestone & { done: boolean; done_on: string | null
 
 export const MILESTONES: Record<"job" | "gruendung", Milestone[]> = {
   gruendung: [
-    { key: "idee", label: "Geschäftsidee beschrieben", action: "Geschäftsidee beschreiben", hint: "Kapitel „Geschäftsidee und Angebot“ im Businessplan", auto: true },
+    { key: "idee", label: "Geschäftsidee beschrieben", action: "Geschäftsidee beschreiben", hint: "Kapitel „Geschäftsidee“ im Businessplan", auto: true },
     { key: "businessplan", label: "Businessplan fertig", action: "Businessplan fertig schreiben", hint: "Alle Kapitel geschrieben", auto: true },
     { key: "finanzplan", label: "Finanzplan steht", action: "Finanzplan vervollständigen", hint: "Kapitalbedarf, Finanzierung, Umsatz, Kosten und privater Bedarf", auto: true },
     { key: "tragfaehigkeit_beantragt", label: "Tragfähigkeitsbescheinigung beantragt", action: "Tragfähigkeitsbescheinigung beantragen", hint: "Bei einer fachkundigen Stelle, z. B. IHK, HWK, Steuerberatung oder Gründungsberatung" },

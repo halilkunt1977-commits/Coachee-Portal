@@ -41,12 +41,35 @@ export function Num({ label, value, onChange, suffix, digits = 2, className = ""
   );
 }
 
-export function Text({ label, value, onChange, placeholder, className = "" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; className?: string }) {
+export function Text({ label, value, onChange, placeholder, className = "", max = 120, list }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; className?: string; max?: number; list?: string }) {
   return (
     <label className={`block min-w-0 ${className}`}>
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
-      <input className="input !py-2" value={value} maxLength={120} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input className="input !py-2" value={value} maxLength={max} placeholder={placeholder} list={list} onChange={(e) => onChange(e.target.value)} />
     </label>
+  );
+}
+
+/** Kleines Zahlenfeld für Monatsmengen; zeigt beim Tippen den eigenen Text, sonst den Wert */
+export function QtyInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      className={`input !px-1.5 !py-1.5 text-center text-sm tabular-nums ${value ? "font-semibold" : "text-muted"}`}
+      inputMode="decimal"
+      aria-label={label}
+      value={draft ?? (value ? fmt(value, 2) : "0")}
+      onFocus={(e) => {
+        setDraft(value ? String(value).replace(".", ",") : "");
+        requestAnimationFrame(() => e.target.select());
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const n = parseDe(e.target.value);
+        if (n !== null && n >= 0) onChange(n);
+      }}
+      onBlur={() => setDraft(null)}
+    />
   );
 }
 

@@ -8,6 +8,7 @@ import { DOC_CATEGORIES, DOC_TYPES, MAX_DOC_BYTES, categoryLabel, extOf, extract
 import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { afterFormFiled } from "@/lib/doku/store";
 import { removeFile, storeFile } from "@/lib/files";
+import { autoImportDocument } from "@/lib/bp/apply-import";
 import { text, type FormState } from "@/lib/forms";
 
 const refresh = (coacheeId: string) => {
@@ -35,14 +36,16 @@ export async function uploadDocument(coacheeId: string, fd: FormData): Promise<{
   const category = validCategory(chosen) ? chosen : byName !== "sonstiges" ? byName : (guessCategoryFromText(plain) ?? "sonstiges");
   const rows = isReport(category) && plain ? extractReportRows(plain) : null;
   const title = file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[_]+/g, " ").trim().slice(0, 200) || file.name;
-  await query(
-    "INSERT INTO documents (coachee_id, file_id, category, title, extracted, extracted_text, created_by, parser_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+  const doc = await one<{ id: string }>(
+    "INSERT INTO documents (coachee_id, file_id, category, title, extracted, extracted_text, created_by, parser_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
     [c.id, fileId, category, title, rows ? JSON.stringify(rows) : null, plain || null, coach.id, PARSER_VERSION],
   );
   await audit(coach.id, "document_uploaded", c.id, { category, name: file.name.slice(0, 120) });
+  // Businessplan (.docx) oder Finanzplan (.xlsx) einer Gründung: übernehmen, solange der Plan im Portal noch leer ist
+  const imported = await autoImportDocument(coach, c, { id: doc!.id, category, name: file.name }, data);
   after(() => afterFormFiled(c.id, file.name, coach.id));
   refresh(c.id);
-  return { ok: `${file.name}: als ${categoryLabel(category)} gespeichert${rows?.length ? `, ${rows.length} Termine erkannt` : ""}.`, category, rows: rows?.length ?? 0 };
+  return { ok: `${file.name}: als ${categoryLabel(category)} gespeichert${rows?.length ? `, ${rows.length} Termine erkannt` : ""}.${imported ? ` ${imported}` : ""}`, category, rows: rows?.length ?? 0 };
 }
 
 async function ownDocument(coachId: string, coacheeId: string, id: string) {
