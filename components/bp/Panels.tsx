@@ -1,15 +1,17 @@
-import type { Coachee } from "@/lib/access";
+import { fullName, type Coachee } from "@/lib/access";
 import { aiEnabled } from "@/lib/ai";
 import type { User } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { financeItems, planFor } from "@/lib/bp/store";
+import { financeIsEmpty, keyFigures } from "@/lib/bp/finance";
+import { planIsEmpty } from "@/lib/bp/sections";
+import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { FinanceEditor } from "./FinanceEditor";
 import { PlanEditor } from "./PlanEditor";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
 
-const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, excel: `/api/businessplan/${id}/excel` });
+const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, word: `/api/businessplan/${id}/word`, excel: `/api/businessplan/${id}/excel` });
 
 export async function PlanPanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
   const plan = await planFor(c);
@@ -22,29 +24,36 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
     ),
   ]);
   const names = Object.fromEntries(users.map((u) => [u.id, u.id === user.id ? "dir" : u.name]));
+  const coach = user.role === "coach";
   return (
     <PlanEditor
       coacheeId={c.id}
-      coach={user.role === "coach"}
-      firstName={c.first_name}
+      coach={coach}
+      name={fullName(c)}
       title={plan.title}
       sections={plan.sections}
+      glance={plan.glance}
+      figures={financeIsEmpty(plan.finance) ? null : keyFigures(plan.finance)}
       names={names}
       bausteine={bausteine}
       categoryLabels={Object.fromEntries(GRUENDUNG_CATEGORIES.map((k) => [k.key, k.label]))}
-      ai={aiEnabled() && user.role === "coach"}
+      ai={aiEnabled() && coach}
       pdfHref={files(c.id).pdf}
+      wordHref={files(c.id).word}
       financeHref={links.finance}
+      imported={coach && plan.imports.plan ? { name: plan.imports.plan.name, at: plan.imports.plan.at } : null}
+      filled={!planIsEmpty(plan.sections, plan.glance) || (financeTouched(plan) && !financeIsEmpty(plan.finance))}
     />
   );
 }
 
 export async function FinancePanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
   const [plan, items] = await Promise.all([planFor(c), financeItems(c.id)]);
+  const coach = user.role === "coach";
   return (
     <FinanceEditor
       coacheeId={c.id}
-      coach={user.role === "coach"}
+      coach={coach}
       initial={plan.finance}
       version={plan.finance_version}
       prefilled={plan.prefilled}
@@ -53,6 +62,8 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
       pdfHref={files(c.id).pdf}
       planHref={links.plan}
       zahlenHref={links.zahlen}
+      imported={coach && plan.imports.finance ? { name: plan.imports.finance.name, at: plan.imports.finance.at } : null}
+      filled={financeTouched(plan) && !financeIsEmpty(plan.finance)}
     />
   );
 }

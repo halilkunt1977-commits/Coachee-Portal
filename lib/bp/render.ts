@@ -1,214 +1,210 @@
-import { FINANCING_KIND, LIQ_ROWS, RENTA_ROWS, calculate, eur, financeHints, monthLabel, type FinanceInput } from "./finance";
-import { SECTIONS, type Sections } from "./sections";
+import { MONTHS, calculate, eur, financeIsEmpty, keyFigures, liquidityRows, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange, type FinanceInput } from "./finance";
+import { parseInline, parseMarkdown, type Run } from "./markdown";
+import { SECTIONS, sourceList, type GlanceItem, type Sections } from "./sections";
 
 /*
- * Der ganze Businessplan als druckfertiges HTML für das PDF: Deckblatt, Inhalt, Textabschnitte, Finanzplan.
- * Die Liquidität steht auf Querformat-Seiten. Platzhalter in [eckigen Klammern] werden markiert, damit nichts
- * Unfertiges unbemerkt eingereicht wird.
+ * Der ganze Businessplan als druckfertiges HTML für das PDF, aufgebaut wie Halils Vorlage: Deckblatt,
+ * Titel mit Inhaltsverzeichnis, „Auf einen Blick“ mit Kennzahlen, Kapitel 1 bis 14 im Blocksatz mit Quellen.
+ * Dahinter folgt als Anhang der Finanzplan; die Liquidität steht auf Querformat-Seiten.
+ * Platzhalter in [eckigen Klammern] werden markiert, damit nichts Unfertiges unbemerkt eingereicht wird.
  */
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c] as string);
+const mark = (s: string) => s.replace(/\[([^\]\n]{1,80})\]/g, "<mark>[$1]</mark>");
 
-const cssText = (s: string) => s.replace(/[\\"]/g, "\\$&").replace(/[<>\n]/g, " ");
-
-function inline(s: string) {
-  return esc(s)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]\n]{1,80})\]/g, '<mark>[$1]</mark>');
+function runs(rs: Run[]) {
+  return rs
+    .map((r) => {
+      let t = mark(esc(r.text));
+      if (r.link) t = `<a href="${esc(r.link)}">${t}</a>`;
+      if (r.bold) t = `<strong>${t}</strong>`;
+      if (r.italic) t = `<em>${t}</em>`;
+      return t;
+    })
+    .join("");
 }
 
-/** Kleines Markdown: Absätze, Listen, Zwischenüberschriften, fett, kursiv */
+/** Kapiteltext (Markdown) als HTML */
 export function mdToHtml(text: string) {
-  const out: string[] = [];
-  for (const block of text.replace(/\r/g, "").split(/\n{2,}/)) {
-    const lines = block.split("\n").filter((l) => l.trim());
-    if (!lines.length) continue;
-    if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) out.push(`<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*[-*•]\s+/, ""))}</li>`).join("")}</ul>`);
-    else if (lines.every((l) => /^\s*\d+[.)]\s+/.test(l))) out.push(`<ol>${lines.map((l) => `<li>${inline(l.replace(/^\s*\d+[.)]\s+/, ""))}</li>`).join("")}</ol>`);
-    else if (lines.length === 1 && /^#{1,6}\s/.test(lines[0])) out.push(`<h3>${inline(lines[0].replace(/^#+\s*/, ""))}</h3>`);
-    else {
-      // gemischter Block: Listenzeilen innerhalb eines Absatzes trotzdem als Liste
-      let para: string[] = [];
-      let list: string[] = [];
-      const flush = () => {
-        if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`);
-        if (list.length) out.push(`<ul>${list.map((l) => `<li>${inline(l)}</li>`).join("")}</ul>`);
-        para = [];
-        list = [];
-      };
-      for (const l of lines) {
-        if (/^\s*[-*•]\s+/.test(l)) {
-          if (para.length) flush();
-          list.push(l.replace(/^\s*[-*•]\s+/, ""));
-        } else if (/^#{1,6}\s/.test(l)) {
-          flush();
-          out.push(`<h3>${inline(l.replace(/^#+\s*/, ""))}</h3>`);
-        } else {
-          if (list.length) flush();
-          para.push(l);
-        }
-      }
-      flush();
-    }
-  }
-  return out.join("\n");
+  return parseMarkdown(text)
+    .map((b) => {
+      if (b.type === "heading") return `<h4>${runs(b.runs)}</h4>`;
+      if (b.type === "para") return `<p>${b.lines.map(runs).join("<br>")}</p>`;
+      if (b.type === "list") return `<${b.ordered ? "ol" : "ul"}>${b.items.map((i) => `<li>${runs(i)}</li>`).join("")}</${b.ordered ? "ol" : "ul"}>`;
+      const [first, ...rest] = b.rows;
+      return `<table class="tbl"><thead><tr>${first.map((c) => `<th>${runs(c)}</th>`).join("")}</tr></thead><tbody>${rest.map((r) => `<tr>${r.map((c) => `<td>${runs(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    })
+    .join("\n");
 }
+
+const plainTable = (rows: string[][], cls = "tbl") =>
+  `<table class="${cls}"><thead><tr>${rows[0].map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 
 type Meta = { title: string; name: string; email: string; phone: string | null; coach: string; date: string };
 
-export function renderPlanHtml(sections: Sections, finance: FinanceInput, meta: Meta, fontCss: string) {
+export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string) {
   const r = calculate(finance);
-  const hasFinance = finance.revenues.length + finance.investments.length + finance.financing.length + finance.fixed.length > 0;
-  const num = (i: number) => i + 1;
-  const fin = SECTIONS.length + 1;
+  const hasFinance = !financeIsEmpty(finance);
+  const figures = hasFinance ? plainTable(keyFigures(finance, r), "tbl figures") : "";
 
-  const sectionHtml = SECTIONS.map((s, i) => {
-    const t = sections[s.key]?.text.trim();
-    return `<section class="sec"><h2><span>${num(i)}</span>${esc(s.title)}</h2>${t ? mdToHtml(t) : `<p class="missing">Dieser Abschnitt ist noch nicht geschrieben.</p>`}</section>`;
+  const toc = SECTIONS.map((s) => `<li>${esc(s.title)}</li>`).join("");
+  const glanceHtml = glance
+    .filter((g) => g.label.trim() && g.value.trim())
+    .map((g) => `<p class="glance"><strong>${esc(g.label)}:</strong><br>${mark(esc(g.value)).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+  const chapters = SECTIONS.map((s, i) => {
+    const sec = sections[s.key];
+    const t = sec?.text.trim();
+    const src = sourceList(sec?.sources ?? "");
+    return `<section class="chapter"><h2>${i + 1}. ${esc(s.title)}</h2>${t ? mdToHtml(t) : `<p class="missing">Dieses Kapitel ist noch nicht geschrieben.</p>`}${s.key === "finanzen" ? figures : ""}${
+      src.length ? `<h4 class="src">Quellen</h4>${src.map((q) => `<p class="source">${runs(parseInline(q))}</p>`).join("")}` : ""
+    }</section>`;
   }).join("\n");
-
-  const money = (n: number) => `<td class="n">${esc(eur(n))}</td>`;
-  const capRows = [
-    ...finance.investments.map((x) => `<tr><td>${esc(x.label || "Anschaffung")}<small>${x.years ? ` · Abschreibung über ${x.years} Jahre` : " · sofort abgeschrieben"}</small></td>${money(x.amount)}</tr>`),
-    ...finance.startup.map((x) => `<tr><td>${esc(x.label || "Gründungskosten")}<small> · Gründungskosten</small></td>${money(x.amount)}</tr>`),
-    ...(finance.reserve ? [`<tr><td>Liquiditätsreserve</td>${money(finance.reserve)}</tr>`] : []),
-  ].join("");
-  const finRows = finance.financing
-    .map((x) => `<tr><td>${esc(x.label || FINANCING_KIND[x.kind])}<small> · ${FINANCING_KIND[x.kind]}${x.kind === "darlehen" ? `, ${x.rate.toLocaleString("de-DE")} % Zins, ${x.years} Jahre, ${x.grace} Monate tilgungsfrei` : ""}</small></td>${money(x.amount)}</tr>`)
-    .join("");
-  const grantRows = finance.grants.map((g) => `<tr><td>${esc(g.label)}<small> · ab ${monthLabel(finance.start, g.from)} für ${g.months} Monate</small></td>${money(g.monthly)}</tr>`).join("");
-  const revRows = finance.revenues
-    .map((x) => `<tr><td>${esc(x.label)}<small> · ${esc(eur(x.price, 2))} je ${esc(x.unit)}, ${x.qtyStart.toLocaleString("de-DE")} → ${x.qtyTarget.toLocaleString("de-DE")} pro Monat in ${x.ramp} Monaten${x.material ? `, ${x.material.toLocaleString("de-DE")} % Wareneinsatz` : ""}</small></td>${money(x.price * x.qtyTarget)}</tr>`)
-    .join("");
-  const fixedRows = finance.fixed.map((x) => `<tr><td>${esc(x.label)}${x.from ? `<small> · ab ${monthLabel(finance.start, x.from)}</small>` : ""}</td>${money(x.monthly)}</tr>`).join("");
-
-  const renta = `<table class="grid"><thead><tr><th></th><th class="n">Jahr 1</th><th class="n">Jahr 2</th><th class="n">Jahr 3</th></tr></thead><tbody>${RENTA_ROWS.map(
-    (row) => `<tr class="${row.strong ? "sum" : ""}"><td><i>${row.sign ?? ""}</i>${esc(row.label)}</td>${r.years.map((y) => `<td class="n${row.strong && row.value(y) < 0 ? " neg" : ""}">${esc(eur(row.value(y)))}</td>`).join("")}</tr>`,
-  ).join("")}</tbody></table>`;
-
-  const liq = [0, 1, 2]
-    .map((y) => {
-      const ms = r.months.slice(y * 12, y * 12 + 12);
-      return `<h3>Liquiditätsplan Jahr ${y + 1}</h3><table class="grid liq"><thead><tr><th></th>${ms.map((_, i) => `<th class="n">${monthLabel(finance.start, y * 12 + i)}</th>`).join("")}</tr></thead><tbody>${LIQ_ROWS.map(
-        (row) => `<tr class="${row.strong ? "sum" : ""}${row.group ? " grp" : ""}"><td><i>${row.sign ?? ""}</i>${esc(row.label)}</td>${ms.map((m) => {
-          const v = row.value(m);
-          return `<td class="n${v < 0 && row.strong ? " neg" : ""}${v === 0 && !row.strong ? " zero" : ""}">${esc(Math.round(v).toLocaleString("de-DE"))}</td>`;
-        }).join("")}</tr>`,
-      ).join("")}</tbody></table>`;
-    })
-    .join("");
-
-  const hints = financeHints(finance, r);
-  const box = (label: string, value: string, warn = false) => `<div class="kpi${warn ? " warn" : ""}"><span>${label}</span><b>${esc(value)}</b></div>`;
-
-  const financeHtml = hasFinance
-    ? `<section class="sec fin">
-  <h2><span>${fin}</span>Finanzplan</h2>
-  <p class="lead">Alle Beträge netto in Euro. Planungsbeginn ${monthLabel(finance.start, 0)}, Betrachtung über 36 Monate.</p>
-  <div class="kpis">
-    ${box("Kapitalbedarf", eur(r.capitalNeed.total))}
-    ${box("Finanzierung", eur(r.financingTotal), r.gap < 0)}
-    ${box("Gewinn Jahr 1", eur(r.years[0].profit), r.years[0].profit < 0)}
-    ${box("Gewinn Jahr 3", eur(r.years[2].profit), r.years[2].profit < 0)}
-    ${box("Nötiger Monatsumsatz", eur(r.breakEvenRevenue))}
-    ${box("Niedrigster Kontostand", eur(r.minBalance.value), r.minBalance.value < 0)}
-  </div>
-  <h3>${fin}.1 Kapitalbedarf</h3>
-  <table class="list"><tbody>${capRows || `<tr><td class="missing">Noch kein Kapitalbedarf eingetragen.</td><td></td></tr>`}<tr class="sum"><td>Summe Kapitalbedarf</td>${money(r.capitalNeed.total)}</tr></tbody></table>
-  <h3>${fin}.2 Finanzierung</h3>
-  <table class="list"><tbody>${finRows || `<tr><td class="missing">Noch keine Finanzierung eingetragen.</td><td></td></tr>`}<tr class="sum"><td>Summe Finanzierung</td>${money(r.financingTotal)}</tr><tr class="${r.gap < 0 ? "neg" : ""}"><td>${r.gap < 0 ? "Unterdeckung" : "Überdeckung"}</td>${money(r.gap)}</tr></tbody></table>
-  ${grantRows ? `<h4>Laufende Zuschüsse im Monat</h4><table class="list"><tbody>${grantRows}</tbody></table>` : ""}
-  <h3>${fin}.3 Umsatz- und Kostenplanung</h3>
-  ${revRows ? `<h4>Umsatz im Monat nach der Anlaufphase</h4><table class="list"><tbody>${revRows}</tbody></table>` : ""}
-  ${fixedRows ? `<h4>Laufende Kosten im Monat</h4><table class="list"><tbody>${fixedRows}<tr class="sum"><td>Summe</td>${money(finance.fixed.reduce((a, x) => a + x.monthly, 0))}</tr></tbody></table>` : ""}
-  <table class="list"><tbody><tr><td>Privater Bedarf im Monat<small> · Lebenshaltung, Krankenversicherung, Vorsorge</small></td>${money(finance.privateMonthly)}</tr><tr><td>Steuerrücklage<small> · vereinfacht vom Gewinn</small></td><td class="n">${finance.taxPct.toLocaleString("de-DE")} %</td></tr></tbody></table>
-  <h3>${fin}.4 Rentabilitätsvorschau</h3>
-  ${renta}
-  ${hints.length ? `<ul class="hints">${hints.map((h) => `<li class="${h.tone}">${esc(h.text)}</li>`).join("")}</ul>` : ""}
-</section>
-<section class="wide">
-  <h2 class="cont"><span>${fin}.5</span>Liquiditätsplan</h2>
-  <p class="lead">Ein- und Auszahlungen je Monat in Euro, Kontostand am Monatsende.</p>
-  ${liq}
-</section>`
-    : "";
-
-  const toc = [...SECTIONS.map((s, i) => `<li><span>${num(i)}</span>${esc(s.title)}</li>`), ...(hasFinance ? [`<li><span>${fin}</span>Finanzplan</li>`] : [])].join("");
 
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Businessplan</title><style>
 ${fontCss}
-@page { size: A4; margin: 22mm 20mm 20mm 22mm;
-  @bottom-left { content: "Businessplan · ${cssText(meta.name)}"; font: 8pt "Source Sans 3", Arial, sans-serif; color: #8a8d94; }
-  @bottom-right { content: "Seite " counter(page) " von " counter(pages); font: 8pt "Source Sans 3", Arial, sans-serif; color: #8a8d94; } }
-@page :first { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
-@page wide { size: A4 landscape; margin: 16mm 14mm 18mm 14mm; }
+@page { size: A4; margin: 25mm 25mm 22mm 25mm;
+  @bottom-right { content: counter(page); font: 8.5pt "Source Sans 3", Arial, sans-serif; color: #7a7a7a; } }
+@page :first { margin: 0; @bottom-right { content: none; } }
+@page wide { size: A4 landscape; margin: 14mm 12mm 16mm 12mm; }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { margin: 0; font-family: "Source Sans 3", Arial, sans-serif; font-size: 10.5pt; line-height: 1.55; color: #16181d; }
-h1, h2, h3 { font-family: "Source Serif 4", Georgia, serif; color: #1f3a5f; break-after: avoid; }
-h2 { font-size: 17pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 1.2pt solid #1f3a5f; display: flex; gap: 3mm; align-items: baseline; }
-h2 span { color: #b88a4a; font-size: 13pt; }
-h3 { font-size: 12pt; margin: 6mm 0 2mm; }
-h4 { font-size: 10pt; margin: 4mm 0 1mm; color: #5d6068; text-transform: uppercase; letter-spacing: .04em; }
-p { margin: 0 0 2.6mm; orphans: 3; widows: 3; }
-/* Fließtext im Blocksatz mit Silbentrennung, wie in eingereichten Businessplänen üblich */
-.sec p, .sec li { text-align: justify; hyphens: auto; }
-ul, ol { margin: 0 0 2.6mm; padding-left: 5mm; }
-li { margin-bottom: .8mm; }
-mark { background: #fbeec8; color: inherit; padding: 0 .5mm; border-radius: 1mm; }
+body { margin: 0; font-family: "Source Sans 3", Aptos, Arial, sans-serif; font-size: 11pt; line-height: 1.32; color: #000; }
+h1, h2, h3, h4 { font-size: 11pt; font-weight: 700; margin: 0; break-after: avoid; }
+p { margin: 0 0 3.6mm; orphans: 3; widows: 3; }
+/* Fließtext im Blocksatz mit Silbentrennung, wie in der Vorlage */
+.chapter p, .chapter li, .glance { text-align: justify; hyphens: auto; }
+a { color: #0000ff; text-decoration: underline; word-break: break-all; }
+ul, ol { margin: 0 0 3.6mm; padding-left: 7mm; }
+li { margin-bottom: 1mm; }
+mark { background: #fbeec8; color: inherit; padding: 0 .5mm; }
 .missing { color: #8a8d94; font-style: italic; }
-.cover { height: 297mm; padding: 34mm 24mm 24mm; display: flex; flex-direction: column; background: #1f3a5f; color: #fff; break-after: page; }
-.cover .kicker { font-size: 10pt; letter-spacing: .18em; text-transform: uppercase; color: #d9b98a; }
-.cover h1 { color: #fff; font-size: 34pt; line-height: 1.12; margin: 6mm 0 8mm; max-width: 150mm; }
-.cover .who { font-size: 13pt; line-height: 1.5; }
-.cover .who b { font-size: 16pt; display: block; }
-.cover .foot { margin-top: auto; border-top: .6pt solid rgba(255,255,255,.35); padding-top: 5mm; font-size: 9.5pt; color: #c9d3e0; display: flex; justify-content: space-between; }
-.toc { break-after: page; }
-.toc ol { list-style: none; padding: 0; margin: 6mm 0 0; }
-.toc li { display: flex; gap: 4mm; padding: 2.4mm 0; border-bottom: .5pt solid #e8e4dc; font-size: 12pt; }
-.toc li span { color: #b88a4a; font-weight: 600; width: 8mm; }
-.sec { break-before: page; }
-.sec + .sec:not(.fin) { break-before: auto; margin-top: 10mm; }
-.fin { break-before: page; }
-.lead { color: #5d6068; }
-table { border-collapse: collapse; width: 100%; margin-bottom: 3mm; }
-td, th { padding: 1.4mm 2mm; vertical-align: top; }
-.list td { border-bottom: .5pt solid #e8e4dc; }
-.list td small { color: #5d6068; font-size: 8.8pt; }
-td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-tr.sum td { font-weight: 700; border-top: 1pt solid #1f3a5f; background: #e7edf4; }
-.neg, tr.neg td, td.neg { color: #a33a2c; }
-.grid th { font-size: 8.8pt; color: #fff; background: #1f3a5f; font-weight: 600; }
-.grid td { border-bottom: .5pt solid #e8e4dc; }
-.grid td i { display: inline-block; width: 4mm; color: #8a8d94; font-style: normal; }
-.liq { font-size: 7.6pt; table-layout: fixed; }
-.liq td, .liq th { padding: 1mm 1.2mm; }
-.liq td:first-child, .liq th:first-child { width: 58mm; }
-.liq tr.grp td { border-top: 1pt solid #c5d0dd; }
-.liq td.zero { color: #b3b6bc; }
-.liq { break-inside: avoid; }
-.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 4mm 0 2mm; }
-.kpi { border: .6pt solid #dcd7cd; border-radius: 2mm; padding: 2.6mm 3mm; break-inside: avoid; }
-.kpi span { display: block; font-size: 8.5pt; color: #5d6068; }
-.kpi b { font-size: 13pt; font-variant-numeric: tabular-nums; }
-.kpi.warn b { color: #a33a2c; }
-.hints { list-style: none; padding: 0; margin-top: 4mm; }
-.hints li { padding-left: 5mm; position: relative; }
-.hints li::before { position: absolute; left: 0; content: "✓"; color: #2f6b45; }
-.hints li.warn::before { content: "!"; color: #a33a2c; font-weight: 700; }
+/* Deckblatt nach der Vorlage: blauer Verlauf, weiße Karte mit dunkelblauem Titelfeld und Akzentbalken */
+.cover { height: 297mm; position: relative; background: linear-gradient(180deg, #c7e6f6 0%, #8fcdeb 45%, #47b0e0 100%); break-after: page; }
+.card { position: absolute; left: 45.5%; width: 36%; top: 9mm; height: 196mm; background: #fff; border: .6pt solid #7f7f7f; padding: 3mm; display: flex; flex-direction: column; }
+.card .navy { background: #0e2841; height: 80mm; display: flex; align-items: flex-end; padding: 0 6mm 9mm; }
+.card .navy span { color: #fff; font-size: 25pt; line-height: 1.1; }
+.card .who { padding: 21mm 4mm 0; color: #0e2841; font-size: 14pt; line-height: 1.35; }
+.card .who small { display: block; font-size: 10.5pt; margin-top: 3mm; color: #156082; }
+.card .bar { margin-top: auto; margin-bottom: 7mm; height: 3.4mm; background: #156082; }
+.card .date { position: absolute; bottom: 2.5mm; left: 4mm; right: 4mm; font-size: 8.5pt; color: #595959; }
+.front { break-after: page; }
+.front .t1 { margin-bottom: 4mm; }
+.front .t3 { margin: 9mm 0 4mm; }
+.toc { padding-left: 9mm; margin: 0; }
+.toc li { margin: 0 0 2.4mm; padding-left: 2mm; }
+.blick { break-after: page; }
+.blick h2 { margin-bottom: 8mm; }
+.glance { margin-bottom: 5.5mm; }
+.chapter h2 { margin: 8mm 0 4mm; }
+.chapter:first-of-type h2 { margin-top: 0; }
+.chapter h4 { margin: 5mm 0 2.6mm; }
+.chapter h4.src { margin-top: 6mm; }
+.source { text-align: left !important; margin-bottom: 2.6mm; }
+table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside: avoid; }
+.tbl th, .tbl td { border: .5pt solid #b7b7b7; padding: 1.4mm 2mm; font-size: 9pt; text-align: left; vertical-align: middle; }
+.tbl th { font-weight: 700; }
+.figures td:not(:first-child), .figures th:not(:first-child) { text-align: right; }
+.annex { break-before: page; }
+.annex h2 { font-size: 13pt; margin-bottom: 1mm; }
+.annex h3 { font-size: 11pt; margin: 6mm 0 2mm; color: #1f4e78; }
+.lead { color: #595959; font-size: 9.5pt; }
+.fin th, .fin td { font-size: 8.6pt; padding: 1.1mm 1.6mm; border-bottom: .5pt solid #d9d9d9; text-align: left; vertical-align: top; }
+.fin th { background: #1f4e78; color: #fff; font-weight: 600; }
+.fin td.n, .fin th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fin tr.sum td { background: #e2f0d9; font-weight: 700; }
+.fin tr.sub td { background: #e7e6e6; font-weight: 700; }
+.fin tr.grp td { font-weight: 700; padding-top: 2mm; border-bottom: none; }
+.fin td.neg { color: #c00000; }
 .wide { page: wide; break-before: page; }
-.wide h3 { margin-top: 3mm; }
-.wide h3 + table { margin-bottom: 4mm; }
-.cont { font-size: 15pt; }
+.liq { table-layout: fixed; }
+.liq th, .liq td { font-size: 7.2pt; padding: .8mm 1mm; }
+.liq td:first-child, .liq th:first-child { width: 52mm; }
+.liq th.m { background: #d9eaf7; color: #000; }
 </style></head><body>
 <div class="cover">
-  <div class="kicker">Businessplan</div>
-  <h1>${esc(meta.title || "Mein Gründungsvorhaben")}</h1>
-  <div class="who"><b>${esc(meta.name)}</b>${esc(meta.email)}${meta.phone ? `<br>${esc(meta.phone)}` : ""}</div>
-  <div class="foot"><span>Stand ${esc(meta.date)}</span><span>Erstellt im Gründungscoaching mit ${esc(meta.coach)} · gründarium</span></div>
+  <div class="card">
+    <div class="navy"><span>Businessplan</span></div>
+    <div class="who">${esc(meta.name)}${meta.title ? `<small>${esc(meta.title)}</small>` : ""}</div>
+    <div class="bar"></div>
+    <div class="date">Stand ${esc(meta.date)}</div>
+  </div>
 </div>
-<div class="toc"><h2>Inhalt</h2><ol>${toc}</ol></div>
-${sectionHtml}
-${financeHtml}
+<div class="front">
+  <h1 class="t1">BUSINESSPLAN – ${esc(meta.name)}</h1>
+  ${meta.title ? `<h1>${esc(meta.title)}</h1>` : ""}
+  <h1 class="t3">Inhaltsverzeichnis</h1>
+  <ol class="toc">${toc}</ol>
+</div>
+<div class="blick">
+  <h2>Auf einen Blick</h2>
+  ${glanceHtml || `<p class="missing">Noch keine Angaben.</p>`}
+  ${figures}
+</div>
+${chapters}
+${hasFinance ? financeAnnex(finance, r) : ""}
 </body></html>`;
+}
+
+// ---------- Anhang Finanzplan ----------
+
+function financeAnnex(f: FinanceInput, r: ReturnType<typeof calculate>) {
+  const n = (v: number) => `<td class="n${v < -0.005 ? " neg" : ""}">${esc(Math.abs(v) < 0.005 ? "–" : eur(v))}</td>`;
+  const yearsHead = `<tr><th></th>${[0, 1, 2].map((y) => `<th class="n">Jahr ${y + 1}</th>`).join("")}</tr>`;
+  const over = `<table class="fin"><thead>${yearsHead}</thead><tbody>${overviewRows(f).map((row) => `<tr class="${row.tone ?? ""}"><td>${esc(row.label)}</td>${r.years.map((y) => n(row.value(y))).join("")}</tr>`).join("")}</tbody></table>`;
+  const assumptions = `<table class="fin"><thead><tr><th>Annahme</th>${[0, 1, 2].map((y) => `<th class="n">Jahr ${y + 1}</th>`).join("")}<th>Herleitung / Hinweis</th></tr></thead><tbody>
+    <tr><td>Planungszeitraum</td>${[0, 1, 2].map((y) => `<td class="n">${yearRange(f.start, y)}</td>`).join("")}<td>${esc(f.notes.period)}</td></tr>
+    <tr><td>Materialquote</td>${f.materialPct.map((p) => `<td class="n">${pct(p)}</td>`).join("")}<td>${esc(f.notes.material)}</td></tr>
+    <tr><td>Anfangsliquidität</td>${n(f.openingCash)}<td></td><td></td><td>${esc(f.notes.opening)}</td></tr>
+    <tr><td>Private Entnahmen im Monat</td>${f.privateDraw.map(n).join("")}<td>${esc(f.notes.private)}</td></tr>
+    ${f.taxPct ? `<tr><td>Steuerrücklage</td><td class="n">${pct(f.taxPct)}</td><td></td><td></td><td>${esc(f.notes.tax)}</td></tr>` : ""}
+  </tbody></table>`;
+  const costs = f.costs.length
+    ? `<h3>Kostenherleitung (€ im Monat)</h3><table class="fin"><thead><tr><th>Kostenart</th>${[1, 2, 3].map((y) => `<th class="n">Jahr ${y}</th>`).join("")}<th>Zuordnung</th><th>Herleitung</th></tr></thead><tbody>${f.costs
+        .map((c) => `<tr><td>${esc(c.label)}${c.from ? ` <span class="lead">(ab ${monthLabel(f.start, c.from)})</span>` : ""}</td>${c.monthly.map(n).join("")}<td>${esc(c.category)}</td><td>${esc(c.note)}</td></tr>`)
+        .join("")}<tr class="sum"><td>Summe laufende Kosten</td>${[0, 1, 2].map((y) => n(f.costs.reduce((a, c) => a + c.monthly[y], 0))).join("")}<td></td><td></td></tr></tbody></table>`
+    : "";
+  const inv = f.investments.length
+    ? `<h3>Investitionsplan</h3><table class="fin"><thead><tr><th>Investition</th><th class="n">Betrag</th><th class="n">Nutzung</th><th class="n">AfA/Monat</th><th class="n">Zahlung</th><th>Begründung</th></tr></thead><tbody>${f.investments
+        .map((i) => `<tr><td>${esc(i.label)}</td>${n(i.amount)}<td class="n">${i.life ? `${i.life} Mon.` : "sofort"}</td>${n(i.life ? i.amount / i.life : 0)}<td class="n">${monthLabel(f.start, i.month)}</td><td>${esc([i.reason, i.note].filter(Boolean).join(" · "))}</td></tr>`)
+        .join("")}<tr class="sum"><td>Gesamtinvestition</td>${n(r.capitalNeed.investments)}<td></td>${n(f.investments.reduce((a, i) => a + (i.life ? i.amount / i.life : 0), 0))}<td></td><td></td></tr></tbody></table>`
+    : "";
+  const staff = f.staff.length
+    ? `<h3>Personalplan</h3><table class="fin"><thead><tr><th>Position</th><th class="n">Start</th><th class="n">Brutto</th><th class="n">AG-Anteil</th><th class="n">Gesamt/Monat</th><th>Herleitung</th></tr></thead><tbody>${f.staff
+        .map((s) => `<tr><td>${esc(s.label)}</td><td class="n">${monthLabel(f.start, s.start)}</td>${n(s.gross)}<td class="n">${pct(s.surcharge)}</td>${n(staffCost(s))}<td>${esc(s.note)}</td></tr>`)
+        .join("")}</tbody></table>`
+    : "";
+  const fin = f.financing.length + f.grants.length
+    ? `<h3>Finanzierung</h3><table class="fin"><tbody>${f.financing.map((x) => `<tr><td>${esc(x.label)} <span class="lead">(${x.kind === "darlehen" ? `Darlehen, ${x.rate.toLocaleString("de-DE")} % Zins, ${x.years} Jahre, ${x.grace} Monate tilgungsfrei` : x.kind === "zuschuss" ? "Zuschuss" : "Eigenkapital"}, ${monthLabel(f.start, x.month)})</span></td>${n(x.amount)}</tr>`).join("")}${f.grants
+        .map((g) => `<tr><td>${esc(g.label)} <span class="lead">(${eur(g.monthly)} im Monat ab ${monthLabel(f.start, g.from)} für ${g.months} Monate)</span></td>${n(g.monthly * g.months)}</tr>`)
+        .join("")}</tbody></table>`
+    : "";
+  const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
+  const revenue = f.revenues.length
+    ? `<h3>Umsatzherleitung</h3><table class="fin"><thead><tr><th>Leistungsart</th><th class="n">Ø Preis netto</th>${[1, 2, 3].map((y) => `<th class="n">Menge J${y}</th><th class="n">Umsatz J${y}</th>`).join("")}</tr></thead><tbody>${f.revenues
+        .map((x) => `<tr><td>${esc(x.label)}${x.description ? `<br><span class="lead">${esc(x.description)}</span>` : ""}</td>${n(x.price)}${[0, 1, 2].map((y) => {
+          const q = sum(x.qty.slice(y * 12, y * 12 + 12));
+          return `<td class="n">${q.toLocaleString("de-DE", { maximumFractionDigits: 1 })}</td>${n(q * x.price)}`;
+        }).join("")}</tr>`)
+        .join("")}<tr class="sum"><td>Jahresumsatz</td><td></td>${r.years.map((y) => `<td></td>${n(y.revenue)}`).join("")}</tr></tbody></table>`
+    : "";
+  const renta = rentaRows(r, f);
+  const yearTables = (title: string, rows: { label: string; value: (m: (typeof r.months)[number]) => number; tone?: string; group?: string }[], opening: boolean) =>
+    [0, 1, 2]
+      .map((y) => {
+        const ms = r.months.slice(y * 12, y * 12 + 12);
+        return `<h3>${title} Jahr ${y + 1} (${yearRange(f.start, y)})</h3><table class="fin liq"><thead><tr><th class="m">${opening ? `Anfangsbestand ${esc(eur(ms[0].opening))}` : "Position"}</th>${ms.map((_, i) => `<th class="n m">${monthLabel(f.start, y * 12 + i)}</th>`).join("")}</tr></thead><tbody>${rows
+          .map((row) => `${row.group ? `<tr class="grp"><td colspan="13">${esc(row.group)}</td></tr>` : ""}<tr class="${row.tone ?? ""}"><td>${esc(row.label)}</td>${ms.map((m) => n(row.value(m))).join("")}</tr>`)
+          .join("")}</tbody></table>`;
+      })
+      .join("");
+  return `<section class="annex">
+  <h2>Anhang: Finanzplan</h2>
+  <p class="lead">Alle Beträge netto in Euro. Planungszeitraum ${yearRange(f.start, 0).split("–")[0]} bis ${monthLabel(f.start, MONTHS - 1)}, Betrachtung über 36 Monate.</p>
+  <h3>Annahmen</h3>${assumptions}
+  <h3>Rentabilität Übersicht</h3>${over}
+  ${revenue}${costs}${inv}${staff}${fin}
+</section>
+<section class="wide">${yearTables("Rentabilitätsvorschau", renta, false)}</section>
+<section class="wide">${yearTables("Liquiditätsplanung", liquidityRows(f), true)}</section>`;
 }

@@ -153,3 +153,6 @@ body {
 .scroll-soft { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Vorschau der Businessplan-Kapitel im Blocksatz wie im fertigen Plan */
+.bp-text p, .bp-text li { text-align: justify; hyphens: auto; }
