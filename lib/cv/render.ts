@@ -22,7 +22,7 @@ export function tint(hex: string, amount: number) {
   return `#${[n >> 16, (n >> 8) & 255, n & 255].map((c) => mix(c).toString(16).padStart(2, "0")).join("")}`;
 }
 
-type Opts = { template: TemplateKey; color: string; photo: string | null; fontCss: string };
+type Opts = { template: TemplateKey; color: string; photo: string | null; fontCss: string; signature?: string | null };
 type Ctx = { d: CvData; o: Opts; c: string; p: CvData["personal"]; name: string };
 
 // ---------- Bausteine ----------
@@ -89,7 +89,7 @@ const mainSections = (d: CvData) =>
 
 function signature(x: Ctx) {
   if (!x.d.signature) return "";
-  return `<div class="signature"><div><p>${x.d.place ? `${esc(x.d.place)}, ${today()}` : "&nbsp;"}</p><span>Ort, Datum</span></div><div><p>&nbsp;</p><span>Unterschrift</span></div></div>`;
+  return `<div class="signature"><div><p>${x.d.place ? `${esc(x.d.place)}, ${today()}` : "&nbsp;"}</p><span>Ort, Datum</span></div><div><p>${x.o.signature && x.d.signatureImage ? `<img src="${esc(x.o.signature)}" alt="Unterschrift">` : "&nbsp;"}</p><span>Unterschrift</span></div></div>`;
 }
 
 const BASE = (o: Opts) => `
@@ -124,6 +124,8 @@ section { margin-bottom: 6mm; }
 .tags span { padding: .6mm 2.4mm; border-radius: 3mm; font-size: 9pt; }
 .signature { margin-top: 10mm; display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; break-inside: avoid; max-width: 140mm; }
 .signature p { border-bottom: .3mm solid #9aa0a8; padding-bottom: 1mm; min-height: 9mm; display: flex; align-items: flex-end; }
+.signature > div { display: flex; flex-direction: column; justify-content: flex-end; }
+.signature p img { display: block; max-height: 16mm; max-width: 62mm; margin-bottom: -1.5mm; }
 .signature span { display: block; font-size: 8pt; color: #6b717a; margin-top: 1mm; }
 `;
 

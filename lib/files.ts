@@ -13,7 +13,7 @@ const fileFor = (id: string) => path.join(dir(), `${id}.bin`);
 
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-export async function storeFile(f: { coacheeId: string; kind: "foto" | "cv_vorlage" | "dokument"; name: string; mime: string; data: Buffer; userId: string }) {
+export async function storeFile(f: { coacheeId: string; kind: "foto" | "cv_vorlage" | "dokument" | "unterschrift"; name: string; mime: string; data: Buffer; userId: string }) {
   const row = await one<{ id: string }>("INSERT INTO files (coachee_id, kind, name, mime, size, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", [f.coacheeId, f.kind, f.name.slice(0, 200), f.mime, f.data.length, f.userId]);
   await mkdir(dir(), { recursive: true });
   await writeFile(fileFor(row!.id), encryptBuffer(f.data));
