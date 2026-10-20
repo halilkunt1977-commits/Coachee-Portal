@@ -34,6 +34,7 @@ npm run dev                  # http://localhost:3000
 | Aufgaben für Coach (eigene und die aller Coachees) und Coachee, nach Dringlichkeit sortiert | `app/coach/aufgaben`, `app/mein-bereich/aufgaben`, `components/tasks`, `app/actions/aufgaben.ts` |
 | Dateien (Fotos, hochgeladene Lebensläufe) verschlüsselt im Volume | `lib/files.ts`, `app/api/dateien/[id]` |
 | Wer welche Akte sehen darf (eine Stelle für alle Prüfungen) | `lib/access.ts` |
+| Datensicherung: jede Nacht 02:30 Uhr und auf Knopfdruck alle Tabellen (ein einheitlicher Stand) und alle Dateien, verschlüsselt (AES-256-GCM), 14 Tage / 8 Wochen / 6 Monate aufbewahrt, Kopie in einen S3-Speicher außer Haus, Warnung und Handy-Meldung bei Problemen, Wiederherstellung per Skript. Details: `docs/datensicherung.md` | `app/coach/datensicherung`, `lib/backup`, `scripts/restore.mjs`, `app/api/datensicherung` |
 | Datenbank-Änderungen | `migrations/*.sql`, eingespielt von `scripts/migrate.mjs` bei jedem Start |
 
 ## Sicherheit und Datenschutz
@@ -56,8 +57,8 @@ npm run dev                  # http://localhost:3000
 
 ## Einrichten in Coolify
 
-1. **Datenbank:** Neue Ressource → PostgreSQL 16, Name z. B. `portal-db`. Unter „Backups“ tägliche Sicherung auf einen
-   S3-Speicher außerhalb des Servers einschalten (z. B. Hetzner Storage Box oder Object Storage).
+1. **Datenbank:** Neue Ressource → PostgreSQL 16, Name z. B. `portal-db`. Die Sicherung von Datenbank und Dateien
+   macht das Portal selbst (siehe Schritt 4 und `docs/datensicherung.md`); die Coolify-Sicherung der Datenbank darf zusätzlich an sein.
 2. **App:** Neue Ressource → Anwendung aus GitHub `coachee-portal`, Build Pack **Dockerfile**, Port **3000**.
 3. **Domain:** `https://portal.gruendarium.de`. Die Subdomain ist beim Domain-Anbieter angelegt; ihr A-Eintrag muss auf
    den Coolify-Server zeigen (dieselbe IP wie gruendarium.de, wenn die Seite schon dort läuft).
@@ -74,7 +75,11 @@ npm run dev                  # http://localhost:3000
    erteilen“. Unter „Zertifikate & Geheimnisse“ einen geheimen Clientschlüssel anlegen. Dann in Coolify `MS_TENANT_ID`
    (Verzeichnis-ID), `MS_CLIENT_ID` (Anwendungs-ID), `MS_CLIENT_SECRET` (Wert des Schlüssels) und `MS_CALENDAR_USER`
    (die Microsoft-365-Mailadresse, in deren Kalender die Termine sollen). Das Postfach braucht eine Teams-Lizenz.
-5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
+   Für die Datensicherung `BACKUP_KEY` (`openssl rand -hex 32`) und für die Kopie außer Haus `S3_ENDPOINT`, `S3_REGION`,
+   `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` (optional `S3_PREFIX`), z. B. Hetzner Object Storage, Backblaze B2 oder
+   IONOS S3. `APP_SECRET` und `BACKUP_KEY` zusätzlich im Passwort-Manager ablegen, sonst sind Sicherungen nach einem
+   Serverausfall wertlos. Anleitung und Wiederherstellung: `docs/datensicherung.md`.
+5. **Speicher:** persistentes Volume auf `/app/data` (für Fotos und hochgeladene Lebensläufe, verschlüsselt). Dort liegen auch die Sicherungen (`backups/`). Ohne Volume gehen die Dateien bei jedem Deploy verloren.
 6. **Erster Zugang:** nach dem ersten Deploy im Coolify-Terminal der App
 
    ```bash

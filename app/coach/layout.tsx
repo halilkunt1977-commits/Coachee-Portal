@@ -7,7 +7,7 @@ import { coachNav } from "@/lib/nav";
 export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
   const user = await requireCoach();
   const [counts, active] = await Promise.all([
-    query<{ mails: number; unread: number; tasks: number; today: number; inbox: number; leads: number }>(
+    query<{ mails: number; unread: number; tasks: number; today: number; inbox: number; leads: number; backup: number }>(
       `SELECT (SELECT count(*) FROM attendance_mails WHERE coach_id = $1 AND status = 'offen')::int AS mails,
               (SELECT count(*) FROM tasks t LEFT JOIN coachees c ON c.id = t.coachee_id
                 WHERE (t.owner_id = $1 OR (c.coach_id = $1 AND c.archived_at IS NULL)) AND t.done_at IS NULL AND t.due_on <= (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS tasks,
@@ -15,7 +15,9 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
                 AND (a.starts_at AT TIME ZONE 'Europe/Berlin')::date = (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS today,
               (SELECT count(*) FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' AND read_at IS NULL)::int AS inbox,
               (SELECT count(*) FROM leads WHERE coach_id = $1 AND status IN ('neu','kontaktiert') AND follow_up_on <= (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS leads,
-              (SELECT count(*) FROM messages m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1)::int AS unread`,
+              (SELECT count(*) FROM messages m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1)::int AS unread,
+              -- Hinweis im Menü, wenn die letzte gelungene Datensicherung älter als 26 Stunden ist
+              (SELECT CASE WHEN EXISTS (SELECT 1 FROM backup_runs WHERE status = 'ok' AND finished_at > now() - interval '26 hours') THEN 0 ELSE 1 END)::int AS backup`,
       [user.id],
     ),
     query<{ id: string; name: string; type: string; unread: number }>(

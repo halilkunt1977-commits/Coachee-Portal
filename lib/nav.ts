@@ -4,7 +4,7 @@ import type { IconName } from "@/components/shell/icons";
 export type NavItem = { href: string; label: string; icon: IconName; exact?: boolean; badge?: number };
 export type NavGroup = { label?: string; items: NavItem[] };
 
-export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; today?: number; inbox?: number; leads?: number } = {}): NavGroup[] => [
+export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; today?: number; inbox?: number; leads?: number; backup?: number } = {}): NavGroup[] => [
   {
     items: [
       { href: "/coach", label: "Dashboard", icon: "grid", exact: true },
@@ -18,6 +18,7 @@ export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; t
     ],
   },
   { label: "Schnell", items: [{ href: "/coach/neu", label: "Neuer Coachee", icon: "plus" }] },
+  { label: "System", items: [{ href: "/coach/datensicherung", label: "Datensicherung", icon: "shield", badge: b.backup }] },
 ];
 
 export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number } = {}): NavGroup[] => [
