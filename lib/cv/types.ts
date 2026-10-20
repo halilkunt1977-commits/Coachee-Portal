@@ -103,3 +103,31 @@ export const TIPS = {
   languages: "Ehrlich einstufen: Muttersprache, C2 bis A1 oder Grundkenntnisse.",
   interests: "Zwei bis drei Interessen, die etwas über dich verraten, zum Beispiel Ehrenamt oder Mannschaftssport.",
 };
+
+/** Angaben aus den Stammdaten, an die Lebensläufe und Anschreiben eines Coachees gebunden sind */
+export type PersonalLock = { firstName: string; lastName: string; email: string; phone: string; birthDate: string };
+
+/** Höchstzahl an Lebensläufen, die ein Coachee selbst anlegen kann (der Coach darf mehr) */
+export const MAX_COACHEE_CVS = 3;
+
+/**
+ * Coachees: Name, E-Mail, Telefon und Geburtsdatum kommen immer aus den Stammdaten, damit das Portal nur für die
+ * eigene Bewerbung genutzt wird. E-Mail, Telefon und Geburtsdatum lassen sich ausblenden (leeres Feld), aber nicht ändern.
+ */
+export function lockPersonal(data: CvData, lock: PersonalLock): CvData {
+  const shown = (v: string, master: string) => (v.trim() ? master : "");
+  return {
+    ...data,
+    personal: {
+      ...data.personal,
+      firstName: lock.firstName,
+      lastName: lock.lastName,
+      email: shown(data.personal.email, lock.email),
+      phone: shown(data.personal.phone, lock.phone),
+      birthDate: shown(data.personal.birthDate, lock.birthDate),
+    },
+  };
+}
+
+/** YYYY-MM-DD → TT.MM.JJJJ */
+export const germanDate = (iso: string | null | undefined) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "");

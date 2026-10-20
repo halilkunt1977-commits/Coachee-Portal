@@ -24,6 +24,8 @@ import { upcomingAppointments, type Appointment } from "@/lib/calendar/store";
 import { BruttoNetto } from "@/components/dashboard/BruttoNetto";
 import { JobTips, JobTipsSkeleton } from "@/components/dashboard/JobTips";
 import { GruenderWissen, HebesatzCard } from "@/components/dashboard/Gruender";
+import { FoerderCard, FoerderWahl } from "@/components/handbuch/FoerderCard";
+import { FOERDERUNGEN } from "@/lib/handbuch/foerderung";
 import { findeHebesatz } from "@/lib/tax/hebesaetze";
 import { BUNDESLAENDER, type Bundesland } from "@/lib/tax/lohnsteuer";
 
@@ -37,6 +39,24 @@ function NextStep({ label, hint, href }: { label: string; hint: string; href: st
         <span className="block truncate text-xs text-night/70">{hint}</span>
       </span>
       <span className="transition group-hover:translate-x-1"><Icon name="arrow" /></span>
+    </Link>
+  );
+}
+
+/** Einstieg ins Handbuch: wie ein Buchrücken, mit dem Hinweis, dass es auch nach dem Coaching bleibt */
+function HandbookTeaser({ closed, gruendung }: { closed: boolean; gruendung: boolean }) {
+  return (
+    <Link href="/mein-bereich/handbuch" className="card card-hover group flex items-center gap-4 !p-4 sm:!p-5">
+      <span aria-hidden className="relative grid h-16 w-12 shrink-0 place-items-center rounded-r-lg rounded-l-sm bg-gradient-to-br from-[#16325a] to-[#0a1628] shadow-[0_10px_20px_-10px_rgba(10,22,40,.8)]">
+        <span className="absolute inset-y-0 left-0 w-1.5 rounded-l-sm bg-black/30" />
+        <span className="font-[family-name:var(--font-display)] text-lg font-extrabold text-[#e2bd7d]">G</span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="eyebrow block !text-gold">Mein Handbuch</span>
+        <span className="block font-[family-name:var(--font-display)] text-lg leading-tight font-bold">{closed ? "Dein Leitfaden für die Zeit nach dem Coaching" : "Dein Leitfaden für nach dem Coaching"}</span>
+        <span className="block text-sm text-muted">{gruendung ? "Förderung, Anmeldungen, Versicherungen, Steuertermine und Kontakte" : "Bewerbungsroutine, Vorstellungsgespräch, Probezeit, Meldepflichten und Kontakte"}. Zum Abhaken und als PDF.</span>
+      </span>
+      <span className="text-accent transition group-hover:translate-x-1"><Icon name="arrow" /></span>
     </Link>
   );
 }
@@ -98,6 +118,7 @@ export default async function MyArea() {
     attendance: "#gespraeche",
   };
   const openTasks = tasks.filter((t) => !t.done_at).length;
+  const closed = c.status === "abgeschlossen";
   const next = progress.milestones.find((m) => !m.done);
   const STEP_LINK: Record<string, string> = {
     idee: links.plan, businessplan: links.plan, finanzplan: links.finance, lebenslauf: links.cv, erfahrung: links.survey,
@@ -123,8 +144,9 @@ export default async function MyArea() {
               </h1>
               <p className="text-white/70">
                 {typeLabel[c.coaching_type]} mit {coach?.name ?? "deinem Coach"}
-                {c.end_date ? ` · bis ${formatDate(c.end_date)}` : ""}
+                {closed ? " · abgeschlossen" : c.end_date ? ` · bis ${formatDate(c.end_date)}` : ""}
               </p>
+              {closed && <p className="max-w-xl text-sm text-white/70">Dein Portal bleibt für dich da: Lebenslauf, {c.coaching_type === "gruendung" ? "Businessplan, Finanzplan" : "Stellen, Bewerbungen"}, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.</p>}
             </div>
             <div className="flex flex-wrap items-stretch gap-3">
               <div className="glass flex items-center gap-4 py-3 pr-5 pl-3">
@@ -136,14 +158,14 @@ export default async function MyArea() {
                   <p className="font-semibold">{progress.milestones.filter((m) => m.done).length} von {progress.milestones.length} Etappen</p>
                 </div>
               </div>
-              {progress.units.rest != null && (
+              {progress.units.rest != null && !closed && (
                 <div className="glass flex flex-col justify-center px-5 py-3">
                   <p className="text-xs text-white/55">Noch für dich</p>
                   <p className="font-[family-name:var(--font-display)] text-2xl font-bold tabular-nums">{progress.units.rest.toLocaleString("de-DE", { maximumFractionDigits: 1 })} <span className="text-sm font-medium text-white/60">Einheiten</span></p>
                 </div>
               )}
             </div>
-            {next && (
+            {next && !closed && (
               <NextStep label={next.action} hint={next.hint} href={nextHref} />
             )}
             <div className="flex flex-wrap gap-2 text-sm">
@@ -170,6 +192,8 @@ export default async function MyArea() {
       </section>
       <AppSetup publicKey={await pushPublicKey()} what="bei Nachrichten, Aufgaben und Terminen von deinem Coach" compact />
 
+      {closed && <HandbookTeaser closed gruendung={c.coaching_type === "gruendung"} />}
+
       <PartsGrid p={progress} links={links} overall={false} />
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
@@ -191,11 +215,20 @@ export default async function MyArea() {
           <BruttoNetto defaultLand={defaultLand} />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr] lg:items-start">
-          <HebesatzCard city={progress.city} action={setCoacheeCity.bind(null, c.id)} />
-          <GruenderWissen />
-        </div>
+        <>
+          {c.foerderart === "gruendungszuschuss" || c.foerderart === "einstiegsgeld" ? (
+            <FoerderCard info={FOERDERUNGEN[c.foerderart]} handbookHref="/mein-bereich/handbuch#foerderung" />
+          ) : c.foerderart !== "sonstiges" ? (
+            <FoerderWahl handbookHref="/mein-bereich/handbuch#foerderung" />
+          ) : null}
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr] lg:items-start">
+            <HebesatzCard city={progress.city} action={setCoacheeCity.bind(null, c.id)} />
+            <GruenderWissen />
+          </div>
+        </>
       )}
+
+      {!closed && <HandbookTeaser closed={false} gruendung={c.coaching_type === "gruendung"} />}
 
       {docs.length > 0 && (
         <section className="card space-y-3">

@@ -220,13 +220,13 @@ export function LetterEditor(p: Props) {
             <Field label="Anlagen" hint="eine pro Zeile" rows={3} {...field("attachments")} />
           </Card>
 
-          <Card title="Absender" hint="Aus dem neuesten Lebenslauf. Fehlt etwas, am besten dort ergänzen.">
-            <Field label="Name" {...field("senderName")} />
+          <Card title="Absender" hint={p.coach ? "Aus dem neuesten Lebenslauf. Fehlt etwas, am besten dort ergänzen." : "Name, Telefon und E-Mail kommen aus deinen Daten. Die Adresse aus deinem neuesten Lebenslauf."}>
+            <Field label="Name" {...field("senderName")} locked={!p.coach} />
             <Field label="Straße und Hausnummer" {...field("senderStreet")} />
             <Field label="PLZ und Ort" {...field("senderCity")} />
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Telefon" {...field("senderPhone")} />
-              <Field label="E-Mail" {...field("senderEmail")} />
+              <Field label="Telefon" {...field("senderPhone")} locked={!p.coach} />
+              <Field label="E-Mail" {...field("senderEmail")} locked={!p.coach} />
             </div>
           </Card>
 
@@ -287,8 +287,16 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
 }
 
 /** Eingabefeld mit „zurücksetzen“, sobald es vom automatischen Wert abweicht */
-function Field({ label, value, onChange, auto, onReset, hint, rows, placeholder }: { label: string; value: string; onChange: (v: string) => void; auto: string; onReset: () => void; hint?: string; rows?: number; placeholder?: string }) {
+function Field({ label, value, onChange, auto, onReset, hint, rows, placeholder, locked }: { label: string; value: string; onChange: (v: string) => void; auto: string; onReset: () => void; hint?: string; rows?: number; placeholder?: string; locked?: boolean }) {
   const changed = value !== auto;
+  if (locked) {
+    return (
+      <label className="block min-w-0">
+        <span className="label">{label} <span className="font-normal text-muted">(aus deinen Daten)</span></span>
+        <input className="input cursor-not-allowed bg-surface-2 text-muted" value={auto} readOnly />
+      </label>
+    );
+  }
   return (
     <label className="block min-w-0">
       <span className="label flex items-baseline justify-between gap-2">

@@ -13,6 +13,10 @@ export type Coachee = {
   phone: string | null;
   coaching_type: "job" | "gruendung";
   funding: "avgs" | "selbstzahler" | "sonstiges";
+  /** Nur bei Gründungen: womit die Gründung gefördert wird (null = noch nicht ausgewählt) */
+  foerderart: "gruendungszuschuss" | "einstiegsgeld" | "sonstiges" | null;
+  /** Geburtsdatum (YYYY-MM-DD); steht so in Lebenslauf und Anschreiben */
+  birth_date: string | null;
   voucher_number: string | null;
   measure_type: string | null;
   start_date: string | null;
@@ -51,4 +55,5 @@ export async function ownCoachee(user: User) {
 export const fullName = (c: { first_name: string; last_name: string }) => `${c.first_name} ${c.last_name}`;
 export const typeLabel = { job: "Jobcoaching", gruendung: "Gründungscoaching" } as const;
 export const fundingLabel = { avgs: "AVGS", selbstzahler: "Selbstzahler", sonstiges: "Sonstiges" } as const;
+export const foerderartLabel = { gruendungszuschuss: "Gründungszuschuss (Agentur für Arbeit)", einstiegsgeld: "Einstiegsgeld (Jobcenter)", sonstiges: "Ohne Förderung / Sonstiges" } as const;
 export const statusLabel = { aktiv: "Aktiv", pausiert: "Pausiert", abgeschlossen: "Abgeschlossen" } as const;

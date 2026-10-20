@@ -223,3 +223,14 @@ export function findCoachee(text: string, coachees: { id: string; first_name: st
   const bySurname = coachees.filter((c) => called.some((n) => namesMatch(n, "", c.last_name)));
   return bySurname.length === 1 ? bySurname[0].id : null;
 }
+
+/**
+ * Förderart einer Gründung aus Projektvertrag oder Startmail: Gründungszuschuss (Agentur für Arbeit, ALG I)
+ * oder Einstiegsgeld (Jobcenter). Nur eindeutige Stichworte; im Zweifel bleibt das Feld leer.
+ */
+export function foerderartOf(text: string): "gruendungszuschuss" | "einstiegsgeld" | null {
+  const gz = /gr[üu]ndungszuschuss|§\s*93\s*SGB\s*III/i.test(text);
+  const esg = /einstiegsgeld|§\s*16b\s*SGB\s*II\b|§\s*16c\s*SGB\s*II\b/i.test(text);
+  if (gz !== esg) return gz ? "gruendungszuschuss" : "einstiegsgeld";
+  return null;
+}

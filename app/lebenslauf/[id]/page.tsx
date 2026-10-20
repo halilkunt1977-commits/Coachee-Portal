@@ -2,7 +2,7 @@ import { CvEditor } from "@/components/cv/CvEditor";
 import { aiEnabled } from "@/lib/ai";
 import { fullName } from "@/lib/access";
 import { audit, requireUser } from "@/lib/auth";
-import { cvFor } from "@/lib/cv/store";
+import { cvFor, personalLockOf } from "@/lib/cv/store";
 import { signatureId } from "@/lib/signature";
 
 export const metadata = { title: "Lebenslauf bearbeiten" };
@@ -23,6 +23,7 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
       ai={aiEnabled() && coach}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=lebenslauf` : "/mein-bereich/lebenslauf"}
       backLabel={coach ? fullName(coachee) : "Meine Lebensläufe"}
+      locked={coach ? null : personalLockOf(coachee)}
     />
   );
 }

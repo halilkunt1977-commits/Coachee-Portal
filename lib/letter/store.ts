@@ -2,7 +2,8 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { coacheeFor, type Coachee } from "../access";
 import type { User } from "../auth";
-import { normalizeCv, type CvData } from "../cv/types";
+import { lockPersonal, normalizeCv, type CvData } from "../cv/types";
+import { personalLockOf } from "../cv/store";
 import { one } from "../db";
 import { getApplication } from "../jobs/store";
 import type { Application } from "../jobs/shared";
@@ -19,16 +20,29 @@ export async function letterFor(user: User, applicationId: string) {
   if (coachee.coaching_type !== "job") notFound();
   const app = (await getApplication(coachee.id, applicationId))!;
   const cv = await one<{ data: unknown; color: string }>("SELECT data, color FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 1", [coachee.id]);
-  const data = cv ? normalizeCv(cv.data) : null;
+  const own = user.role !== "coach";
+  const data = cv ? (own ? lockPersonal(normalizeCv(cv.data), personalLockOf(coachee)) : normalizeCv(cv.data)) : null;
+  const auto = autoLetter(coachee, app, data);
+  const stored = normalizeStoredLetter(row.letter);
+  if (own) {
+    // Coachees schreiben Anschreiben nur in eigenem Namen: Absendername und Kontakt kommen aus den Stammdaten
+    auto.senderName = `${coachee.first_name} ${coachee.last_name}`;
+    auto.senderEmail = coachee.email;
+    auto.senderPhone = coachee.phone ?? "";
+    if (stored) for (const k of SENDER_LOCKED) delete stored.fields[k];
+  }
   return {
     app,
     coachee,
-    stored: normalizeStoredLetter(row.letter),
-    auto: autoLetter(coachee, app, data),
+    stored,
+    auto,
     // Farbe des neuesten Lebenslaufs, damit Anschreiben und Lebenslauf zusammenpassen
     color: cv && /^#[0-9a-f]{6}$/i.test(cv.color) ? cv.color : "#1f3a5f",
   };
 }
+
+/** Absenderfelder, die Coachees nicht selbst ändern können */
+export const SENDER_LOCKED = ["senderName", "senderEmail", "senderPhone"] as const;
 
 export const berlinDate = () => new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
 

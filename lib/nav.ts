@@ -42,6 +42,7 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
   {
     label: "Meine Unterlagen",
     items: [
+      { href: "/mein-bereich/handbuch", label: "Mein Handbuch", icon: "book" },
       { href: "/mein-bereich/lebenslauf", label: "Lebenslauf", icon: "idcard" },
       { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "doc" },
     ],

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { improveWithAi, removePhoto, saveCv, skillsFromProfile, uploadPhoto, type AiField } from "@/app/actions/lebenslauf";
 import { renderCvHtml } from "@/lib/cv/render";
-import { COLORS, TEMPLATES, TIPS, type CvData, type CvPhoto, type TemplateKey } from "@/lib/cv/types";
+import { COLORS, TEMPLATES, TIPS, type CvData, type CvPhoto, type PersonalLock, type TemplateKey } from "@/lib/cv/types";
 import { CvPreview } from "./CvPreview";
 import { PhotoDialog } from "./PhotoDialog";
 import { SignatureField } from "./SignatureField";
@@ -17,6 +17,8 @@ type Props = {
   ai: boolean;
   backHref: string;
   backLabel: string;
+  /** Coachee: Name und Kontakt kommen aus den Stammdaten und lassen sich nur ein- oder ausblenden */
+  locked?: PersonalLock | null;
 };
 
 type SaveState = { kind: "saved" | "dirty" | "saving" | "error" | "conflict"; at?: string; by?: string | null; message?: string };
@@ -26,7 +28,7 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const LEVELS = ["ohne Stufe", "Grundkenntnisse", "Erweitert", "Gut", "Sehr gut", "Experte"];
 const LANGUAGE_LEVELS = ["Muttersprache", "Verhandlungssicher", "Fließend", "Gute Kenntnisse", "Grundkenntnisse", "C2", "C1", "B2", "B1", "A2", "A1"];
 
-export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel }: Props) {
+export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null }: Props) {
   const [name, setName] = useState(initial.name);
   const [template, setTemplate] = useState<TemplateKey>(initial.template);
   const [color, setColor] = useState(initial.color);
@@ -222,16 +224,35 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
               </div>
               {template === "schlicht" && photoUrl && <p className="w-full text-xs text-muted">Das Design „Schlicht“ zeigt bewusst kein Foto.</p>}
             </div>
+            {locked && <p className="rounded-xl bg-tint px-3 py-2 text-xs text-accent">Name, E-Mail, Telefon und Geburtsdatum kommen aus deinen Daten. Du kannst sie ein- oder ausblenden. Ändern kannst du Telefon und Geburtsdatum unter „Meine Daten“ auf der Seite „Mein Lebenslauf“.</p>}
             <Grid>
-              <In label="Vorname" value={data.personal.firstName} onChange={(v) => setPersonal("firstName", v)} autoComplete="given-name" />
-              <In label="Nachname" value={data.personal.lastName} onChange={(v) => setPersonal("lastName", v)} autoComplete="family-name" />
+              {locked ? (
+                <>
+                  <Fixed label="Vorname" value={locked.firstName} />
+                  <Fixed label="Nachname" value={locked.lastName} />
+                </>
+              ) : (
+                <>
+                  <In label="Vorname" value={data.personal.firstName} onChange={(v) => setPersonal("firstName", v)} autoComplete="given-name" />
+                  <In label="Nachname" value={data.personal.lastName} onChange={(v) => setPersonal("lastName", v)} autoComplete="family-name" />
+                </>
+              )}
             </Grid>
             <AiHelp cvId={cvId} ai={ai} field="headline" data={data} value={data.personal.headline} onApply={(v) => setPersonal("headline", v)}>
               <In label="Berufsbezeichnung oder Wunschposition" value={data.personal.headline} onChange={(v) => setPersonal("headline", v)} placeholder="z. B. Fachkraft für Lagerlogistik" />
             </AiHelp>
             <Grid>
-              <In label="E-Mail" type="email" value={data.personal.email} onChange={(v) => setPersonal("email", v)} autoComplete="email" />
-              <In label="Telefon" type="tel" value={data.personal.phone} onChange={(v) => setPersonal("phone", v)} autoComplete="tel" />
+              {locked ? (
+                <>
+                  <Fixed label="E-Mail" value={locked.email} shown={Boolean(data.personal.email)} onShow={(on) => setPersonal("email", on ? locked.email : "")} />
+                  <Fixed label="Telefon" value={locked.phone} shown={Boolean(data.personal.phone)} onShow={(on) => setPersonal("phone", on ? locked.phone : "")} />
+                </>
+              ) : (
+                <>
+                  <In label="E-Mail" type="email" value={data.personal.email} onChange={(v) => setPersonal("email", v)} autoComplete="email" />
+                  <In label="Telefon" type="tel" value={data.personal.phone} onChange={(v) => setPersonal("phone", v)} autoComplete="tel" />
+                </>
+              )}
             </Grid>
             <In label="Straße und Hausnummer" value={data.personal.street} onChange={(v) => setPersonal("street", v)} autoComplete="street-address" />
             <div className="grid grid-cols-[7rem_1fr] gap-3">
@@ -239,7 +260,11 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
               <In label="Ort" value={data.personal.city} onChange={(v) => setPersonal("city", v)} autoComplete="address-level2" />
             </div>
             <Grid>
-              <In label="Geburtsdatum" value={data.personal.birthDate} onChange={(v) => setPersonal("birthDate", v)} placeholder="TT.MM.JJJJ" hint="freiwillig" />
+              {locked ? (
+                <Fixed label="Geburtsdatum" value={locked.birthDate} shown={Boolean(data.personal.birthDate)} onShow={(on) => setPersonal("birthDate", on ? locked.birthDate : "")} />
+              ) : (
+                <In label="Geburtsdatum" value={data.personal.birthDate} onChange={(v) => setPersonal("birthDate", v)} placeholder="TT.MM.JJJJ" hint="freiwillig" />
+              )}
               <In label="Geburtsort" value={data.personal.birthPlace} onChange={(v) => setPersonal("birthPlace", v)} hint="freiwillig" />
               <In label="Nationalität" value={data.personal.nationality} onChange={(v) => setPersonal("nationality", v)} hint="freiwillig" />
               <In label="Führerschein" value={data.personal.license} onChange={(v) => setPersonal("license", v)} placeholder="z. B. B, BE, Stapler" />
@@ -439,6 +464,23 @@ function In({ label, value, onChange, hint, ...rest }: { label: string; value: s
       {label && <span className="label">{label}{hint && <span className="ml-1 font-normal text-muted">({hint})</span>}</span>}
       <input className="input" value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
     </label>
+  );
+}
+
+/** Feld aus den Stammdaten: nur lesen, bei Bedarf im Lebenslauf ein- oder ausblenden */
+function Fixed({ label, value, shown, onShow }: { label: string; value: string; shown?: boolean; onShow?: (on: boolean) => void }) {
+  return (
+    <div className="min-w-0">
+      <span className="label flex items-baseline justify-between gap-2">
+        <span>{label}</span>
+        {onShow && value && (
+          <label className="flex items-center gap-1.5 text-xs font-normal text-muted">
+            <input type="checkbox" checked={shown} onChange={(e) => onShow(e.target.checked)} className="size-3.5 accent-[var(--accent)]" /> zeigen
+          </label>
+        )}
+      </span>
+      <input className={`input cursor-not-allowed bg-surface-2 ${shown === false ? "text-muted line-through" : "text-muted"}`} value={value || "noch nicht eingetragen"} readOnly aria-label={label} />
+    </div>
   );
 }
 
