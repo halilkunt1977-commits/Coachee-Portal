@@ -5,7 +5,7 @@ import { vaultRead, vaultWrite } from "../vault";
 import { namesMatch } from "../attendance/parse";
 import { notify } from "../push";
 import { afterFormFiled } from "../doku/store";
-import { classify, findCoachee, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
+import { classify, findCoachee, foerderartOf, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
 
 /*
  * Mails von Erfolgspfad und AVOCONS aufnehmen und umsetzen:
@@ -127,6 +127,11 @@ export async function applyMail(mailId: string) {
   }
   if ((m.category === "projektvertrag" || m.category === "coachbericht") && coachee) await fileDocuments(m, coachee, applied);
 
+  // Gründung: steht im Vertrag Gründungszuschuss oder Einstiegsgeld, die Förderart vorbelegen (nur wenn noch leer)
+  if (coachee && (m.category === "projektvertrag" || m.category === "coachbericht")) {
+    const art = foerderartOf(`${m.subject}\n${ownPart(m.body)}`);
+    if (art) await query("UPDATE coachees SET foerderart = $2 WHERE id = $1 AND foerderart IS NULL AND coaching_type = 'gruendung'", [coachee.id, art]);
+  }
   if (coachee && !coachee.traeger && (m.source === "avocons" || m.source === "erfolgspfad")) {
     await query("UPDATE coachees SET traeger = $2 WHERE id = $1 AND traeger IS NULL", [coachee.id, m.source]);
   }

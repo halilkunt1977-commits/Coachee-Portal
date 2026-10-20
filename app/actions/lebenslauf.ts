@@ -8,8 +8,8 @@ import { one, query } from "@/lib/db";
 import { IMAGE_TYPES, storeFile } from "@/lib/files";
 import { text, type FormState } from "@/lib/forms";
 import { extractCvText, parseCvText } from "@/lib/cv/import";
-import { cvFor, cvFromAkte, dropFileIfUnused, profileSkills } from "@/lib/cv/store";
-import { emptyCv, isTemplate, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
+import { cvFor, cvFromAkte, dropFileIfUnused, personalLockOf, profileSkills } from "@/lib/cv/store";
+import { MAX_COACHEE_CVS, emptyCv, isTemplate, lockPersonal, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
 
 const listPath = (user: User, coacheeId: string) => (user.role === "coach" ? `/coach/coachees/${coacheeId}?tab=lebenslauf` : "/mein-bereich/lebenslauf");
 const refresh = (coacheeId: string) => {
@@ -20,9 +20,18 @@ const aiMessage = (e: unknown) => (e instanceof AiError ? e.message : "Das hat g
 
 // ---------- Anlegen, kopieren, löschen ----------
 
+/** Coachees legen höchstens MAX_COACHEE_CVS Lebensläufe an; das Portal ist für die eigene Bewerbung gedacht */
+async function overLimit(user: User, coacheeId: string) {
+  if (user.role === "coach") return false;
+  const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM cvs WHERE coachee_id = $1", [coacheeId]);
+  return (row?.n ?? 0) >= MAX_COACHEE_CVS;
+}
+const LIMIT_TEXT = `Du kannst bis zu ${MAX_COACHEE_CVS} Lebensläufe anlegen. Lösch einen, den du nicht mehr brauchst, oder pass einen bestehenden an.`;
+
 export async function createCv(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
   const c = await coacheeFor(user, coacheeId);
+  if (await overLimit(user, c.id)) return { error: LIMIT_TEXT };
   const start = text(fd, "start", 20);
   const name = text(fd, "name", 120) || "Mein Lebenslauf";
   let data: CvData = start === "leer" ? emptyCv({ firstName: c.first_name, lastName: c.last_name }) : await cvFromAkte(c);
@@ -46,6 +55,7 @@ export async function createCv(coacheeId: string, _prev: FormState, fd: FormData
   }
 
   if (!data.place) data.place = data.personal.city;
+  if (user.role !== "coach") data = lockPersonal(data, personalLockOf(c));
   const row = await one<{ id: string }>(
     "INSERT INTO cvs (coachee_id, name, data, source_file_id, updated_by) VALUES ($1,$2,$3,$4,$5) RETURNING id",
     [c.id, name, JSON.stringify(data), sourceId, user.id],
@@ -58,6 +68,7 @@ export async function createCv(coacheeId: string, _prev: FormState, fd: FormData
 export async function duplicateCv(cvId: string) {
   const user = await requireUser();
   const { cv } = await cvFor(user, cvId);
+  if (await overLimit(user, cv.coachee_id)) redirect(`${listPath(user, cv.coachee_id)}?grenze=1`);
   const row = await one<{ id: string }>(
     "INSERT INTO cvs (coachee_id, name, template, color, data, photo_file_id, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
     [cv.coachee_id, `${cv.name} (Kopie)`.slice(0, 120), cv.template, cv.color, JSON.stringify(cv.data), cv.photo_file_id, user.id],
@@ -84,11 +95,11 @@ export type SaveResult = { ok: true; version: number; savedAt: string } | { ok: 
 
 export async function saveCv(cvId: string, baseVersion: number, input: { name: string; template: string; color: string; data: unknown }): Promise<SaveResult> {
   const user = await requireUser();
-  const { cv } = await cvFor(user, cvId);
+  const { cv, coachee } = await cvFor(user, cvId);
   const name = String(input.name ?? "").trim().slice(0, 120) || cv.name;
   const template = isTemplate(String(input.template)) ? input.template : cv.template;
   const color = /^#[0-9a-f]{6}$/i.test(String(input.color)) ? input.color : cv.color;
-  const data = normalizeCv(input.data);
+  const data = user.role === "coach" ? normalizeCv(input.data) : lockPersonal(normalizeCv(input.data), personalLockOf(coachee));
   // Gleichzeitiges Bearbeiten: nur speichern, wenn niemand anderes inzwischen gespeichert hat
   const row = await one<{ version: number; updated_at: string }>(
     `UPDATE cvs SET name=$3, template=$4, color=$5, data=$6, version=version+1, updated_by=$7, updated_at=now()
@@ -184,4 +195,30 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
     if (!(e instanceof AiError)) console.error("KI-Hilfe Lebenslauf", e);
     return { ok: false, error: aiMessage(e) };
   }
+}
+
+// ---------- Eigene Kontaktdaten (Coachee) ----------
+
+/**
+ * Telefon darf der Coachee selbst ändern. Das Geburtsdatum nur einmal eintragen, danach ändert es der Coach.
+ * Name und E-Mail (zugleich die Anmeldung) ändert nur der Coach. So bleiben Lebensläufe und Anschreiben auf die eigene Person bezogen.
+ */
+export async function updateOwnContact(_prev: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser("coachee");
+  const c = await one<{ id: string; phone: string | null; birth_date: string | null }>("SELECT id, phone, birth_date FROM coachees WHERE user_id = $1", [user.id]);
+  if (!c) return { error: "Für deinen Zugang ist keine Akte angelegt." };
+  const phone = text(fd, "phone", 50).replace(/[^\d+()/ -]/g, "").trim();
+  if (phone && phone.replace(/\D/g, "").length < 6) return { error: "Bitte eine vollständige Telefonnummer eingeben." };
+  let birth = c.birth_date;
+  const raw = text(fd, "birth_date", 10);
+  if (!c.birth_date && raw) {
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(raw) && !Number.isNaN(Date.parse(raw));
+    const year = Number(raw.slice(0, 4));
+    if (!ok || year < 1930 || year > new Date().getFullYear() - 14) return { error: "Bitte ein gültiges Geburtsdatum eingeben." };
+    birth = raw;
+  }
+  await query("UPDATE coachees SET phone = $2, birth_date = $3, updated_at = now() WHERE id = $1", [c.id, phone || null, birth]);
+  await audit(user.id, "contact_updated", c.id, { phone: phone !== (c.phone ?? ""), birth_date: birth !== c.birth_date });
+  refresh(c.id);
+  return { ok: "Gespeichert. Gilt ab jetzt in allen Lebensläufen und Anschreiben." };
 }

@@ -19,7 +19,7 @@ import { aiEnabled } from "@/lib/ai";
 import { MAIL_PROBLEM_TEXT } from "@/lib/mail";
 import { FINANCE_SECTIONS, PERIOD_LABEL, categoriesFor, euro, monthly, type FinanceItem, type ProfileItem } from "@/lib/profile";
 import { Empty, Notice, formatDate, formatDateTime, formatUnits } from "@/components/ui";
-import { coacheeFor, fullName, fundingLabel, statusLabel, typeLabel } from "@/lib/access";
+import { coacheeFor, foerderartLabel, fullName, fundingLabel, statusLabel, typeLabel } from "@/lib/access";
 import { audit, requireCoach } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { unitsUsedSql } from "@/lib/attendance/units";
@@ -35,6 +35,8 @@ import { progressFor, type Links } from "@/lib/dashboard/progress";
 import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
 import type { Coachee } from "@/lib/access";
 import { AkteTermine } from "@/components/calendar/AkteTermine";
+import { HandbookView } from "@/components/handbuch/HandbookView";
+import { handbookFor } from "@/lib/handbuch/store";
 
 type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null; doc_text: string; doc_auto: boolean };
 
@@ -56,6 +58,7 @@ const TABS = [
   { key: "lebenslauf", label: "Lebenslauf", group: "unterlagen" },
   { key: "erfahrung", label: "Erfahrungsbogen", group: "unterlagen" },
   { key: "dokumente", label: "Dokumente", group: "unterlagen" },
+  { key: "handbuch", label: "Handbuch", group: "unterlagen" },
   { key: "stammdaten", label: "Stammdaten", group: "verwaltung" },
   { key: "verlauf", label: "Zugriffe", group: "verwaltung" },
 ] as const;
@@ -88,6 +91,7 @@ const actionLabel: Record<string, string> = {
   attendance_updated: "Anwesenheit geändert", attendance_moved: "Anwesenheit verschoben",
   coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
   appointment_created: "Termin angelegt", appointment_updated: "Termin geändert", appointment_cancelled: "Termin abgesagt", appointment_deleted: "Termin gelöscht",
+  handbook_pdf: "Handbuch als PDF geladen", contact_updated: "Eigene Kontaktdaten geändert",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
 };
 
@@ -138,6 +142,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
             <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight sm:text-3xl">{fullName(c)}</h1>
             <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
               <span className="rounded-full bg-white/15 px-2.5 py-1">{typeLabel[c.coaching_type]}</span>
+              {c.coaching_type === "gruendung" && c.foerderart && <span className="rounded-full bg-gold/90 px-2.5 py-1 text-night">{foerderartLabel[c.foerderart]}</span>}
               <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/75">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
               <span className={`rounded-full px-2.5 py-1 ${done ? "bg-white text-ok" : "bg-white/10 text-white/75"}`}>{done ? "✓ " : ""}{statusLabel[c.status]}</span>
               {account && !account.has_password && <span className="rounded-full bg-gold px-2.5 py-1 text-night">Einladung offen</span>}
@@ -166,7 +171,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
           <Link href="?tab=gespraeche" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="plus" className="size-4" />Gespräch erfassen</Link>
           <Link href="?tab=anwesenheit" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="clock" className="size-4" />Anwesenheit</Link>
           <form action={setCoachingStatus.bind(null, c.id, done ? "aktiv" : "abgeschlossen")} className="ml-auto">
-            <button className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${done ? "bg-white/15 hover:bg-white/25" : "bg-ok/90 hover:bg-ok"}`}>{done ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
+            <button title={done ? undefined : "Der Coachee behält seinen Zugang mit Lebenslauf, Werkzeugen und Handbuch, kostenlos."} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${done ? "bg-white/15 hover:bg-white/25" : "bg-ok/90 hover:bg-ok"}`}>{done ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
           </form>
         </div>
       </section>
@@ -227,6 +232,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "lebenslauf" && <CvList coacheeId={c.id} coach />}
       {tab === "erfahrung" && <SurveyPanel coachee={c} coach />}
       {tab === "assistent" && <AssistantPanel user={coach} coachee={c} chatId={typeof sp.chat === "string" ? sp.chat : null} base={{ chat: "?tab=assistent&chat=", fresh: "?tab=assistent" }} />}
+      {tab === "handbuch" && <AkteHandbook coachee={c} />}
       {tab === "aufgaben" && <Tasks coacheeId={c.id} />}
       {tab === "mails" && <AkteMails coacheeId={c.id} />}
       {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
@@ -585,6 +591,20 @@ async function Zahlen({ coacheeId }: { coacheeId: string }) {
         <h2 className="h2">Position eintragen</h2>
         <FinanceItemForm coacheeId={coacheeId} />
       </aside>
+    </div>
+  );
+}
+
+/** Das Handbuch des Coachees, so wie er es sieht (lesend; abhaken kann nur der Coachee) */
+async function AkteHandbook({ coachee }: { coachee: Coachee }) {
+  const { book, done, total } = await handbookFor(coachee);
+  return (
+    <div className="space-y-4">
+      <Notice>
+        So sieht {coachee.first_name} das Handbuch unter „Mein Handbuch“, auch nach dem Coaching. Die Fassung richtet sich nach Coaching-Art
+        {coachee.coaching_type === "gruendung" ? " und Förderart" : ""} in den Stammdaten. Abhaken kann nur {coachee.first_name}.
+      </Notice>
+      <HandbookView book={book} name={fullName(coachee)} done={done} total={total} coacheeId={coachee.id} editable={false} pdfHref={`/api/handbuch/${coachee.id}/pdf`} embedded />
     </div>
   );
 }

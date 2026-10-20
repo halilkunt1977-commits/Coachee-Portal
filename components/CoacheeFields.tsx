@@ -10,6 +10,7 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
         <Field label="E-Mail" name="email" type="email" defaultValue={c?.email} required hint="Darüber bekommt der Coachee seinen Zugang." />
         <Field label="Telefon" name="phone" type="tel" defaultValue={c?.phone ?? ""} />
         <Field label="Wohnort" name="city" defaultValue={c?.city ?? ""} hint="Für das Wetter auf der Startseite. Leer lassen, dann gilt der Ort aus dem Lebenslauf." />
+        <Field label="Geburtsdatum" name="birth_date" type="date" defaultValue={c?.birth_date ?? ""} hint="Freiwillig. Steht so in Lebenslauf und Anschreiben; der Coachee kann es nur einmal selbst eintragen." />
       </section>
       <section className="grid gap-4 sm:grid-cols-2">
         <Select label="Coaching-Art" name="coaching_type" defaultValue={c?.coaching_type ?? "job"}>
@@ -21,6 +22,13 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
           <option value="selbstzahler">Selbstzahler</option>
           <option value="sonstiges">Sonstiges</option>
         </Select>
+        <Select label="Förderung der Gründung" name="foerderart" defaultValue={c?.foerderart ?? ""}>
+          <option value="">– noch offen –</option>
+          <option value="gruendungszuschuss">Gründungszuschuss (ALG I, Agentur für Arbeit)</option>
+          <option value="einstiegsgeld">Einstiegsgeld (Jobcenter)</option>
+          <option value="sonstiges">Ohne Förderung / Sonstiges</option>
+        </Select>
+        <p className="hint self-end sm:pb-2.5">Nur bei Gründungscoaching. Danach richten sich die Infos auf der Startseite und das Handbuch des Coachees.</p>
         <Field label="Gutschein- / Kunden-Nummer" name="voucher_number" defaultValue={c?.voucher_number ?? ""} hint="Steht im Kopf der Beratungsdokumentation." />
         <Field label="Maßnahmeart" name="measure_type" defaultValue={c?.measure_type ?? ""} placeholder="z. B. 04-ORC (40 UE)" />
         <Field label="Bewilligte Unterrichtseinheiten" name="units_total" inputMode="decimal" defaultValue={c?.units_total ?? ""} hint="Zum Beispiel 40. Wird mit der Anwesenheit verrechnet." />

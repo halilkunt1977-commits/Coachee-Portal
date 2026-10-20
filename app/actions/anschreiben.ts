@@ -3,8 +3,8 @@ import { AiError, assertAiAllowed, jsonResponse } from "@/lib/ai";
 import { audit, requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { profileForAi } from "@/lib/jobs/store";
-import { letterFor } from "@/lib/letter/store";
-import { overridesOf, type LetterField, type StoredLetter } from "@/lib/letter/types";
+import { SENDER_LOCKED, letterFor } from "@/lib/letter/store";
+import { normalizeStoredLetter, overridesOf, type LetterField, type StoredLetter } from "@/lib/letter/types";
 
 export type LetterInput = { values: Partial<Record<LetterField, string>>; body: string; adText: string; signature: boolean };
 
@@ -19,6 +19,14 @@ export async function saveLetter(applicationId: string, input: LetterInput): Pro
     signature: input?.signature !== false,
     fields: overridesOf(auto, input?.values ?? {}),
   };
+  if (user.role !== "coach") {
+    // Absender bleibt der Coachee selbst; was der Coach dort eingetragen hat, bleibt erhalten
+    const before = normalizeStoredLetter((await one<{ letter: unknown }>("SELECT letter FROM applications WHERE coachee_id = $1 AND id = $2", [coachee.id, app.id]))?.letter);
+    for (const k of SENDER_LOCKED) {
+      delete letter.fields[k];
+      if (before?.fields[k] !== undefined) letter.fields[k] = before.fields[k];
+    }
+  }
   const row = await one<{ updated_at: string }>("UPDATE applications SET letter = $3, updated_at = now() WHERE coachee_id = $1 AND id = $2 RETURNING updated_at", [coachee.id, app.id, JSON.stringify(letter)]);
   if (!row) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
   const recent = await one("SELECT 1 FROM audit_log WHERE user_id = $1 AND action = 'letter_saved' AND detail->>'application' = $2 AND created_at > now() - interval '30 minutes' LIMIT 1", [user.id, app.id]);

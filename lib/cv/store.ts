@@ -4,7 +4,7 @@ import { coacheeFor, type Coachee } from "../access";
 import type { User } from "../auth";
 import { one, query } from "../db";
 import { loadFile, removeFile } from "../files";
-import { emptyCv, normalizeCv, type CvData, type CvSkill, type TemplateKey } from "./types";
+import { emptyCv, germanDate, lockPersonal, normalizeCv, type CvData, type CvSkill, type PersonalLock, type TemplateKey } from "./types";
 
 export type CvRow = { id: string; coachee_id: string; name: string; template: TemplateKey; color: string; data: CvData; photo_file_id: string | null; source_file_id: string | null; version: number; updated_at: string; updated_by_name: string | null };
 
@@ -14,8 +14,19 @@ export async function cvFor(user: User, cvId: string) {
   const row = await one<CvRow>("SELECT cv.*, u.name AS updated_by_name FROM cvs cv LEFT JOIN users u ON u.id = cv.updated_by WHERE cv.id = $1", [cvId]);
   if (!row) notFound();
   const coachee = await coacheeFor(user, row.coachee_id);
-  return { cv: { ...row, data: normalizeCv(row.data) }, coachee };
+  const data = normalizeCv(row.data);
+  // Coachees sehen und speichern Name und Kontakt immer so, wie sie in den Stammdaten stehen
+  return { cv: { ...row, data: user.role === "coach" ? data : lockPersonal(data, personalLockOf(coachee)) }, coachee };
 }
+
+/** Stammdaten, an die Lebenslauf und Anschreiben eines Coachees gebunden sind */
+export const personalLockOf = (c: Coachee): PersonalLock => ({
+  firstName: c.first_name,
+  lastName: c.last_name,
+  email: c.email,
+  phone: c.phone ?? "",
+  birthDate: germanDate(c.birth_date),
+});
 
 export async function listCvs(coacheeId: string) {
   return query<{ id: string; name: string; template: TemplateKey; color: string; data: unknown; photo_file_id: string | null; source_file_id: string | null; source_name: string | null; updated_at: string; updated_by_name: string | null }>(
@@ -55,7 +66,7 @@ export async function profileSkills(coacheeId: string): Promise<CvSkill[]> {
 
 /** Ein neuer Lebenslauf startet mit dem, was die Akte schon weiß. */
 export async function cvFromAkte(c: Coachee): Promise<CvData> {
-  const cv = emptyCv({ firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "" });
+  const cv = emptyCv({ firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "", birthDate: germanDate(c.birth_date) });
   cv.skills = await profileSkills(c.id);
   return cv;
 }
