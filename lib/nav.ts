@@ -14,6 +14,7 @@ export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; t
       { href: "/coach/anfragen", label: "Anfragen", icon: "flag", badge: b.leads },
       { href: "/coach/aufgaben", label: "Aufgaben", icon: "check", badge: b.tasks },
       { href: "/coach/anwesenheit", label: "Anwesenheit", icon: "clock", badge: b.mails },
+      { href: "/coach/werkzeuge", label: "Rechner & Wissen", icon: "euro" },
     ],
   },
   { label: "Schnell", items: [{ href: "/coach/neu", label: "Neuer Coachee", icon: "plus" }] },
