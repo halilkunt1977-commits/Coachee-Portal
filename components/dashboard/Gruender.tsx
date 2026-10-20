@@ -1,24 +1,24 @@
 import { DURCHSCHNITT, findeHebesatz } from "@/lib/tax/hebesaetze";
 import { GewerbesteuerRechner } from "./GewerbesteuerRechner";
 
-/** Ort eintragen, hell gestaltet (die Variante im Kopfband ist für dunklen Grund) */
-function OrtForm({ action, city }: { action: (fd: FormData) => Promise<void>; city: string | null }) {
+/** Ort eintragen, hell gestaltet (die Variante im Kopfband ist für dunklen Grund). Ohne action (Coach-Werkzeuge) nur als Suche über ?ort= */
+function OrtForm({ action, city }: { action?: (fd: FormData) => Promise<void>; city: string | null }) {
   return (
     <form action={action} className="flex flex-wrap gap-2">
-      <input name="city" defaultValue={city ?? ""} placeholder="z. B. Nürnberg" aria-label="Ort deines Unternehmens" className="input min-w-0 flex-1 basis-40 py-2" />
-      <button className="btn-ghost">Speichern</button>
+      <input name={action ? "city" : "ort"} defaultValue={city ?? ""} placeholder="z. B. Nürnberg" aria-label="Ort des Unternehmens" className="input min-w-0 flex-1 basis-40 py-2" />
+      <button className="btn-ghost">{action ? "Speichern" : "Anzeigen"}</button>
     </form>
   );
 }
 
 /** Gewerbesteuer-Hebesatz am Ort des Coachees mit Erklärung und Beispielrechnung */
-export function HebesatzCard({ city, action }: { city: string | null; action: (fd: FormData) => Promise<void> }) {
+export function HebesatzCard({ city, action, title = "Gewerbesteuer an deinem Ort" }: { city: string | null; action?: (fd: FormData) => Promise<void>; title?: string }) {
   const found = findeHebesatz(city);
   const h = found?.treffer;
   return (
     <section className="card space-y-4">
       <div>
-        <h2 className="h2">Gewerbesteuer an deinem Ort</h2>
+        <h2 className="h2">{title}</h2>
         <p className="text-sm text-muted">Jede Gemeinde legt mit dem Hebesatz selbst fest, wie hoch die Gewerbesteuer bei ihr ist.</p>
       </div>
       {h ? (
@@ -43,8 +43,8 @@ export function HebesatzCard({ city, action }: { city: string | null; action: (f
             </p>
           )}
           <GewerbesteuerRechner hebesatz={h.hebesatz} ort={h.gemeinde} />
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted">Anderen Ort eintragen</summary>
+          <details className="text-sm" open={!action}>
+            <summary className="cursor-pointer text-muted">{action ? "Anderen Ort eintragen" : "Anderen Ort anzeigen"}</summary>
             <div className="pt-2"><OrtForm action={action} city={city} /></div>
           </details>
         </>
