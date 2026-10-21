@@ -61,14 +61,14 @@ const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/g;
 const PHONE = /(?:\+\d{1,3}[\s-]?(?:\(0\))?\s?|\b0)\d{2,5}[\s/.-]?\d[\d\s/-]{3,}\d/g;
 
 /** Alten Lebenslauf in Felder übertragen. Name, E-Mail und Telefon werden vorher entfernt und lokal ergänzt. */
-export async function parseCvText(text: string, ctx: { coacheeId: string; userId: string; firstName: string; lastName: string; email: string; phone: string }): Promise<CvData> {
+export async function parseCvText(text: string, ctx: { coacheeId: string; userId: string; firstName: string; lastName: string; email: string; phone: string; purpose?: string }): Promise<CvData> {
   const email = text.match(EMAIL)?.[0] ?? "";
   const phone = text.match(PHONE)?.[0]?.trim() ?? "";
   const clean = pseudonymize(text.replace(EMAIL, "[E-Mail]").replace(PHONE, "[Telefon]"), [ctx.firstName, ctx.lastName]);
   const result = await jsonResponse<Record<string, unknown>>({
     coacheeId: ctx.coacheeId,
     userId: ctx.userId,
-    purpose: "cv_import",
+    purpose: ctx.purpose ?? "cv_import",
     instructions: INSTRUCTIONS,
     input: clean,
     schemaName: "lebenslauf",

@@ -59,9 +59,8 @@ export async function resetLetter(applicationId: string) {
 export async function draftLetterBody(applicationId: string, adText: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const { app, coachee } = await letterFor(user, applicationId);
-  if (user.role !== "coach" && !coachee.letter_help) return { ok: false, error: "Textvorschläge hat dein Coach für dich noch nicht freigegeben." };
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { feature: "anschreiben", coachee });
     const profile = await profileForAi(coachee);
     const job = [
       `Stelle: ${app.title}`,
@@ -139,9 +138,8 @@ export async function saveEmail(applicationId: string, input: StoredEmail): Prom
 export async function draftEmailText(applicationId: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const { app, coachee, stored } = await letterFor(user, applicationId);
-  if (user.role !== "coach" && !coachee.letter_help) return { ok: false, error: "Textvorschläge hat dein Coach für dich noch nicht freigegeben." };
   try {
-    await assertAiAllowed(user);
+    await assertAiAllowed(user, { feature: "anschreiben", coachee });
     const profile = await profileForAi(coachee);
     const adText = stored?.adText.trim() ?? "";
     const job = [

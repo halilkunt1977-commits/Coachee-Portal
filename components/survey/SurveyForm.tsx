@@ -4,10 +4,10 @@ import { saveSurvey, submitSurvey, suggestStationTasks } from "@/app/actions/erf
 import { LEVELS, YES_NO, asksDetail, newStationKey, period, progress, type Choice, type Level, type Station, type SurveyData } from "@/lib/survey/types";
 import { Notice } from "../ui";
 
-type Props = { id: string; initial: SurveyData; submittedAt: string | null; coach?: boolean };
+type Props = { id: string; initial: SurveyData; submittedAt: string | null; coach?: boolean; /** „Typische Aufgaben anzeigen“ (Zusatzfunktion Erfahrungsbogen-Hilfen) */ suggest?: boolean };
 
 /** Erfahrungsbogen zum Ankreuzen. Speichert von selbst, Absenden schickt ihn an den Coach. */
-export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
+export function SurveyForm({ id, initial, submittedAt, coach = false, suggest = true }: Props) {
   const [d, setD] = useState<SurveyData>(initial);
   const [saved, setSaved] = useState<"ok" | "saving" | "error">("ok");
   const [sent, setSent] = useState<string | null>(submittedAt);
@@ -51,7 +51,7 @@ export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
       )}
 
       {d.stations.map((st, i) => (
-        <StationCard key={st.key} id={id} index={i} st={st} onChange={(patch) => setStation(st.key, patch)} onRemove={() => setD((x) => ({ ...x, stations: x.stations.filter((s) => s.key !== st.key) }))} />
+        <StationCard key={st.key} id={id} index={i} st={st} suggestOn={suggest} onChange={(patch) => setStation(st.key, patch)} onRemove={() => setD((x) => ({ ...x, stations: x.stations.filter((s) => s.key !== st.key) }))} />
       ))}
 
       <button
@@ -84,7 +84,7 @@ export function SurveyForm({ id, initial, submittedAt, coach = false }: Props) {
   );
 }
 
-function StationCard({ id, index, st, onChange, onRemove }: { id: string; index: number; st: Station; onChange: (p: Partial<Station>) => void; onRemove: () => void }) {
+function StationCard({ id, index, st, suggestOn, onChange, onRemove }: { id: string; index: number; st: Station; suggestOn: boolean; onChange: (p: Partial<Station>) => void; onRemove: () => void }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [newTask, setNewTask] = useState("");
@@ -126,7 +126,7 @@ function StationCard({ id, index, st, onChange, onRemove }: { id: string; index:
             <input className="input" type="month" aria-label="Bis" value={st.end} disabled={st.current} onChange={(e) => onChange({ end: e.target.value })} />
           </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={st.current} onChange={(e) => onChange({ current: e.target.checked })} /> Mache ich heute noch</label>
-          <button type="button" className="btn btn-sm" disabled={loading || !st.title.trim()} onClick={suggest}>{loading ? "Einen Moment …" : "Typische Aufgaben anzeigen"}</button>
+          {suggestOn && <button type="button" className="btn btn-sm" disabled={loading || !st.title.trim()} onClick={suggest}>{loading ? "Einen Moment …" : "Typische Aufgaben anzeigen"}</button>}
           {err && <Notice tone="error">{err}</Notice>}
         </div>
       )}

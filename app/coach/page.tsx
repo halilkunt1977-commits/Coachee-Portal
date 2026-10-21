@@ -17,6 +17,8 @@ import { UpcomingList } from "@/components/calendar/Upcoming";
 import { todayBerlin } from "@/lib/calendar/dates";
 import { upcomingAppointments } from "@/lib/calendar/store";
 import { progressFor, weekSeries, weeklyUnitsSql, type Progress } from "@/lib/dashboard/progress";
+import { usageFor } from "@/lib/feature-usage";
+import { FEATURES, hasFeature } from "@/lib/features";
 
 export const metadata = { title: "Dashboard" };
 
@@ -61,7 +63,7 @@ function stageOf(it: Item) {
 export default async function CoachDashboard() {
   const user = await requireCoach();
   const upcomingP = upcomingAppointments(user, 5);
-  const [rows, me, weekRows, month, openMails, closed, leads, inbox, unsigned] = await Promise.all([
+  const [rows, me, weekRows, month, openMails, closed, leads, inbox, unsigned, usage] = await Promise.all([
     query<Row>(
       `SELECT c.*,
               (SELECT count(*) FROM messages x WHERE x.coachee_id = c.id AND x.read_at IS NULL AND x.author_id IS DISTINCT FROM $1)::int AS unread,
@@ -102,6 +104,7 @@ export default async function CoachDashboard() {
         WHERE c.coach_id = $1 AND c.archived_at IS NULL AND d.signature = 'offen' GROUP BY d.coachee_id`,
       [user.id],
     ),
+    usageFor(user.id),
   ]);
 
   const items: Item[] = await Promise.all(rows.map(async (c) => ({ c, p: await progressFor(c) })));
@@ -256,6 +259,29 @@ export default async function CoachDashboard() {
           </Suspense>
         </section>
       </div>
+
+      {rows.length > 0 && (
+        <section className="rise card space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-[#fbf1e3] text-gold"><Icon name="spark" className="size-4" /></span>
+            <h2 className="h2">Zusatzfunktionen</h2>
+            <Link href="/coach/freigaben" className="btn-ghost btn-sm ml-auto">Freigaben verwalten</Link>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {FEATURES.map((f) => {
+              const pool = rows.filter((c) => (f.types as readonly string[]).includes(c.coaching_type));
+              const on = pool.filter((c) => hasFeature(c, f.key));
+              const uses = rows.reduce((a, c) => a + usage.get(c.id).features[f.key].month, 0);
+              return (
+                <Link key={f.key} href="/coach/freigaben" className="rounded-xl bg-surface-2/70 px-3 py-2.5 text-sm transition hover:bg-surface-2">
+                  <span className="block font-semibold">{f.label}</span>
+                  <span className="block text-xs text-muted"><b className="text-ink tabular-nums">{on.length}</b> von {pool.length} freigegeben · <b className="text-ink tabular-nums">{uses}</b> Aufrufe im Monat</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {founders.length > 0 && <Pipeline title="Wo stehen die Gründer?" stages={FOUNDER_STAGES} items={founders} />}
       {jobs.length > 0 && <Pipeline title="Wo stehen die Jobsuchenden?" stages={JOB_STAGES} items={jobs} />}

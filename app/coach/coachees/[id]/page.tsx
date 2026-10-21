@@ -37,6 +37,7 @@ import type { Coachee } from "@/lib/access";
 import { AkteTermine } from "@/components/calendar/AkteTermine";
 import { HandbookView } from "@/components/handbuch/HandbookView";
 import { handbookFor } from "@/lib/handbuch/store";
+import { FeatureBlock } from "@/components/features/Parts";
 
 type Meeting = { id: string; held_on: string; units: number; format: string; title: string; notes: string; results: string; next_steps: string; internal_note: string; shared: boolean; ai_questions: string[]; analyzed_at: string | null; doc_text: string; doc_auto: boolean };
 
@@ -92,6 +93,7 @@ const actionLabel: Record<string, string> = {
   coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
   appointment_created: "Termin angelegt", appointment_updated: "Termin geändert", appointment_cancelled: "Termin abgesagt", appointment_deleted: "Termin gelöscht",
   handbook_pdf: "Handbuch als PDF geladen", contact_updated: "Eigene Kontaktdaten geändert",
+  feature_enabled: "Zusatzfunktion freigegeben", feature_disabled: "Zusatzfunktion gesperrt", ai_limit_set: "Monatsgrenze für Hilfen geändert",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet", shared: "Geteilt (an Coach oder Coachee gesendet)",
 };
 
@@ -258,6 +260,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
                 <p className="text-sm text-muted">Kein Zugang verknüpft.</p>
               )}
             </div>
+            <FeatureBlock coachId={coach.id} coachee={c} />
             <div className="card space-y-3 border-danger/30">
               <h2 className="h2">Löschen</h2>
               <DeleteCoachee coacheeId={c.id} lastName={c.last_name} />
@@ -437,8 +440,8 @@ async function Messages({ coacheeId, selfId }: { coacheeId: string; selfId: stri
 }
 
 async function AuditTrail({ coacheeId }: { coacheeId: string }) {
-  const rows = await query<{ id: number; action: string; created_at: string; name: string | null; ip: string | null }>(
-    "SELECT a.id, a.action, a.created_at, u.name, a.ip FROM audit_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.coachee_id = $1 ORDER BY a.created_at DESC LIMIT 200",
+  const rows = await query<{ id: number; action: string; created_at: string; name: string | null; ip: string | null; label: string | null }>(
+    "SELECT a.id, a.action, a.created_at, u.name, a.ip, CASE WHEN a.action LIKE 'feature_%' THEN a.detail->>'label' END AS label FROM audit_log a LEFT JOIN users u ON u.id = a.user_id WHERE a.coachee_id = $1 ORDER BY a.created_at DESC LIMIT 200",
     [coacheeId],
   );
   return (
@@ -448,7 +451,7 @@ async function AuditTrail({ coacheeId }: { coacheeId: string }) {
         <thead className="text-left text-xs text-muted"><tr><th className="pb-2">Zeitpunkt</th><th className="pb-2">Wer</th><th className="pb-2">Was</th></tr></thead>
         <tbody className="divide-y divide-line-soft">
           {rows.map((r) => (
-            <tr key={r.id}><td className="py-1.5 pr-4 whitespace-nowrap">{formatDateTime(r.created_at)}</td><td className="py-1.5 pr-4">{r.name ?? "–"}</td><td className="py-1.5">{actionLabel[r.action] ?? r.action}</td></tr>
+            <tr key={r.id}><td className="py-1.5 pr-4 whitespace-nowrap">{formatDateTime(r.created_at)}</td><td className="py-1.5 pr-4">{r.name ?? "–"}</td><td className="py-1.5">{actionLabel[r.action] ?? r.action}{r.label ? `: ${r.label}` : ""}</td></tr>
           ))}
         </tbody>
       </table>

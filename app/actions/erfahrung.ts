@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { coacheeFor } from "@/lib/access";
-import { AiError, aiEnabled } from "@/lib/ai";
+import { AiError, aiEnabled, assertAiAllowed } from "@/lib/ai";
 import { audit, requireCoach, requireUser, type User } from "@/lib/auth";
 import { extractCvText, parseCvText } from "@/lib/cv/import";
 import { cvFromAkte } from "@/lib/cv/store";
@@ -24,7 +24,8 @@ const refresh = (coacheeId: string) => {
 const failure = (user: User, e: unknown) => {
   if (!(e instanceof AiError)) console.error("Erfahrungsbogen", e);
   if (user.role === "coach") return e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen.";
-  if (e instanceof AiError && /Datei|PDF|Word|Text/.test(e.message)) return e.message;
+  // Meldungen zu Datei, Freigabe und Monatsgrenze sind für Coachees formuliert; alles mit „KI“ bleibt neutral
+  if (e instanceof AiError && !/\bKI\b/.test(e.message)) return e.message;
   return "Das hat gerade nicht geklappt. Bitte versuch es in ein paar Minuten noch einmal oder sag deinem Coach Bescheid.";
 };
 
@@ -48,6 +49,7 @@ export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormD
   let sourceId: string | null = null;
   const from = text(fd, "from", 40);
   try {
+    await assertAiAllowed(user, { feature: "erfahrungsbogen", coachee: c });
     if (from && from !== "datei") {
       const row = await one<{ data: unknown; source_file_id: string | null }>("SELECT data, source_file_id FROM cvs WHERE id = $1 AND coachee_id = $2", [from, c.id]);
       if (!row) return { error: "Lebenslauf nicht gefunden." };
@@ -58,7 +60,7 @@ export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormD
       if (!(file instanceof File) || file.size === 0) return { error: "Bitte deinen Lebenslauf auswählen." };
       if (file.size > 10 * 1024 * 1024) return { error: "Die Datei ist größer als 10 MB." };
       const { text: content, buffer } = await extractCvText(file);
-      cv = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "" });
+      cv = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "", purpose: "survey_import" });
       if (!cv.skills.length) cv.skills = (await cvFromAkte(c)).skills;
       sourceId = await storeFile({ coacheeId: c.id, kind: "cv_vorlage", name: file.name, mime: file.type || "application/octet-stream", data: buffer, userId: user.id });
     }
@@ -98,6 +100,7 @@ export async function suggestStationTasks(id: string, station: Pick<Station, "ti
   if (!station.title.trim()) return { ok: false, error: "Bitte zuerst die Tätigkeit oder den Beruf eintragen." };
   if (!aiEnabled()) return { ok: false, error: "Das geht gerade nicht. Trag deine Aufgaben bitte unten selbst ein." };
   try {
+    await assertAiAllowed(user, { feature: "erfahrungsbogen", coachee: s.c });
     const r = await tasksForStation({ title: station.title.slice(0, 200), company: station.company.slice(0, 200) }, { coacheeId: s.c.id, userId: user.id });
     return { ok: true, ...r };
   } catch (e) {

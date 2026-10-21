@@ -18,7 +18,13 @@ export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; t
     ],
   },
   { label: "Schnell", items: [{ href: "/coach/neu", label: "Neuer Coachee", icon: "plus" }] },
-  { label: "System", items: [{ href: "/coach/datensicherung", label: "Datensicherung", icon: "shield", badge: b.backup }] },
+  {
+    label: "System",
+    items: [
+      { href: "/coach/freigaben", label: "Freigaben", icon: "spark" },
+      { href: "/coach/datensicherung", label: "Datensicherung", icon: "shield", badge: b.backup },
+    ],
+  },
 ];
 
 export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number; inbox?: number } = {}): NavGroup[] => [

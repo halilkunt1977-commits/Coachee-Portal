@@ -2,6 +2,7 @@ import { LetterEditor } from "@/components/letter/LetterEditor";
 import { ShareButton } from "@/components/teilen/ShareButton";
 import { fullName } from "@/lib/access";
 import { aiEnabled } from "@/lib/ai";
+import { hasFeature } from "@/lib/features";
 import { audit, requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { letterFor } from "@/lib/letter/store";
@@ -34,7 +35,7 @@ export default async function LetterPage({ params, searchParams }: PageProps<"/a
       signatureId={await signatureId(coachee.id)}
       coach={coach}
       // Die Schreibhilfe hat der Coach immer, Coachees nur nach Freigabe in der Akte und ohne Hinweis auf die Technik dahinter
-      draft={aiEnabled() && (coach || coachee.letter_help)}
+      draft={aiEnabled() && (coach || hasFeature(coachee, "anschreiben"))}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=bewerbungen` : "/mein-bereich/bewerbungen"}
       backLabel={coach ? `${fullName(coachee)} · Bewerbungen` : "Meine Bewerbungen"}
       share={<ShareButton kind="anschreiben" refId={app.id} role={user.role} coacheeId={coachee.id} recipient={coachee.first_name} title={[app.title, app.employer].filter(Boolean).join(" · ")} className="btn-ghost" />}

@@ -1,6 +1,7 @@
 import { cvFromSurveyAction, deleteSurvey, reopenSurvey } from "@/app/actions/erfahrung";
 import type { Coachee } from "@/lib/access";
 import { query } from "@/lib/db";
+import { hasFeature } from "@/lib/features";
 import { normalizeSurvey, period, progress } from "@/lib/survey/types";
 import { ActionForm } from "../akte/ActionForm";
 import { ConfirmButton } from "../ConfirmButton";
@@ -18,6 +19,8 @@ export async function SurveyPanel({ coachee: c, coach }: { coachee: Coachee; coa
     query<{ id: string; name: string }>("SELECT id, name FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 5", [c.id]),
   ]);
   const s = rows[0];
+  // Hilfen beim Erstellen und Ausfüllen nur mit Freigabe (Zusatzfunktion „Erfahrungsbogen-Hilfen“); der Coach darf immer
+  const help = coach || hasFeature(c, "erfahrungsbogen");
   if (!s) {
     return (
       <div className="card max-w-2xl space-y-3">
@@ -25,9 +28,11 @@ export async function SurveyPanel({ coachee: c, coach }: { coachee: Coachee; coa
         <p className="text-sm text-muted">
           {coach
             ? `Aus dem Lebenslauf entsteht pro Station eine Liste typischer Tätigkeiten zum Ankreuzen. ${c.first_name} kann den Bogen auch selbst unter „Erfahrungsbogen“ starten.`
-            : "Lade deinen Lebenslauf hoch. Danach bekommst du für jede deiner Stellen eine Liste mit Aufgaben, die du nur noch ankreuzen musst. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf."}
+            : help
+              ? "Lade deinen Lebenslauf hoch. Danach bekommst du für jede deiner Stellen eine Liste mit Aufgaben, die du nur noch ankreuzen musst. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf."
+              : "Trag deine bisherigen Stellen, Ausbildungen und Kurse ein und schreib zu jeder auf, was du dort gemacht hast. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf."}
         </p>
-        <StartSurvey coacheeId={c.id} cvs={cvs} coach={coach} />
+        <StartSurvey coacheeId={c.id} cvs={cvs} coach={coach} upload={help} />
       </div>
     );
   }
@@ -71,7 +76,7 @@ export async function SurveyPanel({ coachee: c, coach }: { coachee: Coachee; coa
           </div>
         </div>
       )}
-      <SurveyForm id={s.id} initial={data} submittedAt={s.submitted_at} coach={coach} />
+      <SurveyForm id={s.id} initial={data} submittedAt={s.submitted_at} coach={coach} suggest={help} />
     </div>
   );
 }

@@ -4,10 +4,16 @@ import { startEmptySurvey, startSurvey } from "@/app/actions/erfahrung";
 import { SubmitButton } from "../SubmitButton";
 import { Notice } from "../ui";
 
-/** Bogen anlegen: Lebenslauf hochladen oder einen aus dem Portal nehmen */
-export function StartSurvey({ coacheeId, cvs, coach }: { coacheeId: string; cvs: { id: string; name: string }[]; coach: boolean }) {
+/** Bogen anlegen: Lebenslauf hochladen oder einen aus dem Portal nehmen. Ohne upload (Hilfe nicht freigegeben) nur leer starten. */
+export function StartSurvey({ coacheeId, cvs, coach, upload = true }: { coacheeId: string; cvs: { id: string; name: string }[]; coach: boolean; upload?: boolean }) {
   const [state, action] = useActionState(startSurvey.bind(null, coacheeId), undefined);
   const [from, setFrom] = useState("datei");
+  if (!upload)
+    return (
+      <form action={startEmptySurvey.bind(null, coacheeId)}>
+        <button className="btn">Bogen beginnen</button>
+      </form>
+    );
   return (
     <div className="space-y-4">
       <form action={action} className="space-y-4">
