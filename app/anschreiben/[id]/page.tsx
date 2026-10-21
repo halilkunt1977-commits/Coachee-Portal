@@ -3,22 +3,31 @@ import { ShareButton } from "@/components/teilen/ShareButton";
 import { fullName } from "@/lib/access";
 import { aiEnabled } from "@/lib/ai";
 import { audit, requireUser } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { letterFor } from "@/lib/letter/store";
 import { signatureId } from "@/lib/signature";
 
 export const metadata = { title: "Anschreiben" };
 
-export default async function LetterPage({ params }: PageProps<"/anschreiben/[id]">) {
+export default async function LetterPage({ params, searchParams }: PageProps<"/anschreiben/[id]">) {
   const user = await requireUser();
   const { id } = await params;
-  const { app, coachee, stored, auto, color } = await letterFor(user, id);
+  const { app, coachee, stored, auto, color, email, cvId } = await letterFor(user, id);
+  const { ansicht } = await searchParams;
+  // Auswahl oben: alle Bewerbungen dieses Coachees, zuletzt bearbeitete zuerst
+  const applications = await query<{ id: string; title: string; employer: string }>("SELECT id, title, employer FROM applications WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 200", [coachee.id]);
   await audit(user.id, "letter_opened", coachee.id, { application: app.id });
   const coach = user.role === "coach";
   return (
     <LetterEditor
+      key={app.id}
       applicationId={app.id}
       coacheeId={coachee.id}
-      job={{ title: app.title, employer: app.employer }}
+      job={{ title: app.title, employer: app.employer, refnr: app.refnr, contact: app.contact, salutation: app.salutation }}
+      applications={applications.map((a) => ({ id: a.id, label: [a.title, a.employer].filter(Boolean).join(" · ") }))}
+      email={email}
+      cvId={cvId}
+      initialMode={ansicht === "email" ? "email" : "brief"}
       auto={auto}
       stored={stored}
       color={color}

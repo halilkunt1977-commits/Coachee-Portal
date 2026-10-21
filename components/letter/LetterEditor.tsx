@@ -1,17 +1,28 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { draftLetterBody, resetLetter, saveLetter } from "@/app/actions/anschreiben";
+import { draftLetterBody, resetLetter, saveContact, saveLetter } from "@/app/actions/anschreiben";
 import { CvPreview } from "@/components/cv/CvPreview";
 import { SignatureField } from "@/components/cv/SignatureField";
+import { EmailEditor } from "@/components/letter/EmailEditor";
+import type { StoredEmail } from "@/lib/letter/email";
 import { renderLetterHtml } from "@/lib/letter/render";
-import { LETTER_FIELDS, resolveLetter, type LetterField, type StoredLetter } from "@/lib/letter/types";
+import { LETTER_FIELDS, resolveLetter, splitContact, type LetterField, type StoredLetter } from "@/lib/letter/types";
 
 type Auto = Record<LetterField, string> & { body: string };
 type Props = {
   applicationId: string;
   coacheeId: string;
-  job: { title: string; employer: string };
+  job: { title: string; employer: string; refnr: string | null; contact: string; salutation: string };
+  /** Alle Bewerbungen des Coachees für die Auswahl oben */
+  applications: { id: string; label: string }[];
+  /** Gespeicherte E-Mail-Bewerbung (null-Felder = automatisch) */
+  email: StoredEmail;
+  /** Neuester Lebenslauf für den PDF-Anhang */
+  cvId: string | null;
+  /** Start in der Ansicht „E-Mail“ (?ansicht=email) */
+  initialMode?: "brief" | "email";
   auto: Auto;
   stored: StoredLetter | null;
   color: string;
@@ -30,6 +41,9 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const pick = (v: Record<LetterField, string>) => Object.fromEntries(LETTER_FIELDS.map((k) => [k, v[k]])) as Record<LetterField, string>;
 
 export function LetterEditor(p: Props) {
+  // Automatische Werte; Anschrift und Anrede ändern sich, wenn hier die Ansprechperson geändert wird
+  const [auto, setAuto] = useState<Auto>(p.auto);
+  const [contact, setContact] = useState(p.job.contact);
   const initial = useMemo(() => resolveLetter(p.auto, p.stored), [p.auto, p.stored]);
   const [values, setValues] = useState<Record<LetterField, string>>(() => pick(initial));
   const [body, setBody] = useState(initial.body);
@@ -38,6 +52,15 @@ export function LetterEditor(p: Props) {
   const [signatureId, setSignatureId] = useState(p.signatureId);
   const [save, setSave] = useState<SaveState>("saved");
   const [view, setView] = useState<"form" | "preview">("form");
+  const [mode, setModeState] = useState<"brief" | "email">(p.initialMode ?? "brief");
+  const setMode = (m: "brief" | "email") => {
+    setModeState(m);
+    // Ansicht in der Adresse merken, damit Neuladen und Zurück in derselben Ansicht landen
+    const url = new URL(window.location.href);
+    if (m === "email") url.searchParams.set("ansicht", "email");
+    else url.searchParams.delete("ansicht");
+    window.history.replaceState(window.history.state, "", url);
+  };
   // Neues Anschreiben mit Schreibhilfe: der erste Entwurf entsteht gleich beim Öffnen
   const autoDraft = useRef(p.draft && !p.stored);
   const [drafting, setDrafting] = useState(p.draft && !p.stored);
@@ -114,7 +137,24 @@ export function LetterEditor(p: Props) {
   const html = useMemo(() => renderLetterHtml(letter, { color: p.color, signature: signatureUrl, fontCss: PREVIEW_FONTS }), [letter, p.color, signatureUrl]);
 
   const set = (k: LetterField) => (v: string) => setValues((x) => ({ ...x, [k]: v }));
-  const field = (k: LetterField) => ({ value: values[k], onChange: set(k), auto: p.auto[k], onReset: () => set(k)(p.auto[k]) });
+  const field = (k: LetterField) => ({ value: values[k], onChange: set(k), auto: auto[k], onReset: () => set(k)(auto[k]) });
+
+  /** Neue automatische Anschrift und Anrede übernehmen, außer dort steht schon etwas eigenes */
+  const contactSaved = (next: { contact: string; recipient: string; salutation: string }) => {
+    setContact(next.contact);
+    setValues((v) => ({
+      ...v,
+      recipient: v.recipient === auto.recipient ? next.recipient : v.recipient,
+      salutation: v.salutation === auto.salutation ? next.salutation : v.salutation,
+    }));
+    setAuto((a) => ({ ...a, recipient: next.recipient, salutation: next.salutation }));
+  };
+
+  const router = useRouter();
+  async function switchJob(id: string) {
+    await flush();
+    router.push(`/anschreiben/${id}${mode === "email" ? "?ansicht=email" : ""}`);
+  }
 
   async function download(kind: "pdf" | "word") {
     await flush();
@@ -122,6 +162,8 @@ export function LetterEditor(p: Props) {
     a.href = `/api/anschreiben/${p.applicationId}/${kind}`;
     a.click();
   }
+
+  const emailApp = useMemo(() => ({ contact, refnr: p.job.refnr }), [contact, p.job.refnr]);
 
   const draftLabel = p.coach ? "Text mit KI neu entwerfen" : "Neuen Textvorschlag erstellen";
   const draftBusy = p.coach ? "Die KI schreibt einen Entwurf …" : "Der Text wird vorbereitet …";
@@ -142,6 +184,32 @@ export function LetterEditor(p: Props) {
         </div>
       </div>
 
+      <div role="tablist" aria-label="Art der Bewerbung" className="flex gap-1 border-b border-line text-sm font-semibold">
+        {(["brief", "email"] as const).map((m) => (
+          <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`-mb-px flex-1 border-b-2 px-4 py-2.5 sm:flex-none ${mode === m ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"}`}>
+            {m === "brief" ? "Brief" : "E-Mail-Bewerbung"}
+          </button>
+        ))}
+      </div>
+
+      <section className="card grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <label htmlFor="stelle" className="label">Stelle</label>
+          <select id="stelle" aria-describedby="stelle-hint" className="input" value={p.applicationId} onChange={(e) => void switchJob(e.target.value)}>
+            {p.applications.map((a) => (
+              <option key={a.id} value={a.id}>{a.label}</option>
+            ))}
+          </select>
+          <span id="stelle-hint" className="mt-1 block text-xs text-muted">Brief und E-Mail entstehen aus {p.coach ? "dem neuesten Lebenslauf" : "deinem neuesten Lebenslauf"} und dieser Stelle.</span>
+        </div>
+        <ContactFields key={p.applicationId} applicationId={p.applicationId} salutation={p.job.salutation} contact={p.job.contact} onSaved={contactSaved} />
+      </section>
+
+      <div className={mode === "email" ? "" : "hidden"}>
+        <EmailEditor applicationId={p.applicationId} app={emailApp} letter={current} stored={p.email} cvId={p.cvId} coach={p.coach} draft={p.draft} flushLetter={flush} />
+      </div>
+      {mode === "brief" && (
+      <>
       <div className="grid grid-cols-2 rounded-xl border border-line bg-surface p-1 text-sm font-semibold lg:hidden">
         {(["form", "preview"] as const).map((v) => (
           <button key={v} type="button" onClick={() => setView(v)} className={`rounded-lg py-2 ${view === v ? "bg-accent text-white" : "text-muted"}`}>{v === "form" ? "Bearbeiten" : "Vorschau"}</button>
@@ -177,13 +245,13 @@ export function LetterEditor(p: Props) {
               <span className="mt-1 block text-xs text-muted">{drafting ? draftBusy : "Absätze mit einer Leerzeile trennen. Im Brief steht der Text im Blocksatz."}</span>
             </label>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {body.trim() !== p.auto.body.trim() && (
+              {body.trim() !== auto.body.trim() && (
                 <button
                   type="button"
                   className="text-sm text-muted hover:text-ink"
                   onClick={() => {
                     touched.current = true;
-                    setBody(p.auto.body);
+                    setBody(auto.body);
                   }}
                 >
                   Vorlage wiederherstellen
@@ -241,6 +309,51 @@ export function LetterEditor(p: Props) {
           <p className="mt-2 text-center text-xs text-muted">So sieht das Anschreiben im PDF aus. Die Word-Datei hat denselben Aufbau.</p>
         </div>
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+/** Ansprechperson der Bewerbung: speichert in die Bewerbung, Anschrift und Anrede ziehen nach */
+function ContactFields(p: { applicationId: string; salutation: string; contact: string; onSaved: (next: { contact: string; recipient: string; salutation: string }) => void }) {
+  const [sal, setSal] = useState(p.salutation);
+  const [name, setName] = useState(() => splitContact(p.contact).name);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const timer = useRef<number | null>(null);
+  const onSaved = useRef(p.onSaved);
+  useEffect(() => {
+    onSaved.current = p.onSaved;
+  });
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(async () => {
+      setState("saving");
+      const res = await saveContact(p.applicationId, { salutation: sal, name }).catch(() => ({ ok: false as const, error: "" }));
+      if (res.ok) onSaved.current(res);
+      setState(res.ok ? "saved" : "error");
+    }, 700);
+  }, [sal, name, p.applicationId]);
+  return (
+    <div className="min-w-0">
+      <span className="label flex items-baseline justify-between gap-2">
+        <span>Ansprechperson <span className="font-normal text-muted">(falls vorhanden)</span></span>
+        {state !== "idle" && <span className={`text-xs font-normal ${state === "error" ? "text-danger" : "text-muted"}`} aria-live="polite">{state === "saving" ? "Speichert …" : state === "saved" ? "In der Bewerbung gespeichert" : "Nicht gespeichert"}</span>}
+      </span>
+      <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2">
+        <select className="input" aria-label="Anrede der Ansprechperson" value={sal} onChange={(e) => setSal(e.target.value)}>
+          <option value="">–</option>
+          <option value="frau">Frau</option>
+          <option value="herr">Herr</option>
+        </select>
+        <input className="input" aria-label="Name der Ansprechperson" placeholder="z. B. Weber" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <span className="mt-1 block text-xs text-muted">Mit Namen: „Sehr geehrte Frau …“. Ohne: „Sehr geehrte Damen und Herren“.</span>
     </div>
   );
 }
