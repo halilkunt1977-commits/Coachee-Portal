@@ -21,10 +21,11 @@ export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; t
   { label: "System", items: [{ href: "/coach/datensicherung", label: "Datensicherung", icon: "shield", badge: b.backup }] },
 ];
 
-export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number } = {}): NavGroup[] => [
+export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number; inbox?: number } = {}): NavGroup[] => [
   {
     items: [
       { href: "/mein-bereich", label: "Start", icon: "home", exact: true },
+      { href: "/mein-bereich/posteingang", label: "Posteingang", icon: "mail", badge: b.inbox },
       { href: "/mein-bereich/kalender", label: "Kalender", icon: "calendar", badge: b.today },
       { href: "/mein-bereich/aufgaben", label: "Aufgaben", icon: "flag", badge: b.tasks },
     ],

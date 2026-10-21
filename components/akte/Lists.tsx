@@ -2,7 +2,7 @@ import { deleteTask, toggleTask } from "@/app/actions/akte";
 import { Empty, formatDate, formatDateTime } from "../ui";
 
 export type Task = { id: string; title: string; details: string; due_on: string | null; done_at: string | null };
-export type Message = { id: string; body: string; created_at: string; author_id: string | null; author_name: string | null };
+export type Message = { id: string; body: string; created_at: string; author_id: string | null; author_name: string | null; read_at?: string | null };
 
 export function TaskList({ coacheeId, tasks, coach }: { coacheeId: string; tasks: Task[]; coach: boolean }) {
   if (!tasks.length) return <Empty>Keine Aufgaben.</Empty>;
@@ -41,8 +41,8 @@ export function MessageList({ messages, selfId }: { messages: Message[]; selfId:
         return (
           <li key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${mine ? "bg-accent text-white" : "bg-bg"}`}>
-              <p className="whitespace-pre-wrap text-[15px]">{m.body}</p>
-              <p className={`mt-1 text-[11px] ${mine ? "text-white/70" : "text-muted"}`}>{m.author_name ?? "Gelöschtes Konto"} · {formatDateTime(m.created_at)}</p>
+              <p className="whitespace-pre-wrap break-words text-[15px] [overflow-wrap:anywhere]">{m.body}</p>
+              <p className={`mt-1 text-[11px] ${mine ? "text-white/70" : "text-muted"}`}>{m.author_name ?? "Gelöschtes Konto"} · {formatDateTime(m.created_at)}{mine && m.read_at ? " · gelesen" : ""}</p>
             </div>
           </li>
         );

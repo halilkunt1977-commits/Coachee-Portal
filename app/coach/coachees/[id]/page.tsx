@@ -424,7 +424,7 @@ async function Tasks({ coacheeId }: { coacheeId: string }) {
 
 async function Messages({ coacheeId, selfId }: { coacheeId: string; selfId: string }) {
   const messages = await query<Message>(
-    "SELECT m.id, m.body, m.created_at, m.author_id, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at",
+    "SELECT m.id, m.body, m.created_at, m.author_id, m.read_at, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at",
     [coacheeId],
   );
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [coacheeId, selfId]);

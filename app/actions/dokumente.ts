@@ -10,6 +10,7 @@ import { afterFormFiled } from "@/lib/doku/store";
 import { removeFile, storeFile } from "@/lib/files";
 import { autoImportDocument } from "@/lib/bp/apply-import";
 import { text, type FormState } from "@/lib/forms";
+import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
@@ -50,8 +51,8 @@ export async function uploadDocument(coacheeId: string, fd: FormData): Promise<{
 
 async function ownDocument(coachId: string, coacheeId: string, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-  return one<{ id: string; file_id: string; category: string; title: string; extracted_text: string | null }>(
-    "SELECT d.id, d.file_id, d.category, d.title, d.extracted_text FROM documents d JOIN coachees c ON c.id = d.coachee_id WHERE d.id = $1 AND d.coachee_id = $2 AND c.coach_id = $3",
+  return one<{ id: string; file_id: string; category: string; title: string; extracted_text: string | null; shared: boolean }>(
+    "SELECT d.id, d.file_id, d.category, d.title, d.extracted_text, d.shared FROM documents d JOIN coachees c ON c.id = d.coachee_id WHERE d.id = $1 AND d.coachee_id = $2 AND c.coach_id = $3",
     [id, coacheeId, coachId],
   );
 }
@@ -68,6 +69,11 @@ export async function updateDocument(coacheeId: string, id: string, _prev: FormS
   const rows = isReport(category) && doc.extracted_text ? extractReportRows(doc.extracted_text) : null;
   await query("UPDATE documents SET title = $2, category = $3, shared = $4, extracted = $5 WHERE id = $1", [doc.id, title, category, shared, rows ? JSON.stringify(rows) : null]);
   await audit(coach.id, "document_updated", c.id, { category, shared });
+  // Frisch freigegeben: Der Coachee findet es im Posteingang
+  if (shared && !doc.shared) {
+    const url = await postToInbox(c.id, "dokument", doc.id, coach.id);
+    await notifyCoachee(c.user_id, { title: "Neues Dokument", body: "Dein Coach hat dir ein Dokument freigegeben.", url, tag: "dokument" });
+  }
   refresh(c.id);
   return { ok: "Gespeichert." };
 }

@@ -3,6 +3,7 @@ import { AiError, assertAiAllowed, jsonResponse } from "@/lib/ai";
 import { audit, requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { profileForAi } from "@/lib/jobs/store";
+import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 import { SENDER_LOCKED, letterFor } from "@/lib/letter/store";
 import { normalizeStoredLetter, overridesOf, type LetterField, type StoredLetter } from "@/lib/letter/types";
 
@@ -30,7 +31,14 @@ export async function saveLetter(applicationId: string, input: LetterInput): Pro
   const row = await one<{ updated_at: string }>("UPDATE applications SET letter = $3, updated_at = now() WHERE coachee_id = $1 AND id = $2 RETURNING updated_at", [coachee.id, app.id, JSON.stringify(letter)]);
   if (!row) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
   const recent = await one("SELECT 1 FROM audit_log WHERE user_id = $1 AND action = 'letter_saved' AND detail->>'application' = $2 AND created_at > now() - interval '30 minutes' LIMIT 1", [user.id, app.id]);
-  if (!recent) await audit(user.id, "letter_saved", coachee.id, { application: app.id });
+  if (!recent) {
+    await audit(user.id, "letter_saved", coachee.id, { application: app.id });
+    // Coach bereitet ein Anschreiben vor: einmal pro Sitzung in den Posteingang des Coachees, nicht bei jedem Zwischenspeichern
+    if (user.role === "coach") {
+      const url = await postToInbox(coachee.id, "anschreiben", app.id, user.id);
+      await notifyCoachee(coachee.user_id, { title: "Anschreiben für dich", body: "Dein Coach hat ein Anschreiben vorbereitet.", url, tag: `anschreiben-${app.id}` });
+    }
+  }
   return { ok: true, savedAt: row.updated_at };
 }
 

@@ -5,6 +5,7 @@ import { audit, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { dateOrNull, text, type FormState } from "@/lib/forms";
 import { noticeMail, sendMail } from "@/lib/mail";
+import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
 const refresh = (coacheeId: string | null) => {
   revalidatePath("/coach", "layout");
@@ -22,10 +23,13 @@ export async function createTask(_prev: FormState, fd: FormData): Promise<FormSt
   const forId = text(fd, "for", 36);
   const c = user.role === "coach" ? (forId ? await coacheeFor(user, forId) : null) : await ownCoachee(user);
   if (user.role === "coachee" && !c) return { error: "Dein Zugang ist noch keinem Coaching zugeordnet." };
-  await query("INSERT INTO tasks (coachee_id, owner_id, title, details, due_on, created_by) VALUES ($1,$2,$3,$4,$5,$6)", [c?.id ?? null, c ? null : user.id, title, details, due, user.id]);
+  const task = await one<{ id: string }>("INSERT INTO tasks (coachee_id, owner_id, title, details, due_on, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id", [c?.id ?? null, c ? null : user.id, title, details, due, user.id]);
   await audit(user.id, "task_created", c?.id ?? null);
-  if (user.role === "coach" && c?.user_id && fd.get("notify") === "on") {
-    await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.") }).catch(() => false);
+  if (user.role === "coach" && c) {
+    // Landet im Posteingang des Coachees; Sofort-Meldung immer, Mail nur auf Wunsch
+    const url = await postToInbox(c.id, "aufgabe", task!.id, user.id);
+    if (c.user_id && fd.get("notify") === "on") await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.") }).catch(() => false);
+    await notifyCoachee(c.user_id, { title: "Neue Aufgabe", body: "Dein Coach hat dir eine Aufgabe gegeben.", url, tag: "aufgabe" });
   }
   refresh(c?.id ?? null);
   return { ok: c && user.role === "coach" ? `Aufgabe für ${c.first_name} angelegt.` : "Aufgabe angelegt." };
