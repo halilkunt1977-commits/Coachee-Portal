@@ -4,6 +4,7 @@ import { chatFor } from "@/lib/assistant";
 import { audit, requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { noticeMail, sendMail } from "@/lib/mail";
+import { notifyCoachee } from "@/lib/coachee-inbox";
 
 const refresh = (coacheeId: string) => {
   revalidatePath(`/coach/coachees/${coacheeId}`);
@@ -29,6 +30,7 @@ export async function shareAnswer(chatId: string, messageId: number): Promise<{ 
   await audit(user.id, "message_sent", coachee.id, { from: "assistant" });
   if (user.role === "coach") {
     await sendMail({ to: coachee.email, ...noticeMail(coachee.first_name, "Du hast eine neue Nachricht von deinem Coach.") }).catch(() => false);
+    await notifyCoachee(coachee.user_id, { title: "Neue Nachricht", body: "Von deinem Coach. Öffnen zum Lesen.", url: "/mein-bereich/posteingang?offen=nachrichten", tag: "nachricht" });
   } else {
     const coach = await one<{ email: string; name: string }>("SELECT email, name FROM users WHERE id = $1", [coachee.coach_id]);
     if (coach) await sendMail({ to: coach.email, ...noticeMail(coach.name.split(" ")[0], `${coachee.first_name} ${coachee.last_name} hat dir eine Nachricht geschrieben.`) }).catch(() => false);

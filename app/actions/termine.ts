@@ -11,6 +11,7 @@ import { one, query } from "@/lib/db";
 import { dateOrNull, text, type FormState } from "@/lib/forms";
 import { randomToken } from "@/lib/crypto";
 import { notify } from "@/lib/push";
+import { postToInbox } from "@/lib/coachee-inbox";
 
 const hm = (fd: FormData, key: string) => {
   const v = text(fd, key, 5);
@@ -87,10 +88,13 @@ export async function saveAppointment(id: string | null, ret: string, _prev: For
       [saved.id, r.msEventId ?? null, r.joinUrl ?? null, r.result === "mail" || r.result === "graph"],
     );
   }
+  // Neu, verschoben oder für einen anderen Coachee: steht im Posteingang des Coachees
+  const fresh = !before || before.coachee_id !== c?.id;
+  const inboxUrl = c && (fresh || timeChanged) ? await postToInbox(c.id, "termin", saved.id, coach.id, fresh ? "neu" : "geaendert") : null;
   // Sofort-Meldung an den Coachee, wenn er eingeladen wird (gleicher Anlass wie die Einladungsmail)
   if (c?.user_id && invite && (!before || timeChanged || before.coachee_id !== c.id)) {
     const when = new Date(`${day}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
-    await notify([c.user_id], { title: before ? "Termin geändert" : "Neuer Termin", body: `${when}, ${start} Uhr`, url: "/mein-bereich/kalender", tag: `termin-${saved.id}` });
+    await notify([c.user_id], { title: before ? "Termin geändert" : "Neuer Termin", body: `${when}, ${start} Uhr`, url: inboxUrl ?? "/mein-bereich/kalender", tag: `termin-${saved.id}` });
   }
   await audit(coach.id, before ? "appointment_updated" : "appointment_created", c?.id ?? null, { appointmentId: saved.id, sync });
   refresh(c?.id ?? null);
@@ -104,6 +108,7 @@ export async function cancelAppointment(id: string, ret: string) {
   if (!a) return;
   const first = a.coachee_id ? (await one<{ first_name: string }>("SELECT first_name FROM coachees WHERE id = $1", [a.coachee_id]))?.first_name ?? null : null;
   await query("UPDATE appointments SET status = 'abgesagt', sequence = sequence + 1, updated_at = now() WHERE id = $1", [id]);
+  if (a.coachee_id && a.status === "geplant") await postToInbox(a.coachee_id, "termin", id, coach.id, "abgesagt");
   const sync = await cancelAppointmentRemote({ ...a, sequence: a.sequence + 1 }, first);
   await audit(coach.id, "appointment_cancelled", a.coachee_id, { appointmentId: id, sync });
   refresh(a.coachee_id);

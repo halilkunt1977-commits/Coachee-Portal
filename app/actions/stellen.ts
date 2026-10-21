@@ -6,6 +6,7 @@ import { one, query } from "@/lib/db";
 import { JobSearchError, searchJobs } from "@/lib/jobs/ba";
 import { CHANNELS, SALUTATIONS, STATUSES, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import { getApplication, hiddenRefs, normalizeQuery, profileForAi } from "@/lib/jobs/store";
+import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
 async function jobCoachee(user: User, coacheeId: string) {
   const c = await coacheeFor(user, coacheeId);
@@ -84,6 +85,12 @@ export async function hideJob(coacheeId: string, refnr: string, hide: boolean) {
 
 // ---------- Tracker ----------
 
+/** Vorschlag des Coachs: in den Posteingang des Coachees, dazu eine Sofort-Meldung (mehrere Vorschläge fasst das Handy zusammen) */
+async function proposed(c: { id: string; user_id: string | null }, applicationId: string, coachId: string) {
+  const url = await postToInbox(c.id, "stelle", applicationId, coachId);
+  await notifyCoachee(c.user_id, { title: "Neue Stelle für dich", body: "Dein Coach hat dir eine Stelle vorgeschlagen.", url, tag: "stelle" });
+}
+
 const historyEntry = (status: Status, user: User) => JSON.stringify([{ at: new Date().toISOString(), status, by: user.name }]);
 
 /** Treffer übernehmen: Coach schlägt vor, Coachee merkt sich die Stelle. Gibt es sie schon, bleibt sie, wie sie ist. */
@@ -93,11 +100,11 @@ export async function saveJob(coacheeId: string, job: Job, reason = ""): Promise
   const refnr = clip(job?.refnr, 80);
   if (!refnr) return { error: "Diese Stelle hat keine Referenznummer." };
   const status: Status = user.role === "coach" ? "vorschlag" : "gemerkt";
-  const row = await one<{ id: string }>(
+  const row = await one<{ id: string; status: Status; fresh: boolean }>(
     `INSERT INTO applications (coachee_id, refnr, title, employer, location, url, published_on, status, reason, history, proposed_by, created_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (coachee_id, refnr) WHERE refnr IS NOT NULL DO UPDATE SET reason = CASE WHEN applications.reason = '' THEN EXCLUDED.reason ELSE applications.reason END
-     RETURNING id`,
+     RETURNING id, status, (xmax = 0) AS fresh`,
     [
       c.id, refnr, clip(job.title, 200) || "Stellenangebot", clip(job.employer, 200), clip(job.location, 120), safeUrl(job.url),
       isDate(String(job.published ?? "").slice(0, 10)) ? String(job.published).slice(0, 10) : null,
@@ -106,6 +113,7 @@ export async function saveJob(coacheeId: string, job: Job, reason = ""): Promise
   );
   await query("DELETE FROM job_hidden WHERE coachee_id = $1 AND refnr = $2", [c.id, refnr]);
   await audit(user.id, user.role === "coach" ? "job_proposed" : "job_saved", c.id, { refnr });
+  if (user.role === "coach" && row!.status === "vorschlag" && row!.fresh) await proposed(c, row!.id, user.id);
   return { application: (await getApplication(c.id, row!.id))! };
 }
 
@@ -179,6 +187,7 @@ export async function updateApplication(coacheeId: string, id: string, patch: Pa
     throw e;
   }
   if (patch.status !== undefined && patch.status !== cur.status) await audit(user.id, "application_status", c.id, { status: patch.status });
+  if (patch.status === "vorschlag" && cur.status !== "vorschlag" && user.role === "coach") await proposed(c, id, user.id);
   return { application: (await getApplication(c.id, id))! };
 }
 

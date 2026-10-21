@@ -29,7 +29,7 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
   );
 }
 
-export async function BewerbungenPanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
+export async function BewerbungenPanel({ user, coachee: c, links, focus }: { user: User; coachee: Coachee; links: Links; focus?: string | null }) {
   const apps = await listApplications(c.id);
   return (
     <Tracker
@@ -37,6 +37,7 @@ export async function BewerbungenPanel({ user, coachee: c, links }: { user: User
       coach={user.role === "coach"}
       firstName={c.first_name}
       initial={apps}
+      focus={focus && apps.some((a) => a.id === focus) ? focus : null}
       searchHref={links.search}
       exportHref={{ pdf: `/api/bewerbungen/${c.id}/pdf`, excel: `/api/bewerbungen/${c.id}/excel` }}
     />

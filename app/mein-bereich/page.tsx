@@ -1,5 +1,4 @@
-import { MessageForm } from "@/components/akte/MessageForm";
-import { MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
+import { TaskList, type Task } from "@/components/akte/Lists";
 import { TaskForm } from "@/components/akte/TaskForm";
 import { Empty, formatDate } from "@/components/ui";
 import { ownCoachee, typeLabel } from "@/lib/access";
@@ -28,6 +27,41 @@ import { FoerderCard, FoerderWahl } from "@/components/handbuch/FoerderCard";
 import { FOERDERUNGEN } from "@/lib/handbuch/foerderung";
 import { findeHebesatz } from "@/lib/tax/hebesaetze";
 import { BUNDESLAENDER, type Bundesland } from "@/lib/tax/lohnsteuer";
+import { inboxEntries, inboxThread, inboxUnread, type InboxEntry } from "@/lib/coachee-inbox";
+
+const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stellenvorschlag", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin" };
+const entryTitle = (e: InboxEntry) => (e.kind === "aufgabe" ? e.task.title : e.kind === "stelle" || e.kind === "anschreiben" ? e.job.title : e.kind === "dokument" ? e.doc.title : e.appt.title);
+
+/** Kurzer Blick in den Posteingang: das Neueste, Tippen öffnet den Eintrag dort */
+function InboxTeaser({ unread, items }: { unread: number; items: { id: string; label: string; title: string; unread: boolean; at: string }[] }) {
+  return (
+    <section id="nachrichten" className="card min-w-0 scroll-mt-24 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="h2">Posteingang</h2>
+        {unread > 0 && <span className="rounded-full bg-danger px-2.5 py-0.5 text-xs font-bold text-white">{unread} neu</span>}
+      </div>
+      {items.length === 0 ? (
+        <Empty>Nachrichten, Aufgaben, Stellen und Dokumente von deinem Coach landen hier.</Empty>
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {items.map((i) => (
+            <li key={i.id}>
+              <Link href={`/mein-bereich/posteingang?offen=${i.id}`} className="flex items-center gap-3 py-2.5 transition hover:text-accent">
+                <span className={`size-2 shrink-0 rounded-full ${i.unread ? "bg-danger" : "bg-line"}`} aria-label={i.unread ? "ungelesen" : undefined} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{i.label}</span>
+                  <span className={`block truncate ${i.unread ? "font-bold" : "font-medium"}`}>{i.title}</span>
+                </span>
+                <span className="shrink-0 text-xs text-muted">{formatDate(i.at)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link href="/mein-bereich/posteingang" className="btn-ghost btn-sm w-full justify-center sm:w-auto">Zum Posteingang · antworten</Link>
+    </section>
+  );
+}
 
 function NextStep({ label, hint, href }: { label: string; hint: string; href: string }) {
   return (
@@ -95,11 +129,10 @@ export default async function MyArea() {
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
 
-  const [meetings, tasks, messages, coach, profile, docs, progress, [nextAppt]] = await Promise.all([
+  const [meetings, tasks, coach, profile, docs, progress, [nextAppt], inbox, thread, unread] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [c.id]),
-    query<Message>("SELECT m.id, m.body, m.created_at, m.author_id, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at", [c.id]),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
     // Interne Einträge (z. B. Gesundheit) werden gar nicht erst geladen
     query<ProfileItem>("SELECT id, category, title, detail, level FROM profile_items WHERE coachee_id = $1 AND NOT internal ORDER BY created_at", [c.id]),
@@ -107,7 +140,16 @@ export default async function MyArea() {
     query<{ id: string; file_id: string; title: string; category: string; created_at: string }>("SELECT id, file_id, title, category, created_at FROM documents WHERE coachee_id = $1 AND shared ORDER BY created_at DESC", [c.id]),
     progressFor(c),
     upcomingAppointments(user, 1),
+    inboxEntries(c.id, 4),
+    inboxThread(c.id, user.id),
+    inboxUnread(c.id, user.id),
   ]);
+  // Nachrichten werden erst im Posteingang als gelesen markiert
+  const teaser = [
+    ...(thread ? [{ id: "nachrichten", label: "Nachrichten", title: thread.unread ? `${thread.unread} neue Nachricht${thread.unread === 1 ? "" : "en"}` : `${thread.mine ? "Du: " : ""}${thread.preview}`, unread: thread.unread > 0, at: thread.at }] : []),
+    ...inbox.map((e) => ({ id: e.id, label: INBOX_LABEL[e.kind], title: entryTitle(e), unread: e.unread, at: e.at })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 4);
+  const newMessages = thread?.unread ?? 0;
   const links: Links = {
     cv: "/mein-bereich/lebenslauf",
     plan: "/mein-bereich/businessplan",
@@ -129,7 +171,6 @@ export default async function MyArea() {
   const land = findeHebesatz(progress.city)?.treffer.land;
   const defaultLand = BUNDESLAENDER.find((b) => b.key === land)?.key as Bundesland | undefined;
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
-  await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [c.id, user.id]);
 
   return (
     <div className="space-y-6">
@@ -169,6 +210,12 @@ export default async function MyArea() {
               <NextStep label={next.action} hint={next.hint} href={nextHref} />
             )}
             <div className="flex flex-wrap gap-2 text-sm">
+              {unread > 0 && (
+                <Link href={newMessages ? "/mein-bereich/posteingang?offen=nachrichten" : "/mein-bereich/posteingang"} className="inline-flex items-center gap-1.5 rounded-full bg-danger px-3 py-1 font-semibold text-white transition hover:brightness-110">
+                  <Icon name="mail" className="size-4" />
+                  {newMessages === unread ? `${unread} neue Nachricht${unread === 1 ? "" : "en"}` : `${unread} Neues`} im Posteingang
+                </Link>
+              )}
               {openTasks > 0 && <Link href="/mein-bereich/aufgaben" className="rounded-full bg-white/10 px-3 py-1 font-medium transition hover:bg-white/20">{openTasks} offene Aufgabe{openTasks > 1 ? "n" : ""}</Link>}
               {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-gold px-3 py-1 font-semibold text-night transition hover:brightness-110">{progress.jobs?.proposals} neue Stelle{progress.jobs?.proposals === 1 ? "" : "n"} für dich</Link>}
               {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="rounded-full bg-white px-3 py-1 font-semibold text-danger">Heute nachfassen: {progress.jobs?.due}</Link>}
@@ -253,11 +300,7 @@ export default async function MyArea() {
             <div className="pt-3"><TaskForm coacheeId={c.id} coach={false} /></div>
           </details>
         </section>
-        <section id="nachrichten" className="card scroll-mt-24 space-y-4">
-          <h2 className="h2">Nachrichten</h2>
-          <div className="max-h-96 overflow-y-auto"><MessageList messages={messages} selfId={user.id} /></div>
-          <MessageForm coacheeId={c.id} />
-        </section>
+        <InboxTeaser unread={unread} items={teaser} />
       </div>
 
       {groups.length > 0 && (

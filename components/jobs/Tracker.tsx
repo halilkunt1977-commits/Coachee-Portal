@@ -1,18 +1,25 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addApplication, deleteApplication, updateApplication } from "@/app/actions/stellen";
 import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
-type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string } };
+type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null };
 
 const ACTIVE: Status[] = ["vorschlag", "gemerkt", "beworben", "gespraech"];
 const fmt = (d: string | null) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "");
 
 export function Tracker(p: Props) {
   const [apps, setApps] = useState(p.initial);
-  const [filter, setFilter] = useState<"aktiv" | "alle" | Status>("aktiv");
-  const [open, setOpen] = useState<string | null>(null);
+  // Aus dem Posteingang kommend: diese Stelle aufgeklappt zeigen, auch wenn sie nicht mehr „laufend“ ist
+  const [filter, setFilter] = useState<"aktiv" | "alle" | Status>(() => {
+    const f = p.focus ? p.initial.find((a) => a.id === p.focus) : null;
+    return f && !ACTIVE.includes(f.status) ? "alle" : "aktiv";
+  });
+  const [open, setOpen] = useState<string | null>(p.focus ?? null);
+  useEffect(() => {
+    if (p.focus) document.getElementById(`stelle-${p.focus}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [p.focus]);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const now = today();
@@ -114,7 +121,7 @@ export function Tracker(p: Props) {
           const isOpen = open === a.id;
           const overdue = a.next_on && a.next_on <= now && ACTIVE.includes(a.status);
           return (
-            <li key={a.id} className={`card !p-0 ${a.status === "vorschlag" && !p.coach ? "ring-2 ring-gold/40" : ""}`}>
+            <li key={a.id} id={`stelle-${a.id}`} className={`card scroll-mt-24 !p-0 ${a.status === "vorschlag" && !p.coach ? "ring-2 ring-gold/40" : a.id === p.focus ? "ring-2 ring-accent/30" : ""}`}>
               <div className="flex flex-wrap items-start gap-3 p-4">
                 <div className="min-w-0 flex-1 basis-64">
                   <div className="flex flex-wrap items-center gap-2">
