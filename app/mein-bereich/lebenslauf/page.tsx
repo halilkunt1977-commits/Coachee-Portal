@@ -3,6 +3,7 @@ import { CvList } from "@/components/cv/CvList";
 import { Empty } from "@/components/ui";
 import { ownCoachee } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
+import { hasFeature } from "@/lib/features";
 import { OwnContactForm } from "@/components/cv/OwnContactForm";
 import { germanDate } from "@/lib/cv/types";
 
@@ -18,6 +19,7 @@ export default async function MyCvs({ searchParams }: PageProps<"/mein-bereich/l
       <CvList
         coacheeId={c.id}
         coach={false}
+        importAllowed={hasFeature(c, "lebenslauf_import")}
         limitHit={(await searchParams).grenze === "1"}
         aside={
           <div className="card space-y-3">

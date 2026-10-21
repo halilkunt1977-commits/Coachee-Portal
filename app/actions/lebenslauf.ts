@@ -42,7 +42,7 @@ export async function createCv(coacheeId: string, _prev: FormState, fd: FormData
     if (!(file instanceof File) || file.size === 0) return { error: "Bitte den bisherigen Lebenslauf auswählen." };
     if (file.size > 10 * 1024 * 1024) return { error: "Die Datei ist größer als 10 MB." };
     try {
-      await assertAiAllowed(user);
+      await assertAiAllowed(user, { feature: "lebenslauf_import", coachee: c });
       const { text: content, buffer } = await extractCvText(file);
       const parsed = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "" });
       if (!parsed.skills.length) parsed.skills = data.skills;

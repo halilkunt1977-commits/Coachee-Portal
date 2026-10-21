@@ -50,7 +50,7 @@ npm run dev                  # http://localhost:3000
   und nur mit Einwilligung des Coachees.
 - Hochgeladene Dateien liegen AES-256-verschlüsselt im Volume und werden nur nach Prüfung der Akte ausgeliefert.
 - Beim Einlesen eines alten Lebenslaufs werden Name, E-Mail und Telefon vor der KI entfernt und danach lokal eingesetzt.
-  Coachees können die KI begrenzt nutzen (`AI_COACHEE_MONTHLY_LIMIT`, Standard 40 Aufrufe im Monat).
+  Coachees nutzen nur die Zusatzfunktionen, die der Coach unter „Freigaben“ (oder in der Akte) einzeln freigibt, und nur begrenzt (`AI_COACHEE_MONTHLY_LIMIT`, Standard 40 Aufrufe im Monat; je Coachee änderbar).
 - Der KI-Assistent bekommt nie Gesundheitsangaben und als Coachee nie interne Notizen; Namen werden ersetzt.
 - Das PDF entsteht in einem Chromium ohne JavaScript und ohne Netzzugriff.
 - Keine Tracker, keine externen Skripte, `noindex` für Suchmaschinen.

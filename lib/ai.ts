@@ -1,6 +1,8 @@
 import "server-only";
 import OpenAI from "openai";
+import type { Coachee } from "./access";
 import type { User } from "./auth";
+import { NOT_RELEASED, defaultMonthlyLimit, hasFeature, type FeatureKey } from "./features";
 import { one, query } from "./db";
 
 /*
@@ -26,15 +28,28 @@ export function pseudonymize(text: string, names: string[]) {
 }
 
 // Coachees sollen nicht merken, dass hinter den Hilfen eine KI steckt (Wunsch des Coachs): Meldungen an sie ohne „KI“.
-/** Coachees dürfen die KI nur begrenzt nutzen (AI_COACHEE_MONTHLY_LIMIT Aufrufe pro Monat, Standard 40). */
-export async function assertAiAllowed(user: User, opts: { coachOnly?: boolean } = {}) {
-  // Schreibhilfen, Assistent und Vorschläge gibt es nur für den Coach. Coachees sehen davon nichts.
-  if (opts.coachOnly && user.role !== "coach") throw new AiError("Diese Funktion steht nur deinem Coach zur Verfügung.");
-  if (!aiEnabled()) throw new AiError(user.role === "coach" ? "Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt)." : "Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
-  if (user.role === "coach") return;
-  const limit = Number(process.env.AI_COACHEE_MONTHLY_LIMIT || 40);
-  const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now())", [user.id]);
-  if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
+type AiCheck =
+  /** Schreibhilfen, Assistent und Vorschläge gibt es nur für den Coach. Coachees sehen davon nichts. */
+  | { coachOnly: true }
+  /** Zusatzfunktion, die der Coach dem Coachee freigeben muss (lib/features.ts). coachee: Zeile, falls schon geladen. */
+  | { feature: FeatureKey; coachee?: Pick<Coachee, "features" | "ai_monthly_limit"> | null };
+
+/**
+ * Darf dieser Aufruf an die KI? Der Coach immer. Coachees nur mit freigegebener Zusatzfunktion und bis zur Monatsgrenze
+ * (eigene Grenze in der Akte, sonst AI_COACHEE_MONTHLY_LIMIT, Standard 40 Aufrufe).
+ */
+export async function assertAiAllowed(user: User, opts: AiCheck) {
+  if (user.role !== "coach") {
+    if (!("feature" in opts)) throw new AiError("Diese Funktion steht nur deinem Coach zur Verfügung.");
+    const c = opts.coachee ?? (await one<Pick<Coachee, "features" | "ai_monthly_limit">>("SELECT features, ai_monthly_limit FROM coachees WHERE user_id = $1", [user.id]));
+    if (!c || !hasFeature(c, opts.feature)) throw new AiError(NOT_RELEASED);
+    if (!aiEnabled()) throw new AiError("Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
+    const limit = c.ai_monthly_limit ?? defaultMonthlyLimit();
+    const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now())", [user.id]);
+    if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
+    return;
+  }
+  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
 }
 
 type Usage = { coacheeId: string | null; userId: string; purpose: string };
