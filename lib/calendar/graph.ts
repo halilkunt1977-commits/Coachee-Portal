@@ -97,6 +97,18 @@ export async function cancelGraphEvent(eventId: string, comment: string) {
   }
 }
 
+/** Verbindung prüfen (für die Kalenderseite): Anmeldung bei Microsoft und Zugriff auf den Kalender des Postfachs */
+export async function graphCheck(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const cal = await graph("/calendar?$select=name,canEdit,allowedOnlineMeetingProviders");
+    const teams = (cal?.allowedOnlineMeetingProviders ?? []).includes("teamsForBusiness");
+    if (!cal?.canEdit) return { ok: false, message: "Der Kalender ist nur lesbar. Bitte die Berechtigung Calendars.ReadWrite (Anwendung) mit Administratorzustimmung erteilen." };
+    return teams ? { ok: true, message: `Kalender „${cal.name}“ erreichbar, Teams-Besprechungen möglich.` } : { ok: false, message: "Kalender erreichbar, aber für dieses Postfach sind keine Teams-Besprechungen erlaubt. Hat das Postfach eine Teams-Lizenz?" };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Unbekannter Fehler" };
+  }
+}
+
 export type OutlookEvent = { id: string; title: string; start: string; end: string; allDay: boolean; location: string | null; joinUrl: string | null; webLink: string | null };
 
 let viewCache: { key: string; at: number; value: OutlookEvent[] } | null = null;

@@ -9,7 +9,7 @@ import { Icon } from "@/components/shell/icons";
 import { Empty } from "@/components/ui";
 import { requireCoach } from "@/lib/auth";
 import { isDay, todayBerlin } from "@/lib/calendar/dates";
-import { graphEnabled } from "@/lib/calendar/graph";
+import { graphCheck, graphEnabled } from "@/lib/calendar/graph";
 import { appointmentFor, calendarItems, upcomingAppointments } from "@/lib/calendar/store";
 import { one, query } from "@/lib/db";
 
@@ -98,7 +98,7 @@ export default async function CoachCalendar({ searchParams }: PageProps<"/coach/
               {upcoming.length ? <UpcomingList items={upcoming} coach hrefFor={(a) => `${path}?ansicht=${view}&datum=${a.day}&termin=${a.id}`} /> : <Empty>Keine Termine geplant.</Empty>}
             </section>
           )}
-          <MicrosoftCard on={graph} />
+          <MicrosoftCard on={graph} check={graph ? await graphCheck() : null} />
           <SubscribeCard token={me?.calendar_token ?? null} />
         </aside>
       </div>
@@ -122,7 +122,7 @@ function Legend({ outlook }: { outlook: boolean }) {
   );
 }
 
-function MicrosoftCard({ on }: { on: boolean }) {
+function MicrosoftCard({ on, check }: { on: boolean; check: { ok: boolean; message: string } | null }) {
   return (
     <section className={`card space-y-2 ${on ? "" : "border-dashed"}`}>
       <div className="flex items-center gap-2.5">
@@ -131,7 +131,7 @@ function MicrosoftCard({ on }: { on: boolean }) {
         </span>
         <div>
           <h2 className="h2 !text-base">Microsoft Teams und Outlook</h2>
-          <p className={`text-xs font-semibold ${on ? "text-ok" : "text-muted"}`}>{on ? "Verbunden" : "Noch nicht verbunden"}</p>
+          <p className={`text-xs font-semibold ${on && check?.ok ? "text-ok" : on ? "text-danger" : "text-muted"}`}>{!on ? "Noch nicht verbunden" : check?.ok ? "Verbunden" : "Verbindung gestört"}</p>
         </div>
       </div>
       <p className="text-sm text-muted">
@@ -139,6 +139,7 @@ function MicrosoftCard({ on }: { on: boolean }) {
           ? "Neue Termine landen in deinem Outlook-Kalender, Teams-Links entstehen automatisch, und deine Outlook-Termine erscheinen hier im Kalender."
           : "Teams-Termine funktionieren schon: Link aus Teams einfügen, das Portal schickt die Einladung. Nach der Anbindung erstellt es Teams-Links selbst und zeigt deine Outlook-Termine hier."}
       </p>
+      {check && <p className={`text-xs ${check.ok ? "text-muted" : "text-danger"}`}>{check.message}</p>}
     </section>
   );
 }
