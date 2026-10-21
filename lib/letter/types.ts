@@ -87,3 +87,17 @@ export function salutationFor(salutation: string, contact: string) {
 
 export const DEFAULT_CLOSING = "Mit freundlichen Grüßen";
 export const DEFAULT_ATTACHMENTS = "Lebenslauf\nZeugnisse";
+
+/**
+ * Ansprechperson aus dem Freitextfeld „Kontakt“ der Bewerbung (z. B. „Frau Weber, weber@firma.de, 0911 …“):
+ * Name ist der erste Teil, sofern er keine E-Mail-Adresse oder Telefonnummer ist; der Rest bleibt unverändert erhalten.
+ */
+export function splitContact(contact: string) {
+  const c = (contact ?? "").trim();
+  const m = /[,;\n]/.exec(c);
+  const first = (m ? c.slice(0, m.index) : c).trim();
+  const isName = first && !/@/.test(first) && !/^[+\d][\d\s/()-]{4,}$/.test(first);
+  return isName ? { name: first.replace(/^(frau|herrn?)\s+/i, "").trim(), rest: m ? c.slice(m.index + 1).trim() : "" } : { name: "", rest: c };
+}
+
+export const joinContact = (name: string, rest: string) => [name.replace(/[,;\n]+/g, " ").trim(), rest.trim()].filter(Boolean).join(", ");
