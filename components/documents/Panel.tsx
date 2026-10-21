@@ -11,6 +11,7 @@ import { planIsEmpty } from "@/lib/bp/sections";
 import { financeTouched, planFor } from "@/lib/bp/store";
 import { ImportDocumentButton } from "../bp/ImportButtons";
 import { ConfirmButton } from "../ConfirmButton";
+import { ShareButton } from "../teilen/ShareButton";
 import { Empty, Notice, formatDate, formatUnits } from "../ui";
 import { EditDocument, ImportRows, UploadForm } from "./Forms";
 
@@ -59,7 +60,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                 const target = importTarget(d.category, d.name);
                 const ok = cmp && !cmp.differs.length && !cmp.missing.length && !cmp.extra.length;
                 return (
-                  <li key={d.id} className="py-2">
+                  <li key={d.id} id={`dokument-${d.id}`} className="scroll-mt-24 py-2">
                     <details>
                       <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
                         <span className="min-w-0">
@@ -78,6 +79,7 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
                         <div className="flex flex-wrap gap-2">
                           <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="btn btn-sm">Öffnen</a>
                           <a href={`/api/dateien/${d.file_id}?download=1`} className="btn-ghost btn-sm">Herunterladen</a>
+                          <ShareButton kind="dokument" refId={d.id} role="coach" coacheeId={c.id} recipient={c.first_name} title={d.title} />
                           {d.signature === "offen" && <form action={setSignature.bind(null, d.id, "unterschrieben")}><button className="btn-ghost btn-sm">Als unterschrieben markieren</button></form>}
                           {d.signature === "unterschrieben" && <form action={setSignature.bind(null, d.id, "offen")}><button className="btn-ghost btn-sm">Unterschrift wieder offen</button></form>}
                           {!d.signature && <form action={setSignature.bind(null, d.id, "offen")}><button className="btn-ghost btn-sm">Unterschrift nötig</button></form>}

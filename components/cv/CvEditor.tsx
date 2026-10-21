@@ -19,6 +19,8 @@ type Props = {
   backLabel: string;
   /** Coachee: Name und Kontakt kommen aus den Stammdaten und lassen sich nur ein- oder ausblenden */
   locked?: PersonalLock | null;
+  /** „An … senden“ */
+  share?: React.ReactNode;
 };
 
 type SaveState = { kind: "saved" | "dirty" | "saving" | "error" | "conflict"; at?: string; by?: string | null; message?: string };
@@ -28,7 +30,7 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const LEVELS = ["ohne Stufe", "Grundkenntnisse", "Erweitert", "Gut", "Sehr gut", "Experte"];
 const LANGUAGE_LEVELS = ["Muttersprache", "Verhandlungssicher", "Fließend", "Gute Kenntnisse", "Grundkenntnisse", "C2", "C1", "B2", "B1", "A2", "A1"];
 
-export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null }: Props) {
+export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null, share }: Props) {
   const [name, setName] = useState(initial.name);
   const [template, setTemplate] = useState<TemplateKey>(initial.template);
   const [color, setColor] = useState(initial.color);
@@ -162,6 +164,7 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
           <button type="button" className="btn-ghost" onClick={() => setDesignOpen((o) => !o)} aria-expanded={designOpen}>
             <span className="size-3.5 rounded-full" style={{ background: color }} /> Design: {TEMPLATES.find((t) => t.key === template)?.label}
           </button>
+          {share}
           <button
             type="button"
             className="btn"

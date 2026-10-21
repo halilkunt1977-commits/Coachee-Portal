@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { addApplication, deleteApplication, updateApplication } from "@/app/actions/stellen";
+import { ShareButton } from "../teilen/ShareButton";
 import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null };
@@ -155,6 +156,7 @@ export function Tracker(p: Props) {
                     </select>
                   )}
                   {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm">Anschreiben</Link>}
+                  <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />
                   <button type="button" aria-expanded={isOpen} className="btn-ghost btn-sm" onClick={() => setOpen(isOpen ? null : a.id)}>{isOpen ? "Zuklappen" : "Details"}</button>
                 </div>
               </div>

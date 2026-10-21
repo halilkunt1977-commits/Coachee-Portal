@@ -5,7 +5,7 @@ import { audit, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { JobSearchError, searchJobs } from "@/lib/jobs/ba";
 import { CHANNELS, SALUTATIONS, STATUSES, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
-import { getApplication, hiddenRefs, normalizeQuery, profileForAi } from "@/lib/jobs/store";
+import { getApplication, hiddenRefs, normalizeQuery, profileForAi, storeJob } from "@/lib/jobs/store";
 import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
 async function jobCoachee(user: User, coacheeId: string) {
@@ -97,24 +97,10 @@ const historyEntry = (status: Status, user: User) => JSON.stringify([{ at: new D
 export async function saveJob(coacheeId: string, job: Job, reason = ""): Promise<{ application?: Application; error?: string }> {
   const user = await requireUser();
   const c = await jobCoachee(user, coacheeId);
-  const refnr = clip(job?.refnr, 80);
-  if (!refnr) return { error: "Diese Stelle hat keine Referenznummer." };
-  const status: Status = user.role === "coach" ? "vorschlag" : "gemerkt";
-  const row = await one<{ id: string; status: Status; fresh: boolean }>(
-    `INSERT INTO applications (coachee_id, refnr, title, employer, location, url, published_on, status, reason, history, proposed_by, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-     ON CONFLICT (coachee_id, refnr) WHERE refnr IS NOT NULL DO UPDATE SET reason = CASE WHEN applications.reason = '' THEN EXCLUDED.reason ELSE applications.reason END
-     RETURNING id, status, (xmax = 0) AS fresh`,
-    [
-      c.id, refnr, clip(job.title, 200) || "Stellenangebot", clip(job.employer, 200), clip(job.location, 120), safeUrl(job.url),
-      isDate(String(job.published ?? "").slice(0, 10)) ? String(job.published).slice(0, 10) : null,
-      status, clip(reason, 600), historyEntry(status, user), user.role === "coach" ? user.id : null, user.id,
-    ],
-  );
-  await query("DELETE FROM job_hidden WHERE coachee_id = $1 AND refnr = $2", [c.id, refnr]);
-  await audit(user.id, user.role === "coach" ? "job_proposed" : "job_saved", c.id, { refnr });
-  if (user.role === "coach" && row!.status === "vorschlag" && row!.fresh) await proposed(c, row!.id, user.id);
-  return { application: (await getApplication(c.id, row!.id))! };
+  const row = await storeJob(c.id, user, job, reason);
+  if ("error" in row) return { error: row.error };
+  if (user.role === "coach" && row.status === "vorschlag" && row.fresh) await proposed(c, row.id, user.id);
+  return { application: (await getApplication(c.id, row.id))! };
 }
 
 /** Eigene Bewerbung eintragen, z. B. Initiativbewerbung oder eine Stelle aus einer anderen Börse */

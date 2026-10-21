@@ -8,11 +8,12 @@ import { ConfirmButton } from "../ConfirmButton";
 import { CvPreview } from "./CvPreview";
 import { Empty, formatDateTime } from "../ui";
 import { NewCvForm } from "./NewCvForm";
+import { ShareButton } from "../teilen/ShareButton";
 import { Notice } from "../ui";
 import type { ReactNode } from "react";
 
 /** Alle Lebensläufe eines Coachees, für Coach (Akte) und Coachee (Mein Bereich) gleich. */
-export async function CvList({ coacheeId, coach, limitHit, aside }: { coacheeId: string; coach: boolean; limitHit?: boolean; aside?: ReactNode }) {
+export async function CvList({ coacheeId, coach, limitHit, aside, recipient }: { coacheeId: string; coach: boolean; limitHit?: boolean; aside?: ReactNode; /** Vorname des Coachees, für „An … senden“ */ recipient?: string }) {
   const cvs = await listCvs(coacheeId);
   // Coachees: höchstens MAX_COACHEE_CVS Fassungen, damit das Portal für die eigene Bewerbung genutzt wird
   const full = !coach && cvs.length >= MAX_COACHEE_CVS;
@@ -39,6 +40,7 @@ export async function CvList({ coacheeId, coach, limitHit, aside }: { coacheeId:
             <div className="flex flex-wrap gap-2">
               <Link href={`/lebenslauf/${cv.id}`} className="btn btn-sm">Bearbeiten</Link>
               <a href={`/api/lebenslauf/${cv.id}/pdf`} className="btn-ghost btn-sm">PDF</a>
+              <ShareButton kind="lebenslauf" refId={cv.id} role={coach ? "coach" : "coachee"} coacheeId={coacheeId} recipient={recipient} title={cv.name} />
               {!full && <form action={duplicateCv.bind(null, cv.id)}><button className="btn-ghost btn-sm">Kopie für andere Bewerbung</button></form>}
               <form action={deleteCv.bind(null, cv.id)}><ConfirmButton /></form>
             </div>

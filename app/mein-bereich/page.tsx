@@ -29,8 +29,14 @@ import { findeHebesatz } from "@/lib/tax/hebesaetze";
 import { BUNDESLAENDER, type Bundesland } from "@/lib/tax/lohnsteuer";
 import { inboxEntries, inboxThread, inboxUnread, type InboxEntry } from "@/lib/coachee-inbox";
 
-const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stellenvorschlag", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin" };
-const entryTitle = (e: InboxEntry) => (e.kind === "aufgabe" ? e.task.title : e.kind === "stelle" || e.kind === "anschreiben" ? e.job.title : e.kind === "dokument" ? e.doc.title : e.appt.title);
+const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stelle", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin", lebenslauf: "Lebenslauf", businessplan: "Businessplan", finanzplan: "Finanzplan" };
+const entryTitle = (e: InboxEntry) =>
+  e.kind === "aufgabe" ? e.task.title
+  : e.kind === "stelle" || e.kind === "anschreiben" ? e.job.title
+  : e.kind === "dokument" ? e.doc.title
+  : e.kind === "lebenslauf" ? e.cv.name
+  : e.kind === "businessplan" || e.kind === "finanzplan" ? e.plan.title
+  : e.appt.title;
 
 /** Kurzer Blick in den Posteingang: das Neueste, Tippen öffnet den Eintrag dort */
 function InboxTeaser({ unread, items }: { unread: number; items: { id: string; label: string; title: string; unread: boolean; at: string }[] }) {

@@ -15,6 +15,7 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
                 AND (a.starts_at AT TIME ZONE 'Europe/Berlin')::date = (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS today,
               (SELECT count(*) FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' AND read_at IS NULL)::int AS inbox,
               (SELECT count(*) FROM leads WHERE coach_id = $1 AND status IN ('neu','kontaktiert') AND follow_up_on <= (now() AT TIME ZONE 'Europe/Berlin')::date)::int AS leads,
+              -- Ungelesenes von Coachees zählt bei „Coachees“ und im Posteingang (Bereich „Von Coachees“)
               (SELECT count(*) FROM messages m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1)::int AS unread,
               -- Hinweis im Menü, wenn die letzte gelungene Datensicherung älter als 26 Stunden ist
               (SELECT CASE WHEN EXISTS (SELECT 1 FROM backup_runs WHERE status = 'ok' AND finished_at > now() - interval '26 hours') THEN 0 ELSE 1 END)::int AS backup`,
@@ -41,7 +42,7 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
     </div>
   );
   return (
-    <AppShell user={user} groups={coachNav(counts[0])} extra={extra}>
+    <AppShell user={user} groups={coachNav({ ...counts[0], inbox: counts[0].inbox + counts[0].unread })} extra={extra}>
       {children}
     </AppShell>
   );

@@ -11,6 +11,8 @@ import { query, one } from "@/lib/db";
 import { CATEGORIES, SOURCES, isCategory, ownPart, type Category, type Source } from "@/lib/inbox/classify";
 import type { Applied, Parsed } from "@/lib/inbox/ingest";
 import { ago } from "@/lib/inbox/time";
+import { ComposeButton } from "@/components/teilen/ComposeButton";
+import { FromCoachees } from "@/components/teilen/FromCoachees";
 
 export const metadata = { title: "Posteingang" };
 
@@ -40,6 +42,55 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
   const art = str(sp.art);
   const quelle = str(sp.quelle);
   const selectedId = str(sp.mail);
+
+  // Zwei Bereiche: was Coachees schicken, und die Mails der Bildungsträger. Ohne Angabe dort, wo Neues liegt.
+  const [fromCoachees, mailUnread, pickList] = await Promise.all([
+    one<{ n: number }>(
+      "SELECT count(*)::int AS n FROM messages m JOIN coachees c ON c.id = m.coachee_id WHERE c.coach_id = $1 AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1",
+      [coach.id],
+    ),
+    one<{ n: number }>("SELECT count(*)::int AS n FROM inbox_mails WHERE coach_id = $1 AND direction = 'in' AND read_at IS NULL", [coach.id]),
+    query<{ id: string; name: string }>(
+      "SELECT id, first_name || ' ' || last_name AS name FROM coachees WHERE coach_id = $1 AND archived_at IS NULL AND user_id IS NOT NULL AND status <> 'abgeschlossen' ORDER BY first_name, last_name",
+      [coach.id],
+    ),
+  ]);
+  const coacheeUnread = fromCoachees?.n ?? 0;
+  const bereich =
+    sp.bereich === "coachees" || sp.bereich === "mails" ? sp.bereich : art || quelle || selectedId ? "mails" : coacheeUnread > 0 || !mailUnread?.n ? "coachees" : "mails";
+  const tabs = (
+    <nav className="mb-5 grid grid-cols-2 rounded-xl border border-line bg-surface p-1 text-sm font-semibold sm:inline-grid sm:w-auto" aria-label="Bereich">
+      {([
+        ["coachees", "Von Coachees", coacheeUnread],
+        ["mails", "Bildungsträger", mailUnread?.n ?? 0],
+      ] as const).map(([key, label, n]) => (
+        <Link key={key} href={`/coach/posteingang?bereich=${key}`} aria-current={bereich === key ? "page" : undefined} className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 transition ${bereich === key ? "bg-accent text-white" : "text-muted hover:text-ink"}`}>
+          {label}
+          {n > 0 && <span className={`rounded-full px-1.5 text-[11px] ${bereich === key ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span>}
+        </Link>
+      ))}
+    </nav>
+  );
+  const compose = pickList.length > 0 && <ComposeButton coachees={pickList} label="Nachricht an Coachee" />;
+
+  if (bereich === "coachees") {
+    const href = (p: Record<string, string | null>) => {
+      const q = new URLSearchParams(Object.entries({ bereich: "coachees", ...p }).filter((e): e is [string, string] => Boolean(e[1])));
+      return `/coach/posteingang?${q}`;
+    };
+    return (
+      <>
+        <PageHeader
+          eyebrow="Coachees und Bildungsträger"
+          title="Posteingang"
+          description="Was deine Coachees dir schicken: Nachrichten, Stellen, Lebensläufe, Aufgaben, Anschreiben und Pläne. Öffnen führt direkt in die Akte."
+          actions={compose}
+        />
+        {tabs}
+        <FromCoachees coachId={coach.id} art={art === "neu" || art === "geteilt" ? art : null} href={href} />
+      </>
+    );
+  }
   const filters: string[] = ["m.coach_id = $1", "m.direction = 'in'"];
   if (art === "neu") filters.push("m.read_at IS NULL");
   else if (art === "offen") filters.push("m.done_at IS NULL");
@@ -75,8 +126,8 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
   const unread = counts.reduce((s, c) => s + c.unread, 0);
   const total = counts.reduce((s, c) => s + c.total, 0);
   const href = (p: Record<string, string | null | undefined>) => {
-    const q = new URLSearchParams(Object.entries({ art, quelle, ...p }).filter((e): e is [string, string] => Boolean(e[1])));
-    return `/coach/posteingang${q.size ? `?${q}` : ""}`;
+    const q = new URLSearchParams(Object.entries({ bereich: "mails", art, quelle, ...p }).filter((e): e is [string, string] => Boolean(e[1])));
+    return `/coach/posteingang?${q}`;
   };
   const chip = (key: string | null, label: string, n?: number, dot?: string) => (
     <Link key={key ?? "alle"} href={href({ art: key, mail: null })} className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${art === key ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent/40 hover:text-accent"}`}>
@@ -89,7 +140,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
   return (
     <>
       <PageHeader
-        eyebrow="Bildungsträger"
+        eyebrow="Coachees und Bildungsträger"
         title="Posteingang"
         description="Das Portal liest alle Mails von AVOCONS und Erfolgspfad und erledigt sie selbst: Buchungen in die Kalender, Verträge und Berichte in die Akte, neue Coachees werden angelegt, Anfragen landen unter „Anfragen“. Hier siehst du, was passiert ist."
         actions={
@@ -100,9 +151,11 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
               </form>
             )}
             {imapConfigured() && <FetchNow />}
+            {compose}
           </>
         }
       />
+      {tabs}
       {!imapConfigured() && <div className="mb-4"><Notice tone="error">Der Postfach-Abruf ist nicht eingerichtet: In Coolify fehlen IMAP_USER und IMAP_PASS.</Notice></div>}
 
       <nav className="no-scrollbar -mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Art">

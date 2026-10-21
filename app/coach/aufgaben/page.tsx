@@ -51,7 +51,7 @@ export default async function CoachTasks({ searchParams }: PageProps<"/coach/auf
             {chip("ich", "Meine", tasks.filter((t) => !t.coachee_id && !t.done_at).length)}
             {withTasks.map((c) => chip(c.id, c.name, tasks.filter((t) => t.coachee_id === c.id && !t.done_at).length))}
           </nav>
-          {shown.length ? <TaskBoard tasks={shown} selfId={coach.id} coach coacheeHref={(id) => `/coach/coachees/${id}?tab=aufgaben`} /> : <Empty>Keine Aufgaben. Oben kannst du eine anlegen.</Empty>}
+          {shown.length ? <TaskBoard tasks={shown} selfId={coach.id} coach coacheeHref={(id) => `/coach/coachees/${id}?tab=aufgaben`} coachees={coachees.map(({ id, name }) => ({ id, name }))} /> : <Empty>Keine Aufgaben. Oben kannst du eine anlegen.</Empty>}
         </div>
         <aside className="space-y-4">
           <section className="night relative overflow-hidden rounded-[20px] p-5">

@@ -27,7 +27,18 @@ export async function openInboxEntry(id: string) {
   const { c } = await me();
   if (!isId(id)) return;
   await query("UPDATE coachee_inbox SET read_at = now() WHERE id = $1 AND coachee_id = $2 AND read_at IS NULL", [id, c.id]);
+  await readShares(c.id, id);
   refresh();
+}
+
+/** Was der Coach geschickt hat, steht auch als Nachricht im Gespräch: mit dem Eintrag gilt sie als gelesen */
+async function readShares(coacheeId: string, entryId: string) {
+  await query(
+    `UPDATE messages m SET read_at = now() FROM coachee_inbox i, coachees c
+      WHERE i.id = $1 AND i.coachee_id = $2 AND c.id = $2 AND m.coachee_id = $2 AND m.ref_kind = i.kind AND m.ref_id = i.ref_id
+        AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM c.user_id`,
+    [entryId, coacheeId],
+  );
 }
 
 /** Das Gespräch mit dem Coach wurde geöffnet: seine Nachrichten gelten als gelesen */
@@ -50,6 +61,7 @@ export async function inboxToggleTask(entryId: string, taskId: string) {
   if (!isId(entryId) || !isId(taskId)) return;
   await toggleTaskDone(taskId);
   await query("UPDATE coachee_inbox SET read_at = COALESCE(read_at, now()) WHERE id = $1 AND coachee_id = $2", [entryId, c.id]);
+  await readShares(c.id, entryId);
   refresh();
 }
 
@@ -60,6 +72,7 @@ export async function inboxJobStatus(entryId: string, applicationId: string, sta
   const res = await updateApplication(c.id, applicationId, { status });
   if (res.error) console.error("[posteingang]", res.error);
   await query("UPDATE coachee_inbox SET read_at = COALESCE(read_at, now()) WHERE id = $1 AND coachee_id = $2", [entryId, c.id]);
+  await readShares(c.id, entryId);
   refresh();
 }
 
@@ -71,6 +84,7 @@ export async function inboxApply(entryId: string, applicationId: string) {
   if (!app) return;
   if (app.status === "vorschlag") await updateApplication(c.id, applicationId, { status: "gemerkt" });
   await query("UPDATE coachee_inbox SET read_at = COALESCE(read_at, now()) WHERE id = $1 AND coachee_id = $2", [entryId, c.id]);
+  await readShares(c.id, entryId);
   refresh();
   redirect(`/anschreiben/${applicationId}`);
 }

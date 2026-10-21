@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addSearch, deleteSearch, hideJob, rateJobs, runSearch, saveJob, suggestSearches, type SearchIdea } from "@/app/actions/stellen";
+import { ShareButton } from "../teilen/ShareButton";
 import { ANGEBOTSART, ARBEITSZEIT, STATUS_TONE, UMKREIS, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
 
 type Props = {
@@ -44,8 +45,6 @@ export function JobSearch(p: Props) {
   const [ideas, setIdeas] = useState<SearchIdea[] | null>(null);
   const [ideasBusy, setIdeasBusy] = useState(false);
   const [hidden, setHidden] = useState<Job | null>(null);
-  const [proposing, setProposing] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
   const [, start] = useTransition();
   const req = useRef(0);
 
@@ -122,12 +121,10 @@ export function JobSearch(p: Props) {
     setFits((prev) => ({ ...prev, ...res.fits }));
   }
 
-  async function keep(job: Job, why = "") {
-    const res = await saveJob(p.coacheeId, job, why || (fits[job.refnr]?.level !== "gering" ? (fits[job.refnr]?.reason ?? "") : ""));
+  async function keep(job: Job) {
+    const res = await saveJob(p.coacheeId, job, fits[job.refnr]?.level !== "gering" ? (fits[job.refnr]?.reason ?? "") : "");
     if (res.error) return setError(res.error);
     setKnown((prev) => ({ ...prev, [job.refnr]: res.application!.status }));
-    setProposing(null);
-    setReason("");
   }
 
   function hide(job: Job) {
@@ -300,20 +297,24 @@ export function JobSearch(p: Props) {
                     <div className="flex flex-wrap items-center gap-2">
                       {status ? (
                         <Link href={p.trackerHref} className={`badge ${STATUS_TONE[status]}`}>{p.coach && status === "vorschlag" ? "Vorgeschlagen" : statusLabel(status)} ✓</Link>
-                      ) : p.coach ? (
-                        <button type="button" className="btn btn-sm" onClick={() => { setProposing(proposing === j.refnr ? null : j.refnr); setReason(fit && fit.level !== "gering" ? fit.reason : ""); }}>Vorschlagen</button>
                       ) : (
-                        <button type="button" className="btn btn-sm" onClick={() => keep(j)}>Merken</button>
+                        !p.coach && <button type="button" className="btn btn-sm" onClick={() => keep(j)}>Merken</button>
                       )}
+                      {/* Coach: schlägt die Stelle vor (Stand „Vorschlag“); Coachee: fragt den Coach, was er davon hält */}
+                      <ShareButton
+                        kind="suche"
+                        job={j}
+                        role={p.coach ? "coach" : "coachee"}
+                        coacheeId={p.coacheeId}
+                        recipient={p.firstName}
+                        title={[j.title, j.employer].filter(Boolean).join(" · ")}
+                        defaultNote={p.coach && fit && fit.level !== "gering" ? fit.reason : undefined}
+                        className={p.coach && !status ? "btn btn-sm" : "btn-ghost btn-sm"}
+                        onSent={(r) => r.status && setKnown((prev) => ({ ...prev, [j.refnr]: r.status! }))}
+                      />
                       {!status && <button type="button" className="btn-ghost btn-sm" onClick={() => hide(j)}>Ausblenden</button>}
                     </div>
                   </div>
-                  {proposing === j.refnr && (
-                    <form className="mt-3 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void keep(j, reason); }}>
-                      <input className="input !py-2 min-w-0 flex-1 basis-64" autoFocus maxLength={600} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={`Warum passt das für ${p.firstName}? (optional, sieht ${p.firstName})`} />
-                      <button className="btn btn-sm">Vorschlagen</button>
-                    </form>
-                  )}
                 </li>
               );
             })}

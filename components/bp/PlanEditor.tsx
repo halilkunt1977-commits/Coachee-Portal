@@ -20,6 +20,8 @@ type Props = {
   bausteine: Baustein[];
   categoryLabels: Record<string, string>;
   ai: boolean;
+  /** „An … senden“ */
+  share?: React.ReactNode;
   pdfHref: string;
   wordHref: string;
   financeHref: string;
@@ -135,6 +137,7 @@ export function PlanEditor(p: Props) {
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <Link href={p.financeHref} className="btn-ghost">Finanzplan</Link>
+            {p.share}
             <button type="button" className="btn-ghost" onClick={() => void download(p.wordHref)}>Word</button>
             <button type="button" className="btn" onClick={() => void download(p.pdfHref)}>PDF</button>
           </div>
