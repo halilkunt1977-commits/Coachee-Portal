@@ -139,6 +139,7 @@ export async function saveEmail(applicationId: string, input: StoredEmail): Prom
 export async function draftEmailText(applicationId: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const { app, coachee, stored } = await letterFor(user, applicationId);
+  if (user.role !== "coach" && !coachee.letter_help) return { ok: false, error: "Textvorschläge hat dein Coach für dich noch nicht freigegeben." };
   try {
     await assertAiAllowed(user);
     const profile = await profileForAi(coachee);
