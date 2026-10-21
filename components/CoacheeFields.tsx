@@ -40,6 +40,13 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
         </Select>
         <Field label="Beginn" name="start_date" type="date" defaultValue={c?.start_date ?? ""} />
         <Field label="Ende" name="end_date" type="date" defaultValue={c?.end_date ?? ""} />
+        <label className="flex items-start gap-3 sm:col-span-2">
+          <input type="checkbox" name="letter_help" defaultChecked={c?.letter_help ?? false} className="mt-1 h-4 w-4" />
+          <span>
+            <span className="font-medium">Textvorschläge beim Anschreiben freigeben</span>
+            <span className="hint block">Nur bei Jobcoaching. Der Coachee kann sich dann beim Anschreiben einen Brieftext vorschlagen lassen (ohne Hinweis auf KI).</span>
+          </span>
+        </label>
       </section>
       <TextArea label="Ziel des Coachings" name="goal" defaultValue={c?.goal ?? ""} hint="Sieht auch der Coachee." />
       <TextArea label="Interne Notiz" name="internal_note" defaultValue={c?.internal_note ?? ""} hint="Nur für dich, der Coachee sieht das nie." />
