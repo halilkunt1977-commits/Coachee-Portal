@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { draftSection, saveGlance, saveSection, saveTitle } from "@/app/actions/businessplan";
+import { addChapterNote, clearChapterChat, markProposal, saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
+import { openProposal, type ChapterChats, type ChatTurn } from "@/lib/bp/notes";
 import { GLANCE_PRESETS, SECTIONS, sectionDone, type GlanceItem, type Sections } from "@/lib/bp/sections";
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
+import { Schreibhilfe } from "./Schreibhilfe";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 
 type Baustein = { category: string; title: string; detail: string };
@@ -27,6 +29,10 @@ type Props = {
   financeHref: string;
   imported: { name: string; at: string } | null;
   filled: boolean;
+  /** Schreibhilfe: Verlauf pro Kapitel und Notizen zum Vorhaben (nur Coach) */
+  chats: ChapterChats;
+  projectNotes: string;
+  schreibhilfeHref: string;
 };
 
 type Sec = { text: string; sources: string; saved: string; version: number; updatedAt: string | null; updatedBy: string | null; conflict?: { text: string; sources: string; version: number; by: string | null } };
@@ -42,9 +48,11 @@ export function PlanEditor(p: Props) {
   );
   const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && !sectionDone(p.sections[s.key]))?.key ?? "idee"));
   const [title, setTitle] = useState(p.title);
-  const [draft, setDraft] = useState<{ key: string; text: string; sources: string } | null>(null);
-  const [drafting, setDrafting] = useState<string | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [chats, setChats] = useState<ChapterChats>(p.chats);
+  const [writing, setWriting] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<{ key: string; message: string } | null>(null);
+  const [batch, setBatch] = useState<{ keys: string[]; done: number } | null>(null);
+  const stopBatch = useRef(false);
   const [preview, setPreview] = useState(false);
   const latest = useRef(secs);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -97,9 +105,58 @@ export function PlanEditor(p: Props) {
 
   function go(key: string) {
     setActive(key);
-    setDraft(null);
-    setAiError(null);
+    setChatError(null);
     setPreview(false);
+  }
+
+  /** Nachricht an die Schreibhilfe; die KI schreibt oder überarbeitet das Kapitel als Vorschlag */
+  async function ask(key: string, message: string) {
+    setChatError(null);
+    setWriting(key);
+    try {
+      const res = await fetch(p.schreibhilfeHref, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, message }) });
+      const data = (await res.json().catch(() => ({}))) as { history?: ChatTurn[]; error?: string };
+      if (data.history) setChats((prev) => ({ ...prev, [key]: data.history! }));
+      if (data.error || !res.ok) setChatError({ key, message: data.error ?? "Das hat gerade nicht geklappt." });
+      // Die Nachricht ist gespeichert, sobald ein Verlauf zurückkommt, auch wenn die KI nicht geantwortet hat
+      return Boolean(data.history);
+    } catch {
+      setChatError({ key, message: "Keine Verbindung. Bitte gleich noch einmal versuchen." });
+      return false;
+    } finally {
+      setWriting(null);
+    }
+  }
+
+  async function note(key: string, message: string) {
+    const history = await addChapterNote(p.coacheeId, key, message).catch(() => null);
+    if (history) setChats((prev) => ({ ...prev, [key]: history }));
+    return Boolean(history);
+  }
+
+  function apply(key: string, turn: ChatTurn) {
+    patch(key, { text: turn.text, sources: turn.sources || secs[key].sources });
+    setChats((prev) => ({ ...prev, [key]: (prev[key] ?? []).map((t) => (t.id === turn.id ? { ...t, status: "uebernommen" } : t)) }));
+    void markProposal(p.coacheeId, key, turn.id, "uebernommen");
+  }
+
+  function discard(key: string, turn: ChatTurn) {
+    setChats((prev) => ({ ...prev, [key]: (prev[key] ?? []).map((t) => (t.id === turn.id ? { ...t, status: "verworfen" } : t)) }));
+    void markProposal(p.coacheeId, key, turn.id, "verworfen");
+  }
+
+  /** Alle leeren Kapitel (ohne Summary) nacheinander entwerfen: Jedes bekommt einen Vorschlag zum Prüfen */
+  async function draftEmpty() {
+    const keys = SECTIONS.filter((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? [])).map((s) => s.key);
+    if (!keys.length) return;
+    stopBatch.current = false;
+    setBatch({ keys, done: 0 });
+    for (const [i, key] of keys.entries()) {
+      if (stopBatch.current) break;
+      await ask(key, "");
+      setBatch({ keys, done: i + 1 });
+    }
+    setBatch(null);
   }
 
   /** Baustein (Zwischenüberschrift, Liste, Tabelle) an der Cursorposition einfügen */
@@ -165,7 +222,7 @@ export function PlanEditor(p: Props) {
             <span className="sr-only">Kapitel</span>
             <select className="input" value={active} onChange={(e) => go(e.target.value)}>
               <option value={BLICK}>Auf einen Blick</option>
-              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {s.title}{secs[s.key].conflict ? " (Konflikt)" : ""}</option>)}
+              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {s.title}{secs[s.key].conflict ? " (Konflikt)" : openProposal(chats[s.key] ?? []) ? " (Vorschlag)" : ""}</option>)}
             </select>
           </label>
           <ol className="hidden space-y-0.5 lg:block">
@@ -184,16 +241,34 @@ export function PlanEditor(p: Props) {
                     <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${ok ? "bg-ok text-white" : sec.text.trim() ? "bg-gold/20 text-gold" : "bg-line-soft text-muted"}`}>{ok ? "✓" : i + 1}</span>
                     <span className="min-w-0 flex-1 truncate">{s.title}</span>
                     {sec.conflict && <span className="text-danger" title="Konflikt">!</span>}
+                    {!sec.conflict && writing === s.key && <span className="animate-pulse text-gold" title="Schreibt …">✦</span>}
+                    {!sec.conflict && writing !== s.key && openProposal(chats[s.key] ?? []) && <span className="size-2 rounded-full bg-gold" title="Vorschlag wartet auf Prüfung" />}
                   </button>
                 </li>
               );
             })}
           </ol>
           <p className="border-t border-line-soft pt-3 text-xs text-muted">Ein Kapitel gilt ab etwa 300 Zeichen als geschrieben. Die Executive Summary am besten zum Schluss.</p>
+          {p.ai && (
+            <div className="space-y-1.5 border-t border-line-soft pt-3">
+              {batch ? (
+                <>
+                  <p className="text-xs font-semibold" role="status">✦ Entwirft Kapitel {Math.min(batch.done + 1, batch.keys.length)} von {batch.keys.length} …</p>
+                  <div className="h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(batch.done / batch.keys.length) * 100}%` }} /></div>
+                  <button type="button" className="link text-xs" onClick={() => (stopBatch.current = true)}>Nach diesem Kapitel anhalten</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="btn-ghost btn-sm w-full" disabled={writing !== null || !SECTIONS.some((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? []))} onClick={() => void draftEmpty()}>✦ Alle leeren Kapitel entwerfen</button>
+                  <p className="text-xs text-muted">Jedes leere Kapitel bekommt nacheinander einen Vorschlag zum Prüfen. Nichts wird ohne dich übernommen.</p>
+                </>
+              )}
+            </div>
+          )}
         </aside>
 
         {active === BLICK ? (
-          <GlanceEditor coacheeId={p.coacheeId} initial={p.glance} figures={p.figures} financeHref={p.financeHref} />
+          <GlanceEditor coacheeId={p.coacheeId} initial={p.glance} figures={p.figures} financeHref={p.financeHref} coach={p.coach} ai={p.ai} projectNotes={p.projectNotes} schreibhilfeHref={p.schreibhilfeHref} />
         ) : (
           renderChapter()
         )}
@@ -210,16 +285,6 @@ export function PlanEditor(p: Props) {
     const words = sec.text.trim() ? sec.text.trim().split(/\s+/).length : 0;
     const by = sec.updatedBy === "me" ? "dir" : sec.updatedBy ? p.names[sec.updatedBy] ?? null : null;
 
-    async function askAi() {
-      setAiError(null);
-      setDrafting(active);
-      const key = active;
-      const res = await draftSection(p.coacheeId, key).catch(() => ({ error: "Das hat gerade nicht geklappt.", text: undefined, sources: undefined }));
-      setDrafting(null);
-      if (res.text) setDraft({ key, text: res.text, sources: res.sources ?? "" });
-      else setAiError(res.error ?? "Das hat gerade nicht geklappt.");
-    }
-
     return (
       <section className="card min-w-0 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -228,11 +293,6 @@ export function PlanEditor(p: Props) {
             <h2 className="h2">{index + 1}. {def.title}</h2>
             <p className="text-sm text-muted">{def.hint}</p>
           </div>
-          {p.ai && (
-            <button type="button" className="btn-ghost btn-sm" disabled={drafting !== null || Boolean(sec.conflict)} onClick={askAi}>
-              {drafting === active ? "Schreibt …" : sec.text.trim() ? "✦ Mit KI überarbeiten" : "✦ KI-Entwurf schreiben"}
-            </button>
-          )}
         </div>
 
         <details className="rounded-xl bg-bg px-4 py-3" open={!sec.text.trim()}>
@@ -259,19 +319,27 @@ export function PlanEditor(p: Props) {
           </div>
         )}
 
-        {aiError && <p className="rounded-lg bg-[#f8e6e3] px-3 py-2 text-sm text-danger" role="alert">{aiError}</p>}
-        {draft?.key === active && (
-          <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fbf6ec] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gold">✦ Vorschlag der KI, bitte prüfen</p>
-            <div className="bp-text text-[15px]"><Markdown text={draft.text} /></div>
-            {draft.sources && <div className="text-xs text-muted"><b>Quellen:</b> {draft.sources.split("\n").join(" · ")}</div>}
-            <p className="text-xs text-muted">Stellen in [eckigen Klammern] fehlen noch. Bitte mit echten Angaben ersetzen und Quellen prüfen.</p>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn btn-sm" onClick={() => { patch(active, { text: draft.text, sources: draft.sources || sec.sources }); setDraft(null); }}>Übernehmen</button>
-              {sec.text.trim() && <button type="button" className="btn-ghost btn-sm" onClick={() => { patch(active, { text: `${sec.text.trimEnd()}\n\n${draft.text}`, sources: [sec.sources.trim(), draft.sources].filter(Boolean).join("\n") }); setDraft(null); }}>Unten anfügen</button>}
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setDraft(null)}>Verwerfen</button>
-            </div>
-          </div>
+        {p.ai && (
+          <Schreibhilfe
+            key={active}
+            title={def.title}
+            summary={def.key === "summary"}
+            hasText={Boolean(sec.text.trim())}
+            turns={chats[active] ?? []}
+            writing={writing === active}
+            busy={writing !== null || batch !== null}
+            blocked={Boolean(sec.conflict)}
+            error={chatError?.key === active ? chatError.message : null}
+            writtenChapters={SECTIONS.filter((s) => s.key !== "summary" && secs[s.key].text.trim()).length}
+            onSend={(m) => ask(active, m)}
+            onNote={(m) => note(active, m)}
+            onApply={(t) => apply(active, t)}
+            onDiscard={(t) => discard(active, t)}
+            onClear={() => {
+              setChats((prev) => ({ ...prev, [active]: [] }));
+              void clearChapterChat(p.coacheeId, active);
+            }}
+          />
         )}
 
         <div className="space-y-2">
@@ -291,7 +359,7 @@ export function PlanEditor(p: Props) {
               className="input min-h-80 resize-none text-[15px] leading-relaxed"
               value={sec.text}
               disabled={Boolean(sec.conflict)}
-              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder einen Entwurf aus den Gesprächsbausteinen machen lassen.` : `Hier schreibst du das Kapitel „${def.title}“. Die Leitfragen oben helfen dir.`}
+              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder oben mit der Schreibhilfe aus Notizen entwerfen lassen.` : `Hier schreibst du das Kapitel „${def.title}“. Die Leitfragen oben helfen dir.`}
               onChange={(e) => patch(active, { text: e.target.value })}
             />
           )}
@@ -359,8 +427,11 @@ function FiguresTable({ rows }: { rows: string[][] }) {
 }
 
 /** „Auf einen Blick“: die Steckbrief-Angaben der Vorlage, darunter die Kennzahlen aus dem Finanzplan */
-function GlanceEditor({ coacheeId, initial, figures, financeHref }: { coacheeId: string; initial: GlanceItem[]; figures: string[][] | null; financeHref: string }) {
+function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, projectNotes, schreibhilfeHref }: { coacheeId: string; initial: GlanceItem[]; figures: string[][] | null; financeHref: string; coach: boolean; ai: boolean; projectNotes: string; schreibhilfeHref: string }) {
   const [items, setItems] = useState(initial);
+  const [proposal, setProposal] = useState<(GlanceItem & { take: boolean })[] | null>(null);
+  const [proposing, setProposing] = useState(false);
+  const [proposeError, setProposeError] = useState<string | null>(null);
   const latest = useRef(items);
   useEffect(() => {
     latest.current = items;
@@ -374,6 +445,35 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref }: { coacheeId:
     schedule();
   };
   const missing = GLANCE_PRESETS.filter((l) => !items.some((g) => g.label === l));
+
+  async function propose() {
+    setProposing(true);
+    setProposeError(null);
+    setProposal(null);
+    try {
+      const res = await fetch(schreibhilfeHref, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blick: true }) });
+      const data = (await res.json().catch(() => ({}))) as { items?: GlanceItem[]; error?: string };
+      if (data.items) {
+        if (!data.items.length) setProposeError("Aus den Inhalten ergibt sich nichts Neues für diese Seite.");
+        // leere Felder sind vorausgewählt, schon ausgefüllte nicht
+        else setProposal(data.items.map((g) => ({ ...g, take: !items.find((x) => x.label === g.label)?.value.trim() })));
+      } else setProposeError(data.error ?? "Das hat gerade nicht geklappt.");
+    } catch {
+      setProposeError("Keine Verbindung. Bitte gleich noch einmal versuchen.");
+    } finally {
+      setProposing(false);
+    }
+  }
+
+  function applyProposal() {
+    if (!proposal) return;
+    const take = proposal.filter((g) => g.take);
+    const next = items.map((x) => take.find((g) => g.label === x.label) ?? x).map(({ label, value }) => ({ label, value }));
+    for (const g of take) if (!next.some((x) => x.label === g.label)) next.push({ label: g.label, value: g.value });
+    update(next);
+    setProposal(null);
+  }
+
   return (
     <section className="card min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -383,6 +483,40 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref }: { coacheeId:
         </div>
         <SaveBadge state={state} />
       </div>
+      {coach && <ProjectNotes coacheeId={coacheeId} initial={projectNotes} />}
+      {ai && (
+        <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm"><span className="text-gold">✦</span> <b>Aus den Inhalten ausfüllen:</b> <span className="text-muted">Die KI schlägt Stichworte aus Kapiteln, Finanzplan und Notizen vor. Du wählst, was übernommen wird.</span></p>
+            <button type="button" className="btn-ghost btn-sm" disabled={proposing} onClick={() => void propose()}>{proposing ? "Liest die Inhalte …" : "✦ Vorschlag machen"}</button>
+          </div>
+          {proposeError && <p className="text-sm text-danger" role="alert">{proposeError}</p>}
+          {proposal && (
+            <div className="space-y-2">
+              <ul className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface">
+                {proposal.map((g, i) => {
+                  const before = items.find((x) => x.label === g.label)?.value.trim();
+                  return (
+                    <li key={g.label}>
+                      <label className="flex items-start gap-3 px-3 py-2.5 text-sm">
+                        <input type="checkbox" className="mt-1" checked={g.take} onChange={(e) => setProposal(proposal.map((x, j) => (j === i ? { ...x, take: e.target.checked } : x)))} />
+                        <span className="min-w-0 flex-1">
+                          <span className="font-semibold">{g.label}:</span> {g.value}
+                          {before && <span className="block text-xs text-muted">Bisher: {before}</span>}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="btn btn-sm" disabled={!proposal.some((g) => g.take)} onClick={applyProposal}>Ausgewählte übernehmen</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => setProposal(null)}>Verwerfen</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <div className="space-y-3">
         {items.map((g, i) => (
           <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-xl border border-line-soft bg-bg/50 p-3 sm:grid-cols-[13rem_minmax(0,1fr)_auto]">
@@ -410,5 +544,37 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref }: { coacheeId:
         {figures ? <FiguresTable rows={figures} /> : <p className="text-muted">Noch keine Zahlen. Die Tabelle entsteht aus dem <Link className="link" href={financeHref}>Finanzplan</Link>.</p>}
       </div>
     </section>
+  );
+}
+
+/** Notizen des Coachs zum ganzen Vorhaben: fließen in jedes Kapitel der Schreibhilfe ein, Coachees sehen sie nie */
+function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: string }) {
+  const [text, setText] = useState(initial);
+  const latest = useRef(text);
+  useEffect(() => {
+    latest.current = text;
+  }, [text]);
+  const { state, schedule } = useAutosave(async () => {
+    await saveProjectNotes(coacheeId, latest.current);
+    return { ok: true };
+  });
+  return (
+    <label className="block rounded-xl bg-bg px-4 py-3">
+      <span className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="label !mb-0">Notizen zum Vorhaben (nur für dich)</span>
+        {text !== initial && <SaveBadge state={state} />}
+      </span>
+      <textarea
+        className="input mt-1.5 min-h-28 text-sm"
+        rows={Math.min(14, Math.max(4, text.split("\n").length + 1))}
+        value={text}
+        maxLength={8000}
+        placeholder="Alles, was für den ganzen Plan gilt: Ideen, Eindrücke aus den Gesprächen, Auskünfte, offene Punkte … Die Schreibhilfe nutzt diese Notizen in jedem Kapitel."
+        onChange={(e) => {
+          setText(e.target.value);
+          schedule();
+        }}
+      />
+    </label>
   );
 }
