@@ -9,7 +9,9 @@ import { one, query } from "./db";
  * KI über OpenAI (wie bei gründarium.de). OPENAI_API_KEY in Coolify, Modelle über OPENAI_MODEL und
  * OPENAI_TRANSCRIBE_MODEL änderbar. Namen von Coachees werden vor dem Senden durch Platzhalter ersetzt.
  */
-export const aiEnabled = () => Boolean(process.env.OPENAI_API_KEY);
+// Nur für lokale Tests ohne Schlüssel: AI_MOCK=1 liefert feste Antworten. In der fertigen App (NODE_ENV=production) nie aktiv.
+const mockAi = () => process.env.NODE_ENV !== "production" && process.env.AI_MOCK === "1";
+export const aiEnabled = () => Boolean(process.env.OPENAI_API_KEY) || mockAi();
 const MODEL = () => process.env.OPENAI_MODEL || "gpt-5.6-terra";
 const TRANSCRIBE_MODEL = () => process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-transcribe";
 
@@ -61,6 +63,11 @@ async function logUsage(u: Usage, model: string, input = 0, output = 0) {
 /** Antwort als JSON nach festem Schema (Structured Outputs). */
 export async function jsonResponse<T>(opts: Usage & { instructions: string; input: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number }): Promise<T> {
   if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (mockAi()) {
+    const { mockJson } = await import("./ai-mock");
+    await logUsage(opts, "mock");
+    return mockJson(opts.schemaName, opts.input) as T;
+  }
   const model = MODEL();
   const response = await openai().responses.create({
     model,

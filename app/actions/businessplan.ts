@@ -1,18 +1,18 @@
 "use server";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { coacheeFor, fullName, type Coachee } from "@/lib/access";
-import { AiError, assertAiAllowed, jsonResponse, pseudonymize } from "@/lib/ai";
+import { coacheeFor } from "@/lib/access";
 import { audit, requireCoach, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { DOC_TYPES, MAX_DOC_BYTES, extOf } from "@/lib/documents";
 import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { loadFile, storeFile } from "@/lib/files";
 import { applyFinanceXlsx, applyPlanDocx, documentFile, importTarget, type ImportResult } from "@/lib/bp/apply-import";
-import { financeSummary, normalizeFinance, type FinanceInput } from "@/lib/bp/finance";
-import { SECTIONS, normalizeGlance, normalizeSections, sourceList, type GlanceItem } from "@/lib/bp/sections";
+import { normalizeFinance, type FinanceInput } from "@/lib/bp/finance";
+import { MAX_NOTE, VORHABEN, type ChatTurn } from "@/lib/bp/notes";
+import { appendTurns, setTurnStatus } from "@/lib/bp/schreibhilfe";
+import { SECTIONS, normalizeGlance, normalizeSections, type GlanceItem } from "@/lib/bp/sections";
 import { financeFromItems, financeItems, planFor } from "@/lib/bp/store";
-import { normalizeCv } from "@/lib/cv/types";
-import { categoryLabel } from "@/lib/profile";
 
 async function gruendungCoachee(user: User, coacheeId: string) {
   const c = await coacheeFor(user, coacheeId);
@@ -75,106 +75,47 @@ export async function saveGlance(coacheeId: string, glance: GlanceItem[]) {
   return { ok: true as const };
 }
 
-const DRAFT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["text", "sources"],
-  properties: { text: { type: "string" }, sources: { type: "array", items: { type: "string" } } },
-};
+// ---------- Schreibhilfe (nur Coach) ----------
+// Das Schreiben selbst läuft über /api/businessplan/[id]/schreibhilfe, damit das automatische Speichern nicht warten muss.
 
-/** Entwurf für ein Kapitel aus den Bausteinen der Gespräche, den Zahlen und den übrigen Kapiteln (nur für den Coach). */
-export async function draftSection(coacheeId: string, key: string): Promise<{ text?: string; sources?: string; error?: string }> {
-  const user = await requireUser();
-  const c = await gruendungCoachee(user, coacheeId);
-  const def = SECTIONS.find((s) => s.key === key);
-  if (!def) return { error: "Unbekanntes Kapitel." };
-  try {
-    await assertAiAllowed(user, { coachOnly: true });
-    const input = await draftContext(user, c, key);
-    const number = SECTIONS.indexOf(def) + 1;
-    const out = await jsonResponse<{ text: string; sources: string[] }>({
-      coacheeId: c.id,
-      userId: user.id,
-      purpose: "businessplan",
-      schemaName: "kapitel",
-      schema: DRAFT_SCHEMA,
-      maxTokens: 6000,
-      instructions: `Du schreibst Kapitel ${number} „${def.title}“ eines Businessplans für eine Gründung in Deutschland. Der Plan wird bei der fachkundigen Stelle (Gründungszuschuss der Agentur für Arbeit) und bei Banken eingereicht und folgt der Vorlage des Gründungscoachs.
-
-Stil der Vorlage:
-- Sachlich und nüchtern in der dritten Person: „[Name] plant …“, „Der Gründer verfügt …“, „Das Unternehmen richtet sich …“. Keine Ich-Form, keine Werbesprache, keine Superlative.
-- Zusammenhängende Absätze mit jeweils zwei bis vier Sätzen, getrennt durch eine Leerzeile. Konkrete Angaben statt allgemeiner Aussagen.
-- Bei längeren Kapiteln Zwischenüberschriften als eigene Zeile mit „### “. Aufzählungen mit „- “ nur, wo sie wirklich helfen. Eine Tabelle im Markdown-Format (| Spalte | Spalte |) nur, wenn sie etwas übersichtlicher macht, z. B. Mitbewerber oder Kundengruppen.
-- Umfang etwa ${def.words[0]} bis ${def.words[1]} Wörter. Keine Kapitelüberschrift, keine Vorrede, kein Fazit-Absatz mit Floskeln.
-
-Inhalt:
-- Beantworte diese Leitfragen: ${def.questions.join(" ")}
-- Nutze nur Fakten aus dem Material. Erfinde keine Zahlen, Namen, Kunden, Statistiken oder Abschlüsse. Wo etwas fehlt, setze einen kurzen Platzhalter in eckigen Klammern, z. B. [Anzahl Betriebe der Branche im Landkreis mit Quelle].
-- Zahlen aus dem Finanzplan übernimmst du genau so, wie sie im Material stehen.
-- Namen sind durch [Name] ersetzt. Schreib [Name], wo der Name der gründenden Person nötig ist.
-- Wenn es schon einen Text gibt, verbessere und ergänze ihn und behalte seine Aussagen, Zahlen und Quellen.
-
-Quellen:
-- Gib im Feld sources die Quellen für die Fakten im Kapitel an, eine pro Eintrag, z. B. „Handwerkskammer Wiesbaden (2026): Schriftliche Auskunft …“ oder eine Statistik mit Link.
-- Nur Quellen, die wörtlich im Material stehen (bisherige Quellen des Kapitels, genannte Auskünfte, Lebenslauf, Unterlagen). Erfinde niemals Quellen oder Links. Hast du keine belegbare Quelle, gib eine leere Liste zurück.
-
-Gib den fertigen Kapiteltext im Feld text zurück.`,
-      input,
-    });
-    await audit(user.id, "bp_draft", c.id, { section: key });
-    const name = fullName(c);
-    return { text: out.text.replaceAll("[Name]", name).trim(), sources: out.sources.map((s) => s.replaceAll("[Name]", name).trim()).filter(Boolean).join("\n") };
-  } catch (e) {
-    if (!(e instanceof AiError)) console.error("Businessplan-Entwurf", e);
-    return { error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
-  }
+/** Notizen zum ganzen Vorhaben: Material für alle Kapitel */
+export async function saveProjectNotes(coacheeId: string, notes: string) {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  await query(
+    `INSERT INTO bp_notes (coachee_id, section, notes, updated_by) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (coachee_id, section) DO UPDATE SET notes = EXCLUDED.notes, updated_by = $4, updated_at = now()`,
+    [c.id, VORHABEN, String(notes ?? "").slice(0, MAX_NOTE), coach.id],
+  );
+  await auditThrottled(coach, "bp_notes_saved", c.id);
+  return { ok: true as const };
 }
 
-async function draftContext(user: User, c: Coachee, key: string) {
-  const coach = user.role === "coach";
-  const def = SECTIONS.find((s) => s.key === key)!;
-  const all = key === "summary";
-  const plan = await planFor(c);
-  const [items, cv] = await Promise.all([
-    // Gesundheitsangaben gehen nie an die KI
-    query<{ category: string; title: string; detail: string }>(
-      "SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' AND (NOT internal OR $2) AND ($3 OR category = ANY($4)) ORDER BY category, created_at",
-      [c.id, coach, all, def.from],
-    ),
-    key === "gruender" || all ? one<{ data: unknown }>("SELECT data FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 1", [c.id]) : null,
-  ]);
+/** Notiz zu einem Kapitel merken, ohne dass die KI schreibt */
+export async function addChapterNote(coacheeId: string, key: string, text: string): Promise<ChatTurn[] | null> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const body = String(text ?? "").trim().slice(0, MAX_NOTE);
+  if (!SECTIONS.some((s) => s.key === key) || !body) return null;
+  return appendTurns(c.id, key, coach.id, [{ id: randomUUID(), role: "coach", text: body, at: new Date().toISOString() }]);
+}
 
-  const lines: string[] = [];
-  if (plan.title || c.goal) lines.push(`Vorhaben: ${plan.title || c.goal}`);
-  const glance = plan.glance.filter((g) => g.value.trim());
-  if (glance.length) {
-    lines.push("\nAuf einen Blick:");
-    for (const g of glance) lines.push(`- ${g.label}: ${g.value.replace(/\n/g, ", ")}`);
-  }
-  if (items.length) {
-    lines.push("\nBausteine aus den Coaching-Gesprächen:");
-    for (const i of items) lines.push(`- ${categoryLabel("gruendung", i.category)}: ${i.title}${i.detail ? ` – ${i.detail}` : ""}`);
-  }
-  if (cv) {
-    const d = normalizeCv(cv.data);
-    lines.push("\nLebenslauf:");
-    if (d.personal.headline) lines.push(`Beruf: ${d.personal.headline}`);
-    for (const e of d.experience) lines.push(`- ${e.start || "?"} bis ${e.current ? "heute" : e.end || "?"}: ${e.title}, ${e.company}${e.bullets ? ` – ${e.bullets.replace(/\n/g, "; ")}` : ""}`);
-    for (const e of d.education) lines.push(`- Ausbildung: ${e.degree}, ${e.school} (${e.end || e.start})`);
-    for (const e of d.certificates) lines.push(`- Zertifikat: ${e.name}${e.year ? ` (${e.year})` : ""}`);
-  }
-  if (def.finance || ["marketing", "organisation", "standort", "risiken"].includes(key)) lines.push("\n" + financeSummary(plan.finance));
+/** Vorschlag als übernommen oder verworfen markieren (das Übernehmen des Textes macht der Editor über saveSection) */
+export async function markProposal(coacheeId: string, key: string, turnId: string, status: "uebernommen" | "verworfen"): Promise<ChatTurn[]> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  if (!SECTIONS.some((s) => s.key === key) || (status !== "uebernommen" && status !== "verworfen")) return [];
+  const next = await setTurnStatus(c.id, key, [String(turnId)], status);
+  if (status === "uebernommen") await audit(coach.id, "bp_draft_applied", c.id, { section: key });
+  return next;
+}
 
-  const others = SECTIONS.filter((s) => s.key !== key && plan.sections[s.key].text.trim());
-  if (others.length) {
-    lines.push("\nBereits geschriebene Kapitel:");
-    for (const s of others) lines.push(`## ${s.title}\n${plan.sections[s.key].text.slice(0, all ? 2500 : 600)}`);
-  }
-  const current = plan.sections[key];
-  lines.push(current.text.trim() ? `\nBisheriger Text dieses Kapitels:\n${current.text.trim()}` : "\nDieses Kapitel ist noch leer.");
-  const src = sourceList(current.sources);
-  if (src.length) lines.push(`\nBisherige Quellen dieses Kapitels:\n${src.map((s) => `- ${s}`).join("\n")}`);
-  return pseudonymize(lines.join("\n"), [c.first_name, c.last_name]);
+/** Verlauf eines Kapitels leeren (Notizen und Vorschläge) */
+export async function clearChapterChat(coacheeId: string, key: string) {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  await query("DELETE FROM bp_notes WHERE coachee_id = $1 AND section = $2 AND section <> $3", [c.id, String(key), VORHABEN]);
+  return { ok: true as const };
 }
 
 // ---------- Finanzplan ----------
