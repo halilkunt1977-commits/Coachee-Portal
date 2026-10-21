@@ -7,6 +7,7 @@ import { Meter, Ring, WeekBars, toneFor } from "@/components/dashboard/Charts";
 import { greeting, todayLong } from "@/components/dashboard/Hero";
 import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
+import { ComposeButton } from "@/components/teilen/ComposeButton";
 import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
 import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { fullName, typeLabel, type Coachee } from "@/lib/access";
@@ -141,6 +142,9 @@ export default async function CoachDashboard() {
   const order = { danger: 0, gold: 1, accent: 2, ok: 3 };
   alerts.sort((a, b) => order[a.tone] - order[b.tone]);
 
+  // Empfänger für „Nachricht an Coachee“: aktive mit Zugang
+  const pick = rows.filter((c) => c.has_login && c.user_id).map((c) => ({ id: c.id, name: fullName(c) }));
+  const unreadAll = rows.reduce((a, c) => a + c.unread, 0);
   const upcoming = await upcomingP;
   const todayDay = todayBerlin();
   const todayCount = upcoming.filter((a) => a.day === todayDay).length;
@@ -162,6 +166,14 @@ export default async function CoachDashboard() {
                 {todayCount ? `${todayCount} ${todayCount === 1 ? "Termin" : "Termine"} heute. ` : ""}
                 {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} deinen Blick.` : "Alles im grünen Bereich."}
               </p>
+              {pick.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <ComposeButton coachees={pick} label="Nachricht an Coachee" className="btn-gold btn-sm" />
+                  <Link href="/coach/posteingang?bereich=coachees" className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">
+                    <Icon name="mail" className="size-4" /> Von Coachees{unreadAll ? <span className="rounded-full bg-danger px-1.5 text-[11px]">{unreadAll}</span> : null}
+                  </Link>
+                </div>
+              )}
             </div>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[

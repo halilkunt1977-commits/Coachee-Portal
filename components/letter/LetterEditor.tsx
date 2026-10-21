@@ -19,6 +19,8 @@ type Props = {
   coach: boolean;
   /** Schreibhilfe verfügbar (beim Coachee ohne Hinweis auf die Technik) */
   draft: boolean;
+  /** „An … senden“ */
+  share?: React.ReactNode;
   backHref: string;
   backLabel: string;
 };
@@ -134,6 +136,7 @@ export function LetterEditor(p: Props) {
         </div>
         <SaveBadge state={save} />
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          {p.share}
           <button type="button" className="btn-ghost" onClick={() => download("word")}>Word herunterladen</button>
           <button type="button" className="btn" onClick={() => download("pdf")}>PDF herunterladen</button>
         </div>

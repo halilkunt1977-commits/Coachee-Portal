@@ -3,7 +3,7 @@ import { AkteMails } from "@/components/inbox/AkteMails";
 import { deleteMeeting } from "@/app/actions/akte";
 import { MeetingForm } from "@/components/akte/MeetingForm";
 import { MessageForm } from "@/components/akte/MessageForm";
-import { MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
+import { MESSAGE_COLUMNS, MessageList, TaskList, type Message, type Task } from "@/components/akte/Lists";
 import { TaskForm } from "@/components/akte/TaskForm";
 import { CvList } from "@/components/cv/CvList";
 import { AttendancePanel } from "@/components/attendance/Panel";
@@ -92,7 +92,7 @@ const actionLabel: Record<string, string> = {
   coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
   appointment_created: "Termin angelegt", appointment_updated: "Termin geändert", appointment_cancelled: "Termin abgesagt", appointment_deleted: "Termin gelöscht",
   handbook_pdf: "Handbuch als PDF geladen", contact_updated: "Eigene Kontaktdaten geändert",
-  access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet",
+  access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet", shared: "Geteilt (an Coach oder Coachee gesendet)",
 };
 
 export default async function CoacheePage({ params, searchParams }: PageProps<"/coach/coachees/[id]">) {
@@ -222,18 +222,18 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "stellen" && <StellenPanel user={coach} coachee={c} links={jobLinks} />}
       {tab === "bewerbungen" && (
         <div className="space-y-8">
-          <BewerbungenPanel user={coach} coachee={c} links={jobLinks} />
+          <BewerbungenPanel user={coach} coachee={c} links={jobLinks} focus={typeof sp.stelle === "string" ? sp.stelle : null} />
           <StellenAnalysen coachee={c} coachId={coach.id} />
         </div>
       )}
       {tab === "zahlen" && <Zahlen coacheeId={c.id} />}
       {tab === "businessplan" && <PlanPanel user={coach} coachee={c} links={bpLinks} />}
       {tab === "finanzplan" && <FinancePanel user={coach} coachee={c} links={bpLinks} />}
-      {tab === "lebenslauf" && <CvList coacheeId={c.id} coach />}
+      {tab === "lebenslauf" && <CvList coacheeId={c.id} coach recipient={c.first_name} />}
       {tab === "erfahrung" && <SurveyPanel coachee={c} coach />}
       {tab === "assistent" && <AssistantPanel user={coach} coachee={c} chatId={typeof sp.chat === "string" ? sp.chat : null} base={{ chat: "?tab=assistent&chat=", fresh: "?tab=assistent" }} />}
       {tab === "handbuch" && <AkteHandbook coachee={c} />}
-      {tab === "aufgaben" && <Tasks coacheeId={c.id} />}
+      {tab === "aufgaben" && <Tasks coacheeId={c.id} firstName={c.first_name} />}
       {tab === "mails" && <AkteMails coacheeId={c.id} />}
       {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
       {tab === "stammdaten" && (
@@ -320,7 +320,7 @@ async function Overview({ coachee, stats }: { coachee: Coachee; stats: { meeting
       </div>
       <div className="card space-y-3 lg:col-span-2">
         <div className="flex items-center justify-between"><h2 className="h2">Offene Aufgaben</h2><Link href="?tab=aufgaben" className="link text-sm">Alle {stats?.open_tasks ?? 0}</Link></div>
-        <TaskList coacheeId={coacheeId} tasks={tasks} coach />
+        <TaskList coacheeId={coacheeId} tasks={tasks} coach recipient={coachee.first_name} />
       </div>
     </div>
     </div>
@@ -412,19 +412,19 @@ async function Meetings({ coachee, edit }: { coachee: Coachee; edit: string | nu
   );
 }
 
-async function Tasks({ coacheeId }: { coacheeId: string }) {
+async function Tasks({ coacheeId, firstName }: { coacheeId: string; firstName: string }) {
   const tasks = await query<Task>("SELECT * FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [coacheeId]);
   return (
     <div className="card space-y-5">
       <TaskForm coacheeId={coacheeId} coach />
-      <TaskList coacheeId={coacheeId} tasks={tasks} coach />
+      <TaskList coacheeId={coacheeId} tasks={tasks} coach recipient={firstName} />
     </div>
   );
 }
 
 async function Messages({ coacheeId, selfId }: { coacheeId: string; selfId: string }) {
   const messages = await query<Message>(
-    "SELECT m.id, m.body, m.created_at, m.author_id, m.read_at, u.name AS author_name FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at",
+    `SELECT ${MESSAGE_COLUMNS} FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at`,
     [coacheeId],
   );
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [coacheeId, selfId]);

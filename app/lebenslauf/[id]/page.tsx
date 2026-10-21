@@ -1,4 +1,5 @@
 import { CvEditor } from "@/components/cv/CvEditor";
+import { ShareButton } from "@/components/teilen/ShareButton";
 import { aiEnabled } from "@/lib/ai";
 import { fullName } from "@/lib/access";
 import { audit, requireUser } from "@/lib/auth";
@@ -24,6 +25,7 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=lebenslauf` : "/mein-bereich/lebenslauf"}
       backLabel={coach ? fullName(coachee) : "Meine Lebensläufe"}
       locked={coach ? null : personalLockOf(coachee)}
+      share={<ShareButton kind="lebenslauf" refId={cv.id} role={user.role} coacheeId={coachee.id} recipient={coachee.first_name} title={cv.name} className="btn-ghost" />}
     />
   );
 }

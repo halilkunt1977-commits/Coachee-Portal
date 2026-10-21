@@ -4,7 +4,8 @@ import { pseudonymize } from "../ai";
 import { normalizeCv } from "../cv/types";
 import { one, query } from "../db";
 import { categoryLabel } from "../profile";
-import { ANGEBOTSART, ARBEITSZEIT, UMKREIS, type Application, type JobQuery, type SavedSearch } from "./shared";
+import { audit, type User } from "../auth";
+import { ANGEBOTSART, ARBEITSZEIT, UMKREIS, type Application, type Job, type JobQuery, type SavedSearch, type Status } from "./shared";
 import { cleanWas } from "./ba";
 
 export const APP_COLUMNS = `a.id, a.refnr, a.title, a.employer, a.location, a.url, a.published_on::text, a.status, a.channel, a.applied_on::text, a.next_on::text,
@@ -19,6 +20,38 @@ export const listApplications = (coacheeId: string) =>
 
 export const getApplication = (coacheeId: string, id: string) =>
   one<Application>(`SELECT ${APP_COLUMNS} FROM applications a LEFT JOIN users p ON p.id = a.proposed_by WHERE a.coachee_id = $1 AND a.id = $2`, [coacheeId, id]);
+
+const clip = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
+const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+const jobUrl = (v: unknown) => {
+  const u = clip(v, 600);
+  return /^https?:\/\/[^\s]+$/i.test(u) ? u : "";
+};
+
+/**
+ * Treffer aus der Stellensuche in die Bewerbungen der Akte übernehmen: vom Coach als Vorschlag, vom Coachee als gemerkte Stelle.
+ * Gibt es die Stelle schon, bleibt ihr Stand, wie er ist. Meldungen verschickt der Aufrufer.
+ */
+export async function storeJob(coacheeId: string, user: User, job: Job, reason = ""): Promise<{ id: string; status: Status; fresh: boolean } | { error: string }> {
+  const refnr = clip(job?.refnr, 80);
+  if (!refnr) return { error: "Diese Stelle hat keine Referenznummer." };
+  const status: Status = user.role === "coach" ? "vorschlag" : "gemerkt";
+  const published = String(job.published ?? "").slice(0, 10);
+  const row = await one<{ id: string; status: Status; fresh: boolean }>(
+    `INSERT INTO applications (coachee_id, refnr, title, employer, location, url, published_on, status, reason, history, proposed_by, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+     ON CONFLICT (coachee_id, refnr) WHERE refnr IS NOT NULL DO UPDATE SET reason = CASE WHEN applications.reason = '' THEN EXCLUDED.reason ELSE applications.reason END
+     RETURNING id, status, (xmax = 0) AS fresh`,
+    [
+      coacheeId, refnr, clip(job.title, 200) || "Stellenangebot", clip(job.employer, 200), clip(job.location, 120), jobUrl(job.url),
+      isDate(published) ? published : null,
+      status, clip(reason, 600), JSON.stringify([{ at: new Date().toISOString(), status, by: user.name }]), user.role === "coach" ? user.id : null, user.id,
+    ],
+  );
+  await query("DELETE FROM job_hidden WHERE coachee_id = $1 AND refnr = $2", [coacheeId, refnr]);
+  await audit(user.id, user.role === "coach" ? "job_proposed" : "job_saved", coacheeId, { refnr });
+  return row!;
+}
 
 export const listSearches = (coacheeId: string) =>
   query<SavedSearch>("SELECT id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit FROM job_searches WHERE coachee_id = $1 ORDER BY created_at", [coacheeId]);

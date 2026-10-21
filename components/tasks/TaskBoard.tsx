@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { removeTask, toggleTaskDone } from "@/app/actions/aufgaben";
 import { Avatar } from "@/components/shell/AppShell";
+import { ShareButton } from "@/components/teilen/ShareButton";
 import { addDays, dayMedium, relativeDay, todayBerlin, weekStart } from "@/lib/calendar/dates";
 
 export type BoardTask = {
@@ -32,7 +33,7 @@ export function groupTasks(tasks: BoardTask[], today = todayBerlin()): Group[] {
   return groups.filter((g) => g.items.length);
 }
 
-export function TaskBoard({ tasks, selfId, coach, coacheeHref }: { tasks: BoardTask[]; selfId: string; coach: boolean; coacheeHref?: (id: string) => string }) {
+export function TaskBoard({ tasks, selfId, coach, coacheeHref, coachees }: { tasks: BoardTask[]; selfId: string; coach: boolean; coacheeHref?: (id: string) => string; /** Coach: eigene Aufgaben an einen Coachee schicken */ coachees?: { id: string; name: string }[] }) {
   const today = todayBerlin();
   const groups = groupTasks(tasks, today);
   return (
@@ -44,7 +45,7 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref }: { tasks: BoardT
           </h2>
           <ul className="card divide-y divide-line-soft !p-0">
             {g.items.map((t) => (
-              <li key={t.id} className="group flex items-start gap-3 px-4 py-3 sm:px-5">
+              <li key={t.id} id={`aufgabe-${t.id}`} className="group flex scroll-mt-24 items-start gap-3 px-4 py-3 sm:px-5">
                 <form action={toggleTaskDone.bind(null, t.id)}>
                   <button
                     aria-label={t.done_at ? "Als offen markieren" : "Als erledigt markieren"}
@@ -65,6 +66,18 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref }: { tasks: BoardT
                     )}
                     {coach && !t.coachee_id && <span className="rounded-full bg-tint px-2 py-0.5 font-semibold text-accent">Meine Aufgabe</span>}
                     {t.by_coachee && <span>{coach ? "vom Coachee angelegt" : "von dir angelegt"}</span>}
+                    {!t.done_at && (t.coachee_id || coachees?.length) && (
+                      <ShareButton
+                        kind="aufgabe"
+                        refId={t.id}
+                        role={coach ? "coach" : "coachee"}
+                        coacheeId={t.coachee_id ?? undefined}
+                        coachees={coach && !t.coachee_id ? coachees : undefined}
+                        recipient={t.coachee_name?.split(" ")[0]}
+                        title={t.title}
+                        className="inline-flex items-center gap-1 font-semibold text-accent hover:underline"
+                      />
+                    )}
                   </div>
                 </div>
                 {(coach || t.created_by === selfId) && (

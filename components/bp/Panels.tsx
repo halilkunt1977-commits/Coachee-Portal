@@ -8,6 +8,7 @@ import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { FinanceEditor } from "./FinanceEditor";
 import { PlanEditor } from "./PlanEditor";
+import { ShareButton } from "../teilen/ShareButton";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
 
@@ -43,6 +44,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       financeHref={links.finance}
       imported={coach && plan.imports.plan ? { name: plan.imports.plan.name, at: plan.imports.plan.at } : null}
       filled={!planIsEmpty(plan.sections, plan.glance) || (financeTouched(plan) && !financeIsEmpty(plan.finance))}
+      share={<ShareButton kind="businessplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title={plan.title || "Businessplan"} className="btn-ghost" />}
     />
   );
 }
@@ -64,6 +66,7 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
       zahlenHref={links.zahlen}
       imported={coach && plan.imports.finance ? { name: plan.imports.finance.name, at: plan.imports.finance.at } : null}
       filled={financeTouched(plan) && !financeIsEmpty(plan.finance)}
+      share={<ShareButton kind="finanzplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title="Finanzplan" />}
     />
   );
 }

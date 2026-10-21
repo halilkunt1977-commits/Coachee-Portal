@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { inboxApply, inboxJobStatus, inboxToggleTask, markAllInboxRead } from "@/app/actions/posteingang";
 import { MessageForm } from "@/components/akte/MessageForm";
-import { MessageList, type Message } from "@/components/akte/Lists";
+import { MESSAGE_COLUMNS, MessageList, type Message } from "@/components/akte/Lists";
+import { ComposeButton } from "@/components/teilen/ComposeButton";
 import { InboxCard } from "@/components/posteingang/InboxCard";
 import { PageHeader } from "@/components/shell/AppShell";
 import { Icon, type IconName } from "@/components/shell/icons";
@@ -49,6 +50,9 @@ const TONE: Record<InboxEntry["kind"] | "nachrichten", { icon: IconName; tone: s
   anschreiben: { icon: "doc", tone: "bg-ok-soft text-ok" },
   dokument: { icon: "folder", tone: "bg-surface-2 text-ink" },
   termin: { icon: "calendar", tone: "bg-tint text-accent" },
+  lebenslauf: { icon: "idcard", tone: "bg-tint text-accent" },
+  businessplan: { icon: "doc", tone: "bg-tint text-accent" },
+  finanzplan: { icon: "chart", tone: "bg-ok-soft text-ok" },
 };
 
 export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-bereich/posteingang">) {
@@ -63,7 +67,7 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
     inboxThread(c.id, user.id),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
     query<Message>(
-      `SELECT * FROM (SELECT m.id, m.body, m.created_at, m.author_id, m.read_at, u.name AS author_name
+      `SELECT * FROM (SELECT ${MESSAGE_COLUMNS}
                         FROM messages m LEFT JOIN users u ON u.id = m.author_id
                        WHERE m.coachee_id = $1 ORDER BY m.created_at DESC LIMIT 40) x ORDER BY created_at`,
       [c.id],
@@ -95,13 +99,16 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
       <PageHeader
         eyebrow="Von deinem Coach"
         title="Posteingang"
-        description={`Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von ${coachName}, das Neueste oben. Antworte direkt hier.`}
+        description={`Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von ${coachName}, das Neueste oben. Antworte direkt hier. Eigene Sachen schickst du überall mit „An Coach senden“.`}
         actions={
-          unread > 0 ? (
-            <form action={markAllInboxRead}>
-              <SubmitButton className="btn-ghost btn-sm" pendingText="Einen Moment …">Alle gelesen</SubmitButton>
-            </form>
-          ) : undefined
+          <>
+            {unread > 0 && (
+              <form action={markAllInboxRead}>
+                <SubmitButton className="btn-ghost btn-sm" pendingText="Einen Moment …">Alle gelesen</SubmitButton>
+              </form>
+            )}
+            <ComposeButton recipient={coachFirst} />
+          </>
         }
       />
       <div className="max-w-3xl space-y-6">
@@ -118,7 +125,7 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
           </ul>
         )}
 
-        {items.length === 0 && <Empty>Hier landet alles, was dein Coach dir schickt: Nachrichten, Aufgaben, Stellenvorschläge, Anschreiben, Dokumente und Termine.</Empty>}
+        {items.length === 0 && <Empty>Hier landet alles, was dein Coach dir schickt: Nachrichten, Aufgaben, Stellenvorschläge, Anschreiben, Lebensläufe, Dokumente und Termine.</Empty>}
 
         {groups.map((g) => (
           <section key={g.label} className="space-y-2">
@@ -155,12 +162,18 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
 function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }) {
   const from = e.actor ? `Von ${e.actor}` : "Von deinem Coach";
   const common = { id: e.id, icon: TONE[e.kind].icon, tone: TONE[e.kind].tone, when, unread: e.unread, initiallyOpen: open };
+  // Notiz, die der Coach beim Schicken dazugeschrieben hat
+  const note = e.kind !== "termin" && e.note ? (
+    <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]"><span className="font-semibold text-accent">{e.actor?.split(" ")[0] ?? "Dein Coach"}: </span>{e.note}</p>
+  ) : null;
+  const notePreview = e.kind !== "termin" && e.note ? `„${e.note}“` : null;
 
   if (e.kind === "aufgabe") {
     const t = e.task;
     const today = berlinDay(new Date());
     return (
-      <InboxCard {...common} label="Aufgabe" title={t.title} done={Boolean(t.done_at)} preview={t.done_at ? "Erledigt" : t.due_on ? `bis ${formatDate(t.due_on)}${t.details ? ` · ${t.details}` : ""}` : t.details}>
+      <InboxCard {...common} label="Aufgabe" title={t.title} done={Boolean(t.done_at)} preview={notePreview ?? (t.done_at ? "Erledigt" : t.due_on ? `bis ${formatDate(t.due_on)}${t.details ? ` · ${t.details}` : ""}` : t.details)}>
+        {note}
         {t.details && <p className="whitespace-pre-wrap break-words text-[15px] [overflow-wrap:anywhere]">{t.details}</p>}
         <p className="text-xs text-muted">
           {from}
@@ -185,7 +198,8 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
     const j = e.job;
     const proposal = j.status === "vorschlag";
     return (
-      <InboxCard {...common} label="Stellenvorschlag" title={j.title} preview={[j.employer, j.location].filter(Boolean).join(" · ") || undefined}>
+      <InboxCard {...common} label={proposal ? "Stellenvorschlag" : "Stelle"} title={j.title} preview={notePreview ?? ([j.employer, j.location].filter(Boolean).join(" · ") || undefined)}>
+        {note}
         <div className="space-y-1">
           <p className="text-[15px] break-words">{[j.employer, j.location].filter(Boolean).join(" · ") || "Ohne Arbeitgeberangabe"}</p>
           <p className="text-xs text-muted">
@@ -193,7 +207,7 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
             {!proposal && <> · <span className={`badge !px-2 !py-0 ${STATUS_TONE[j.status as Status] ?? ""}`}>{statusLabel(j.status as Status)}</span></>}
           </p>
         </div>
-        {j.reason && <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm break-words"><span className="font-semibold text-accent">Warum es passt: </span>{j.reason}</p>}
+        {j.reason && j.reason !== e.note && <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm break-words"><span className="font-semibold text-accent">Warum es passt: </span>{j.reason}</p>}
         <Actions>
           {proposal ? (
             <>
@@ -216,7 +230,8 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "anschreiben") {
     const j = e.job;
     return (
-      <InboxCard {...common} label="Anschreiben vorbereitet" title={j.title} preview={`${j.employer ? `${j.employer} · ` : ""}Dein Anschreiben liegt bereit.`}>
+      <InboxCard {...common} label="Anschreiben vorbereitet" title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}Dein Anschreiben liegt bereit.`}>
+        {note}
         <p className="text-[15px]">Für deine Bewerbung{j.employer ? ` bei ${j.employer}` : ""} liegt ein Anschreiben bereit. Lies es durch, pass es an, wo du magst, und lade es als PDF oder Word herunter.</p>
         <p className="text-xs text-muted">{from}</p>
         <Actions>
@@ -230,10 +245,37 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "dokument") {
     const d = e.doc;
     return (
-      <InboxCard {...common} label="Dokument" title={d.title} preview={categoryLabel(d.category)}>
+      <InboxCard {...common} label="Dokument" title={d.title} preview={notePreview ?? categoryLabel(d.category)}>
+        {note}
         <p className="text-xs text-muted">{from} · {categoryLabel(d.category)}</p>
         <Actions>
           <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="btn btn-sm">Öffnen</a>
+        </Actions>
+      </InboxCard>
+    );
+  }
+
+  if (e.kind === "lebenslauf") {
+    return (
+      <InboxCard {...common} label="Lebenslauf" title={e.cv.name} preview={notePreview ?? "Dein Coach hat dir deinen Lebenslauf geschickt."}>
+        {note}
+        <p className="text-xs text-muted">{from}</p>
+        <Actions>
+          <Link href={`/lebenslauf/${e.cv.id}`} className="btn btn-sm">Lebenslauf öffnen</Link>
+          <a href={`/api/lebenslauf/${e.cv.id}/pdf`} className="btn-ghost btn-sm">PDF</a>
+        </Actions>
+      </InboxCard>
+    );
+  }
+
+  if (e.kind === "businessplan" || e.kind === "finanzplan") {
+    const bp = e.kind === "businessplan";
+    return (
+      <InboxCard {...common} label={bp ? "Businessplan" : "Finanzplan"} title={e.plan.title} preview={notePreview ?? (bp ? "Schau dir deinen Businessplan an." : "Schau dir deinen Finanzplan an.")}>
+        {note}
+        <p className="text-xs text-muted">{from}</p>
+        <Actions>
+          <Link href={bp ? "/mein-bereich/businessplan" : "/mein-bereich/finanzplan"} className="btn btn-sm">{bp ? "Businessplan öffnen" : "Finanzplan öffnen"}</Link>
         </Actions>
       </InboxCard>
     );

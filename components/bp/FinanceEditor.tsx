@@ -17,6 +17,8 @@ type Props = {
   version: number;
   prefilled: boolean;
   itemCount: number;
+  /** „An … senden“ */
+  share?: React.ReactNode;
   excelHref: string;
   pdfHref: string;
   planHref: string;
@@ -82,6 +84,7 @@ export function FinanceEditor(p: Props) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href={p.planHref} className="btn-ghost btn-sm">Businessplan</Link>
+            {p.share}
             <button type="button" className="btn-ghost btn-sm" onClick={() => void download(p.excelHref)}>Excel</button>
             <button type="button" className="btn btn-sm" onClick={() => void download(p.pdfHref)}>PDF mit Businessplan</button>
           </div>
