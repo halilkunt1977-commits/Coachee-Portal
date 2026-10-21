@@ -31,6 +31,7 @@ function readCoachee(fd: FormData) {
     units_total: numberOrNull(fd, "units_total"),
     foerderart: ["gruendungszuschuss", "einstiegsgeld", "sonstiges"].includes(text(fd, "foerderart", 30)) ? text(fd, "foerderart", 30) : null,
     birth_date: dateOrNull(fd, "birth_date"),
+    letter_help: fd.get("letter_help") === "on",
     traeger: ["erfolgspfad", "avocons", "sonstige"].includes(text(fd, "traeger", 20)) ? text(fd, "traeger", 20) : null,
     goal: optional(fd, "goal", 2000),
     internal_note: optional(fd, "internal_note", 10000),
@@ -59,9 +60,9 @@ export async function createCoachee(_prev: FormState, fd: FormData): Promise<For
     created = await transaction(async (db) => {
       const u = await db.query<{ id: string }>("INSERT INTO users (email, name, role) VALUES ($1,$2,'coachee') RETURNING id", [c.email, `${c.first_name} ${c.last_name}`]);
       const row = await db.query<{ id: string }>(
-        `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, goal, internal_note, traeger, city, measure_type, foerderart, birth_date)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
-        [u.rows[0].id, coach.id, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note, c.traeger, c.city, c.measure_type, c.foerderart, c.birth_date],
+        `INSERT INTO coachees (user_id, coach_id, first_name, last_name, email, phone, coaching_type, funding, voucher_number, start_date, end_date, units_total, goal, internal_note, traeger, city, measure_type, foerderart, birth_date, letter_help)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
+        [u.rows[0].id, coach.id, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note, c.traeger, c.city, c.measure_type, c.foerderart, c.birth_date, c.letter_help],
       );
       return { id: row.rows[0].id, user_id: u.rows[0].id };
     });
@@ -98,8 +99,8 @@ export async function updateCoachee(coacheeId: string, _prev: FormState, fd: For
       await db.query(
         `UPDATE coachees SET first_name=$2, last_name=$3, email=$4, phone=$5, coaching_type=$6, funding=$7, voucher_number=$8, start_date=$9, end_date=$10,
                 units_total=$11, goal=$12, internal_note=$13, status=$14, traeger=$15, city=$16, measure_type=$17,
-                foerderart=$18, birth_date=$19, updated_at=now() WHERE id=$1`,
-        [coacheeId, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note, status, c.traeger, c.city, c.measure_type, c.foerderart, c.birth_date],
+                foerderart=$18, birth_date=$19, letter_help=$20, updated_at=now() WHERE id=$1`,
+        [coacheeId, c.first_name, c.last_name, c.email, c.phone, c.coaching_type, c.funding, c.voucher_number, c.start_date, c.end_date, c.units_total, c.goal, c.internal_note, status, c.traeger, c.city, c.measure_type, c.foerderart, c.birth_date, c.letter_help],
       );
       if (current.user_id) {
         // Auch nach dem Abschluss behält der Coachee seinen Zugang mit allen Werkzeugen, bis die Akte gelöscht oder der Zugang gesperrt wird

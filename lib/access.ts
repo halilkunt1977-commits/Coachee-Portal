@@ -17,6 +17,8 @@ export type Coachee = {
   foerderart: "gruendungszuschuss" | "einstiegsgeld" | "sonstiges" | null;
   /** Geburtsdatum (YYYY-MM-DD); steht so in Lebenslauf und Anschreiben */
   birth_date: string | null;
+  /** Coach hat die Textvorschläge beim Anschreiben für den Coachee freigegeben */
+  letter_help: boolean;
   voucher_number: string | null;
   measure_type: string | null;
   start_date: string | null;

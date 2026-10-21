@@ -24,8 +24,8 @@ export default async function LetterPage({ params }: PageProps<"/anschreiben/[id
       color={color}
       signatureId={await signatureId(coachee.id)}
       coach={coach}
-      // Die Schreibhilfe gibt es für beide; Coachees sehen sie ohne Hinweis auf die Technik dahinter
-      draft={aiEnabled()}
+      // Die Schreibhilfe hat der Coach immer, Coachees nur nach Freigabe in der Akte und ohne Hinweis auf die Technik dahinter
+      draft={aiEnabled() && (coach || coachee.letter_help)}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=bewerbungen` : "/mein-bereich/bewerbungen"}
       backLabel={coach ? `${fullName(coachee)} · Bewerbungen` : "Meine Bewerbungen"}
       share={<ShareButton kind="anschreiben" refId={app.id} role={user.role} coacheeId={coachee.id} recipient={coachee.first_name} title={[app.title, app.employer].filter(Boolean).join(" · ")} className="btn-ghost" />}
