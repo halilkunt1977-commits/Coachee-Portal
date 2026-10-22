@@ -59,7 +59,10 @@ export function InboxCard(p: Props) {
           <span className={`mt-0.5 block break-words [overflow-wrap:anywhere] ${unread ? "font-bold" : "font-semibold"} ${p.done ? "text-muted line-through" : ""}`}>{p.title}</span>
           {p.preview && <span className="mt-0.5 line-clamp-2 block break-words text-sm text-muted [overflow-wrap:anywhere]">{p.preview}</span>}
         </span>
-        <span className={`mt-2.5 shrink-0 text-muted transition ${open ? "-rotate-90" : "rotate-90"}`} aria-hidden><Icon name="arrow" className="size-4" /></span>
+        <span className="mt-1.5 flex shrink-0 items-center gap-1 text-xs font-semibold text-muted" title={open ? "Zuklappen" : "Öffnen"}>
+          <span className="hidden sm:inline">{open ? "Zuklappen" : "Öffnen"}</span>
+          <span className={`transition ${open ? "-rotate-90" : "rotate-90"}`} aria-hidden><Icon name="arrow" className="size-4" /></span>
+        </span>
       </button>
       {open && <div className="space-y-3 border-t border-line-soft px-4 pt-3 pb-4">{p.children}</div>}
     </li>

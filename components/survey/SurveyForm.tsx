@@ -13,16 +13,19 @@ export function SurveyForm({ id, initial, submittedAt, coach = false, suggest = 
   const [sent, setSent] = useState<string | null>(submittedAt);
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const first = useRef(true);
+  // Öffnen allein speichert nie: erst wenn sich etwas gegenüber dem geladenen Stand geändert hat (auch unter StrictMode)
+  const [initialJson] = useState(() => JSON.stringify(initial));
+  const changed = useRef(false);
 
   useEffect(() => {
-    if (first.current) { first.current = false; return; }
+    if (!changed.current && JSON.stringify(d) === initialJson) return;
+    changed.current = true;
     setSaved("saving");
     const t = setTimeout(() => {
       saveSurvey(id, d).then((r) => setSaved(r.ok ? "ok" : "error")).catch(() => setSaved("error"));
     }, 1200);
     return () => clearTimeout(t);
-  }, [d, id]);
+  }, [d, id, initialJson]);
 
   const setStation = (key: string, patch: Partial<Station>) => setD((p) => ({ ...p, stations: p.stations.map((s) => (s.key === key ? { ...s, ...patch } : s)) }));
   const p = progress(d);
@@ -110,7 +113,7 @@ function StationCard({ id, index, st, suggestOn, onChange, onRemove }: { id: str
           {gap ? <h2 className="h2">Was hast du {st.current ? `seit ${period({ ...st, current: false })}` : `von ${period(st)}`} gemacht?</h2> : manual && !st.title ? null : <h2 className="h2">{st.title || "Neue Station"}</h2>}
           {!gap && <p className="text-sm text-muted">{[st.company, st.location, period(st)].filter(Boolean).join(" · ")}</p>}
         </div>
-        {(manual || gap) && <button type="button" className="text-xs text-muted hover:text-danger" onClick={onRemove}>{gap ? "Trifft nicht zu" : "Entfernen"}</button>}
+        {(manual || gap) && <button type="button" className="tap -my-2 px-2 text-sm text-muted hover:text-danger" onClick={onRemove}>{gap ? "Trifft nicht zu" : "Entfernen"}</button>}
       </div>
 
       {manual && (
@@ -150,7 +153,7 @@ function StationCard({ id, index, st, suggestOn, onChange, onRemove }: { id: str
           <div className="mt-2 flex gap-2">
             <input className="input flex-1 text-sm" placeholder="Fehlt etwas? Hier eintragen" value={newTask} onChange={(e) => setNewTask(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && newTask.trim()) { e.preventDefault(); onChange({ tasks: [...st.tasks, { text: newTask.trim().slice(0, 200), level: 2 }] }); setNewTask(""); } }} />
-            <button type="button" className="btn-ghost btn-sm" disabled={!newTask.trim()} onClick={() => { onChange({ tasks: [...st.tasks, { text: newTask.trim().slice(0, 200), level: 2 }] }); setNewTask(""); }}>Hinzufügen</button>
+            <button type="button" className="btn-ghost btn-sm tap" disabled={!newTask.trim()} onClick={() => { onChange({ tasks: [...st.tasks, { text: newTask.trim().slice(0, 200), level: 2 }] }); setNewTask(""); }}>Hinzufügen</button>
           </div>
         </div>
       )}
@@ -173,10 +176,10 @@ function StationCard({ id, index, st, suggestOn, onChange, onRemove }: { id: str
 
 function LevelPicker({ value, options, onChange }: { value: Level; options: { value: Level; label: string }[]; onChange: (l: Level) => void }) {
   return (
-    <span className="inline-flex shrink-0 overflow-hidden rounded-lg border border-line text-xs">
+    <span role="group" className="inline-flex shrink-0 overflow-hidden rounded-lg border border-line text-sm sm:text-xs">
       {options.map((l) => (
-        <button key={l.value} type="button" onClick={() => onChange(l.value)}
-          className={`px-2.5 py-1.5 ${value === l.value ? (l.value === 0 ? "bg-line-soft font-semibold" : "bg-accent font-semibold text-white") : "bg-surface text-muted hover:text-ink"}`}>
+        <button key={l.value} type="button" aria-pressed={value === l.value} onClick={() => onChange(l.value)}
+          className={`min-h-11 min-w-11 px-3 sm:min-h-0 sm:min-w-0 sm:px-2.5 sm:py-1.5 ${value === l.value ? (l.value === 0 ? "bg-line-soft font-semibold" : "bg-accent font-semibold text-white") : "bg-surface text-muted hover:text-ink"}`}>
           {l.label}
         </button>
       ))}
@@ -195,14 +198,14 @@ function ChipGroup({ label, items, onChange, addLabel, levels = false }: { label
       <div className="flex flex-wrap gap-2">
         {items.map((c, i) => (
           <button key={`${c.text}${i}`} type="button" onClick={() => onChange(items.map((x, j) => (j === i ? { ...x, level: next(x.level) } : x)))}
-            className={`rounded-full border px-3 py-1 text-sm ${c.level === 2 ? "border-accent bg-accent text-white" : c.level === 1 ? "border-accent bg-accent/10 text-accent" : "border-line-soft bg-surface text-muted hover:text-ink"}`}>
+            className={`tap rounded-full border px-3 py-1 text-sm ${c.level === 2 ? "border-accent bg-accent text-white" : c.level === 1 ? "border-accent bg-accent/10 text-accent" : "border-line-soft bg-surface text-muted hover:text-ink"}`}>
             {c.level > 0 ? "✓ " : ""}{c.text}{levels && c.level === 1 ? " · Grundkenntnisse" : levels && c.level === 2 ? " · gut" : ""}
           </button>
         ))}
         {addLabel && (
           <span className="inline-flex gap-1">
             <input className="input w-40 py-1 text-sm" placeholder={addLabel} value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); push(); } }} />
-            {add.trim() && <button type="button" className="btn-ghost btn-sm" onClick={push}>+</button>}
+            {add.trim() && <button type="button" className="btn-ghost btn-sm tap min-w-11" aria-label="Hinzufügen" onClick={push}>+</button>}
           </span>
         )}
       </div>

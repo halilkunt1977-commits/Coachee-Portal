@@ -9,7 +9,8 @@ import { IMAGE_TYPES, storeFile } from "@/lib/files";
 import { text, type FormState } from "@/lib/forms";
 import { extractCvText, parseCvText } from "@/lib/cv/import";
 import { cvFor, cvFromAkte, dropFileIfUnused, personalLockOf, profileSkills } from "@/lib/cv/store";
-import { MAX_COACHEE_CVS, emptyCv, isTemplate, lockPersonal, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
+import { todayBerlin } from "@/lib/calendar/dates";
+import { MAX_COACHEE_CVS, emptyCv, germanDate, isTemplate, lockPersonal, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
 
 const listPath = (user: User, coacheeId: string) => (user.role === "coach" ? `/coach/coachees/${coacheeId}?tab=lebenslauf` : "/mein-bereich/lebenslauf");
 const refresh = (coacheeId: string) => {
@@ -26,14 +27,16 @@ async function overLimit(user: User, coacheeId: string) {
   const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM cvs WHERE coachee_id = $1", [coacheeId]);
   return (row?.n ?? 0) >= MAX_COACHEE_CVS;
 }
-const LIMIT_TEXT = `Du kannst bis zu ${MAX_COACHEE_CVS} Lebensläufe anlegen. Lösch einen, den du nicht mehr brauchst, oder pass einen bestehenden an.`;
+const LIMIT_TEXT = `Du kannst höchstens ${MAX_COACHEE_CVS} Lebensläufe haben. Neue kannst du anlegen, wenn du einen löschst, oder du passt einen bestehenden an.`;
+/** Vorgabe für neue Lebensläufe, damit sich mehrere auseinanderhalten lassen: „Lebenslauf 22.10.2026“ */
+const datedName = () => `Lebenslauf ${germanDate(todayBerlin())}`;
 
 export async function createCv(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
   const c = await coacheeFor(user, coacheeId);
   if (await overLimit(user, c.id)) return { error: LIMIT_TEXT };
   const start = text(fd, "start", 20);
-  const name = text(fd, "name", 120) || "Mein Lebenslauf";
+  const name = text(fd, "name", 120) || datedName();
   let data: CvData = start === "leer" ? emptyCv({ firstName: c.first_name, lastName: c.last_name }) : await cvFromAkte(c);
   let sourceId: string | null = null;
 
@@ -71,11 +74,22 @@ export async function duplicateCv(cvId: string) {
   if (await overLimit(user, cv.coachee_id)) redirect(`${listPath(user, cv.coachee_id)}?grenze=1`);
   const row = await one<{ id: string }>(
     "INSERT INTO cvs (coachee_id, name, template, color, data, photo_file_id, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
-    [cv.coachee_id, `${cv.name} (Kopie)`.slice(0, 120), cv.template, cv.color, JSON.stringify(cv.data), cv.photo_file_id, user.id],
+    [cv.coachee_id, `${cv.name} (Kopie vom ${germanDate(todayBerlin())})`.slice(0, 120), cv.template, cv.color, JSON.stringify(cv.data), cv.photo_file_id, user.id],
   );
   await audit(user.id, "cv_duplicated", cv.coachee_id, { cv: row!.id });
   refresh(cv.coachee_id);
   redirect(`/lebenslauf/${row!.id}`);
+}
+
+/** Umbenennen aus der Liste; ändert nichts am Inhalt und zählt nicht als Bearbeitung */
+export async function renameCv(cvId: string, _prev: FormState, fd: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const { cv } = await cvFor(user, cvId);
+  const name = text(fd, "name", 120);
+  if (!name) return { error: "Bitte einen Namen eingeben." };
+  await query("UPDATE cvs SET name = $2 WHERE id = $1", [cv.id, name]);
+  refresh(cv.coachee_id);
+  return { ok: "Umbenannt." };
 }
 
 export async function deleteCv(cvId: string) {

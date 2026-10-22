@@ -74,11 +74,11 @@ export function Tracker(p: Props) {
         <div className="flex flex-wrap gap-2">
           {applied > 0 && (
             <>
-              <a className="btn-ghost btn-sm" href={p.exportHref.pdf}>Nachweis als PDF</a>
-              <a className="btn-ghost btn-sm" href={p.exportHref.excel}>Excel</a>
+              <a className="btn-ghost btn-sm tap" href={p.exportHref.pdf}>Nachweis als PDF</a>
+              <a className="btn-ghost btn-sm tap" href={p.exportHref.excel}>Excel</a>
             </>
           )}
-          <button type="button" className="btn btn-sm" onClick={() => setAdding(!adding)}>{adding ? "Abbrechen" : "+ Bewerbung eintragen"}</button>
+          <button type="button" className="btn btn-sm tap" onClick={() => setAdding(!adding)}>{adding ? "Abbrechen" : "+ Bewerbung eintragen"}</button>
         </div>
       </div>
 
@@ -142,22 +142,22 @@ export function Tracker(p: Props) {
                 <div className="flex flex-wrap items-center gap-2">
                   {a.status === "vorschlag" && !p.coach ? (
                     <>
-                      <button type="button" className="btn btn-sm" onClick={() => patch(a.id, { status: "gemerkt" })}>Interessiert mich</button>
-                      <button type="button" className="btn-ghost btn-sm" onClick={() => patch(a.id, { status: "verworfen" })}>Passt nicht</button>
+                      <button type="button" className="btn btn-sm tap" onClick={() => patch(a.id, { status: "gemerkt" })}>Interessiert mich</button>
+                      <button type="button" className="btn-ghost btn-sm tap" onClick={() => patch(a.id, { status: "verworfen" })}>Passt nicht</button>
                     </>
                   ) : (
                     <select
                       aria-label="Stand"
-                      className={`rounded-full border-0 py-1 pl-3 pr-8 text-xs font-semibold ${STATUS_TONE[a.status]}`}
+                      className={`tap rounded-full border-0 py-1 pl-3 pr-8 text-xs font-semibold max-sm:text-sm ${STATUS_TONE[a.status]}`}
                       value={a.status}
                       onChange={(e) => patch(a.id, { status: e.target.value as Status })}
                     >
                       {STATUSES.filter((s) => s.key !== "vorschlag" || p.coach || a.status === "vorschlag").map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </select>
                   )}
-                  {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm">Anschreiben</Link>}
+                  {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm tap">Anschreiben</Link>}
                   <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />
-                  <button type="button" aria-expanded={isOpen} className="btn-ghost btn-sm" onClick={() => setOpen(isOpen ? null : a.id)}>{isOpen ? "Zuklappen" : "Details"}</button>
+                  <button type="button" aria-expanded={isOpen} className="btn-ghost btn-sm tap" onClick={() => setOpen(isOpen ? null : a.id)}>{isOpen ? "Zuklappen" : "Details"}</button>
                 </div>
               </div>
               {isOpen && <Details a={a} coach={p.coach} onPatch={(c) => patch(a.id, c)} onDelete={() => remove(a.id)} />}
@@ -190,8 +190,8 @@ function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boole
           <p className="text-sm font-semibold sm:col-span-2">Stelle und Arbeitgeber bearbeiten</p>
           <JobFields a={a} />
           <div className="flex justify-end gap-2 sm:col-span-2">
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Abbrechen</button>
-            <button className="btn btn-sm">Speichern</button>
+            <button type="button" className="btn-ghost btn-sm tap" onClick={() => setEditing(false)}>Abbrechen</button>
+            <button className="btn btn-sm tap">Speichern</button>
           </div>
         </form>
       ) : (
@@ -200,7 +200,7 @@ function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boole
             {address.length ? address.map((l, i) => <p key={i} className={i === 0 ? "font-semibold" : ""}>{l}</p>) : <p className="text-muted">Noch keine Anschrift eingetragen.</p>}
             <p className="text-xs text-muted">{[a.refnr && `Referenznummer ${a.refnr}`, a.published_on && `ausgeschrieben am ${fmt(a.published_on)}`].filter(Boolean).join(" · ")}</p>
           </div>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(true)}>Angaben bearbeiten</button>
+          <button type="button" className="btn-ghost btn-sm tap" onClick={() => setEditing(true)}>Angaben bearbeiten</button>
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -244,11 +244,11 @@ function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boole
         {confirm ? (
           <span className="flex items-center gap-2 text-sm">
             Wirklich löschen?
-            <button type="button" className="font-semibold text-danger hover:underline" onClick={onDelete}>Ja, löschen</button>
-            <button type="button" className="text-muted hover:text-ink" onClick={() => setConfirm(false)}>Nein</button>
+            <button type="button" className="tap px-1 font-semibold text-danger hover:underline" onClick={onDelete}>Ja, löschen</button>
+            <button type="button" className="tap px-1 text-muted hover:text-ink" onClick={() => setConfirm(false)}>Nein</button>
           </span>
         ) : (
-          <button type="button" className="text-sm text-muted hover:text-danger" onClick={() => setConfirm(true)}>Löschen</button>
+          <button type="button" className="tap px-1 text-sm text-muted hover:text-danger" onClick={() => setConfirm(true)}>Löschen</button>
         )}
       </div>
     </div>
@@ -266,7 +266,7 @@ function Stat({ label, value, tone = "" }: { label: string; value: number; tone?
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" aria-pressed={on} onClick={onClick} className={`rounded-full border px-3 py-1 text-sm ${on ? "border-accent bg-tint text-accent" : "border-line-soft text-muted hover:border-accent"}`}>
+    <button type="button" aria-pressed={on} onClick={onClick} className={`tap rounded-full border px-3 py-1 text-sm ${on ? "border-accent bg-tint text-accent" : "border-line-soft text-muted hover:border-accent"}`}>
       {children}
     </button>
   );

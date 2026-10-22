@@ -49,7 +49,9 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
   const busy = useRef<Promise<void> | null>(null);
   const pending = useRef(false);
   const timer = useRef<number | null>(null);
-  const first = useRef(true);
+  // Öffnen allein speichert nie (auch nicht unter StrictMode): erst nach einer echten Änderung
+  const [initialJson] = useState(() => JSON.stringify({ name, template, color, data }));
+  const changed = useRef(false);
   const blocked = useRef(false);
 
   // Speichert, bis nichts mehr offen ist. Änderungen während des Speicherns werden direkt danach nachgeschoben.
@@ -88,14 +90,12 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
   }, [name, template, color, data]);
 
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (!changed.current && JSON.stringify({ name, template, color, data }) === initialJson) return;
+    changed.current = true;
     setSave((s) => (s.kind === "conflict" ? s : { kind: "dirty" }));
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void doSave(), 900);
-  }, [name, template, color, data, doSave]);
+  }, [name, template, color, data, doSave, initialJson]);
 
   const flush = useCallback(async () => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -186,13 +186,13 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
       {save.kind === "conflict" && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#fbf1e3] px-4 py-3 text-sm text-[#7a5524]">
           <span>{save.by ? `${save.by} hat` : "Jemand hat"} diesen Lebenslauf gerade geändert. Lade neu, um mit dem aktuellen Stand weiterzumachen. Deine letzte Änderung ist dann weg.</span>
-          <button type="button" className="btn-ghost btn-sm" onClick={() => window.location.reload()}>Neu laden</button>
+          <button type="button" className="btn-ghost btn-sm tap" onClick={() => window.location.reload()}>Neu laden</button>
         </div>
       )}
       {notice && (
         <div className="flex items-center justify-between gap-3 rounded-xl bg-tint px-4 py-2.5 text-sm text-accent" role="status">
           <span>{notice}</span>
-          <button type="button" className="text-xs font-semibold" onClick={() => setNotice(null)}>Schließen</button>
+          <button type="button" className="tap px-1 text-xs font-semibold" onClick={() => setNotice(null)}>Schließen</button>
         </div>
       )}
 
@@ -218,10 +218,10 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn-ghost btn-sm" onClick={() => fileInput.current?.click()} disabled={uploading}>{uploading ? "Lädt hoch …" : photoUrl ? "Anderes Foto" : "Foto hochladen"}</button>
-                {photoUrl && <button type="button" className="btn-ghost btn-sm" onClick={() => setPhotoEdit(true)}>Ausschnitt</button>}
+                <button type="button" className="btn-ghost btn-sm tap" onClick={() => fileInput.current?.click()} disabled={uploading}>{uploading ? "Lädt hoch …" : photoUrl ? "Anderes Foto" : "Foto hochladen"}</button>
+                {photoUrl && <button type="button" className="btn-ghost btn-sm tap" onClick={() => setPhotoEdit(true)}>Ausschnitt</button>}
                 {photoUrl && (
-                  <button type="button" className="btn-ghost btn-sm" onClick={async () => { await removePhoto(cvId); setPhotoId(null); }}>Entfernen</button>
+                  <button type="button" className="btn-ghost btn-sm tap" onClick={async () => { await removePhoto(cvId); setPhotoId(null); }}>Entfernen</button>
                 )}
                 <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => onPhotoFile(e.target.files?.[0])} />
               </div>
@@ -367,8 +367,8 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn-ghost btn-sm" onClick={() => set("skills", [...data.skills, { name: "", level: 3 }])}>+ Kenntnis</button>
-              <button type="button" className="btn-ghost btn-sm" onClick={addProfileSkills}>Aus dem Kompetenzprofil übernehmen</button>
+              <button type="button" className="btn-ghost btn-sm tap" onClick={() => set("skills", [...data.skills, { name: "", level: 3 }])}>+ Kenntnis</button>
+              <button type="button" className="btn-ghost btn-sm tap" onClick={addProfileSkills}>Aus dem Kompetenzprofil übernehmen</button>
             </div>
           </Step>
 
@@ -383,7 +383,7 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
                 </div>
               ))}
             </div>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => set("languages", [...data.languages, { name: "", level: "" }])}>+ Sprache</button>
+            <button type="button" className="btn-ghost btn-sm tap" onClick={() => set("languages", [...data.languages, { name: "", level: "" }])}>+ Sprache</button>
           </Step>
 
           <Step n={8} title="Interessen und Abschluss" tip={TIPS.interests}>
@@ -505,12 +505,12 @@ function move<T>(list: T[], i: number, dir: -1 | 1) {
 }
 
 function MiniButtons({ i, len, onMove, onRemove }: { i: number; len: number; onMove: (d: -1 | 1) => void; onRemove: () => void }) {
-  const cls = "grid size-9 place-items-center rounded-lg border border-line text-muted hover:border-accent hover:text-accent disabled:opacity-30";
+  const cls = "grid size-11 sm:size-9 place-items-center rounded-lg border border-line text-muted hover:border-accent hover:text-accent disabled:opacity-30";
   return (
     <div className="flex shrink-0 gap-1">
-      <button type="button" className={cls} disabled={i === 0} onClick={() => onMove(-1)} aria-label="Nach oben">↑</button>
-      <button type="button" className={cls} disabled={i === len - 1} onClick={() => onMove(1)} aria-label="Nach unten">↓</button>
-      <button type="button" className={`${cls} hover:!border-danger hover:!text-danger`} onClick={onRemove} aria-label="Entfernen">✕</button>
+      <button type="button" className={cls} disabled={i === 0} onClick={() => onMove(-1)} aria-label="Nach oben" title="Nach oben">↑</button>
+      <button type="button" className={cls} disabled={i === len - 1} onClick={() => onMove(1)} aria-label="Nach unten" title="Nach unten">↓</button>
+      <button type="button" className={`${cls} hover:!border-danger hover:!text-danger`} onClick={onRemove} aria-label="Entfernen" title="Entfernen">✕</button>
     </div>
   );
 }
@@ -524,7 +524,7 @@ function ListEditor<T>({ items, onChange, add, summary, render, extra }: { items
         return (
           <div key={i} className={`rounded-xl border ${open ? "border-accent/40 bg-bg/40" : "border-line-soft"}`}>
             <div className="flex items-center gap-2 px-3 py-2">
-              <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-semibold" onClick={() => setOpenIdx(open ? null : i)} aria-expanded={open}>
+              <button type="button" className="min-h-11 min-w-0 flex-1 truncate text-left text-sm font-semibold sm:min-h-0" onClick={() => setOpenIdx(open ? null : i)} aria-expanded={open}>
                 {summary(item)}
               </button>
               <MiniButtons
@@ -545,7 +545,7 @@ function ListEditor<T>({ items, onChange, add, summary, render, extra }: { items
         );
       })}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => { onChange([...items, add.item]); setOpenIdx(items.length); }}>+ {add.label}</button>
+        <button type="button" className="btn-ghost btn-sm tap" onClick={() => { onChange([...items, add.item]); setOpenIdx(items.length); }}>+ {add.label}</button>
         {extra}
       </div>
     </div>
@@ -583,8 +583,8 @@ function AiHelp({ cvId, ai, field, data, value, onApply, children }: { cvId: str
           <p className="text-xs font-semibold uppercase tracking-wide text-gold">Vorschlag</p>
           <p className="whitespace-pre-line text-sm">{suggestion}</p>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-sm" onClick={() => { onApply(suggestion); setSuggestion(null); }}>Übernehmen</button>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setSuggestion(null)}>Verwerfen</button>
+            <button type="button" className="btn btn-sm tap" onClick={() => { onApply(suggestion); setSuggestion(null); }}>Übernehmen</button>
+            <button type="button" className="btn-ghost btn-sm tap" onClick={() => setSuggestion(null)}>Verwerfen</button>
           </div>
         </div>
       )}
@@ -597,7 +597,7 @@ function DesignPicker({ data, photo, template, color, onTemplate, onColor, onClo
     <div className="card space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="h2">Design und Farbe</h2>
-        <button type="button" className="btn-ghost btn-sm" onClick={onClose}>Fertig</button>
+        <button type="button" className="btn-ghost btn-sm tap" onClick={onClose}>Fertig</button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {COLORS.map((c) => (

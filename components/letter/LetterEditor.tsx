@@ -71,7 +71,10 @@ export function LetterEditor(p: Props) {
   const latest = useRef({ values, body, adText, signature: useSignature });
   const timer = useRef<number | null>(null);
   const busy = useRef<Promise<void> | null>(null);
-  const first = useRef(true);
+  // Öffnen allein speichert nie: gespeichert wird erst, wenn sich etwas gegenüber dem geladenen Stand ändert.
+  // (Ein Merker „erster Durchlauf“ reicht nicht: StrictMode führt Effekte beim Öffnen zweimal aus.)
+  const [initialJson] = useState(() => JSON.stringify({ values, body, adText, signature: useSignature }));
+  const changed = useRef(false);
 
   const doSave = useCallback(async () => {
     if (busy.current) await busy.current;
@@ -86,14 +89,12 @@ export function LetterEditor(p: Props) {
 
   useEffect(() => {
     latest.current = { values, body, adText, signature: useSignature };
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (!changed.current && JSON.stringify(latest.current) === initialJson) return;
+    changed.current = true;
     setSave("dirty");
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void doSave(), 900);
-  }, [values, body, adText, useSignature, doSave]);
+  }, [values, body, adText, useSignature, doSave, initialJson]);
 
   const flush = useCallback(async () => {
     if (timer.current) window.clearTimeout(timer.current);
@@ -325,12 +326,11 @@ function ContactFields(p: { applicationId: string; salutation: string; contact: 
   useEffect(() => {
     onSaved.current = p.onSaved;
   });
-  const first = useRef(true);
+  const [initialContact] = useState(() => JSON.stringify([p.salutation, splitContact(p.contact).name]));
+  const changed = useRef(false);
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (!changed.current && JSON.stringify([sal, name]) === initialContact) return;
+    changed.current = true;
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(async () => {
       setState("saving");
@@ -338,7 +338,7 @@ function ContactFields(p: { applicationId: string; salutation: string; contact: 
       if (res.ok) onSaved.current(res);
       setState(res.ok ? "saved" : "error");
     }, 700);
-  }, [sal, name, p.applicationId]);
+  }, [sal, name, p.applicationId, initialContact]);
   return (
     <div className="min-w-0">
       <span className="label flex items-baseline justify-between gap-2">
@@ -385,9 +385,9 @@ function ResetAll({ applicationId }: { applicationId: string }) {
 }
 
 function SaveBadge({ state }: { state: SaveState }) {
-  const text = { saved: "Gespeichert", dirty: "Änderungen …", saving: "Speichert …", error: "Nicht gespeichert" }[state];
+  const text = { saved: "Gespeichert ✓", dirty: "Wird gleich gespeichert", saving: "Wird gespeichert …", error: "Nicht gespeichert" }[state];
   const tone = state === "error" ? "text-danger" : state === "saved" ? "text-ok" : "text-muted";
-  return <span className={`text-xs font-medium ${tone}`} aria-live="polite">{text}</span>;
+  return <span className={`shrink-0 whitespace-nowrap text-sm font-medium ${tone}`} aria-live="polite">{text}</span>;
 }
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {

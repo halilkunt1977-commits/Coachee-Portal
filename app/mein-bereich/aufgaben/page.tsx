@@ -16,7 +16,7 @@ export default async function MyTasks() {
     ? await query<BoardTask>(
         `SELECT t.id, t.title, t.details, t.due_on, t.done_at, t.coachee_id, t.created_by, NULL AS coachee_name, t.created_by = $2 AS by_coachee
            FROM tasks t WHERE t.coachee_id = $1 AND (t.done_at IS NULL OR t.done_at > now() - interval '60 days')
-          ORDER BY t.done_at DESC NULLS FIRST, t.due_on NULLS LAST, t.created_at`,
+          ORDER BY t.done_at DESC NULLS FIRST, (t.created_by = $2) NULLS FIRST, t.due_on NULLS LAST, t.created_at`,
         [c.id, user.id],
       )
     : [];
@@ -28,12 +28,18 @@ export default async function MyTasks() {
       <PageHeader eyebrow="Mein Coaching" title="Aufgaben" description="Was als Nächstes zu tun ist. Haken setzen, wenn es erledigt ist, dein Coach sieht es sofort." />
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-5">
-          {c && (
-            <section className="card rise">
-              <NewTaskForm />
-            </section>
-          )}
+          {/* Erst, was der Coach aufgegeben hat; eigene Aufgaben anlegen steht darunter, zugeklappt */}
           {tasks.length ? <TaskBoard tasks={tasks} selfId={user.id} coach={false} /> : <Empty>Gerade gibt es nichts zu tun. Neue Aufgaben von deinem Coach erscheinen hier.</Empty>}
+          {c && (
+            <details className="card group rise">
+              <summary className="-m-2 flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl p-2 font-semibold text-accent [&::-webkit-details-marker]:hidden">
+                <span className="grid size-6 place-items-center rounded-full bg-tint text-base leading-none transition group-open:rotate-45">+</span> Neue Aufgabe anlegen
+              </summary>
+              <div className="pt-4">
+                <NewTaskForm />
+              </div>
+            </details>
+          )}
         </div>
         <aside className="space-y-4">
           <section className="night relative overflow-hidden rounded-[20px] p-5">

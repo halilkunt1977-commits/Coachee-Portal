@@ -99,7 +99,7 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
       <PageHeader
         eyebrow="Von deinem Coach"
         title="Posteingang"
-        description={`Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von ${coachName}, das Neueste oben. Antworte direkt hier. Eigene Sachen schickst du überall mit „An Coach senden“.`}
+        description={`Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von ${coachName}, das Neueste oben. Antworte direkt hier. Eigene Sachen zeigst du deinem Coach überall mit „Dem Coach zeigen“.`}
         actions={
           <>
             {unread > 0 && (

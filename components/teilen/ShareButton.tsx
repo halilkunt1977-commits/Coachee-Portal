@@ -27,19 +27,20 @@ type Props = {
   onSent?: (r: ShareResult) => void;
 };
 
-/** „An Coach senden“ / „An Coachee senden“: kleine Notiz dazu, dann landet es im Posteingang der anderen Seite. */
+/** „Dem Coach zeigen“ / „An Coachee senden“: kleine Notiz dazu, dann landet es im Posteingang der anderen Seite. */
 export function ShareButton(p: Props) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [to, setTo] = useState(p.coacheeId ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<string | null>(null);
+  // Nach dem Senden bleibt sichtbar, dass es angekommen ist: „an Halil gesendet ✓“
+  const [sent, setSent] = useState<{ text: string; to?: string } | null>(null);
   const [pending, start] = useTransition();
   const meta = SHARE_META[p.kind === "suche" ? "stelle" : p.kind];
   const coach = p.role === "coach";
   const picker = coach && !p.coacheeId;
   const toName = coach ? (picker ? p.coachees?.find((c) => c.id === to)?.name.split(" ")[0] : p.recipient) : null;
-  const label = p.label ?? (coach ? (picker ? "An Coachee senden" : `An ${p.recipient ?? "Coachee"} senden`) : "An Coach senden");
+  const label = p.label ?? (coach ? (picker ? "An Coachee senden" : `An ${p.recipient ?? "Coachee"} senden`) : "Dem Coach zeigen");
 
   const show = () => {
     setError(null);
@@ -52,19 +53,18 @@ export function ShareButton(p: Props) {
       setError(null);
       const res = await shareItem({ kind: p.kind, refId: p.refId, job: p.job, coacheeId: coach ? to || undefined : p.coacheeId, note }).catch(() => ({ error: "Das hat gerade nicht geklappt. Bitte noch einmal versuchen." }) as ShareResult);
       if (res.error) return setError(res.error);
-      setSent(res.ok ?? "Gesendet.");
+      setSent({ text: res.ok ?? "Gesendet.", to: res.to ?? toName ?? undefined });
       setOpen(false);
       p.onSent?.(res);
-      window.setTimeout(() => setSent(null), 4000);
     });
 
   return (
     <>
-      <button type="button" className={p.className ?? "btn-ghost btn-sm"} onClick={show} aria-haspopup="dialog">
-        {sent ? <>✓ Gesendet</> : <><Icon name="send" className="size-3.5" /> {label}</>}
+      <button type="button" className={`${p.className ?? "btn-ghost btn-sm"} tap ${sent ? "!text-ok" : ""}`} onClick={show} aria-haspopup="dialog" title={sent ? "Noch einmal senden" : undefined}>
+        {sent ? <>{sent.to ? `an ${sent.to} gesendet` : "gezeigt"} ✓</> : <><Icon name="send" className="size-3.5" /> {label}</>}
       </button>
-      {sent && <span role="status" className="sr-only">{sent}</span>}
-      <Sheet open={open} onClose={() => setOpen(false)} title={coach ? (toName ? `An ${toName} senden` : "An Coachee senden") : "An deinen Coach senden"}>
+      {sent && <span role="status" className="sr-only">{sent.text}</span>}
+      <Sheet open={open} onClose={() => setOpen(false)} title={coach ? (toName ? `An ${toName} senden` : "An Coachee senden") : "Deinem Coach zeigen"}>
         <form
           className="space-y-4"
           onSubmit={(e) => {

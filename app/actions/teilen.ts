@@ -27,7 +27,7 @@ export type ShareInput = {
   coacheeId?: string;
   note?: string;
 };
-export type ShareResult = { ok?: string; error?: string; status?: Status };
+export type ShareResult = { ok?: string; error?: string; status?: Status; /** Vorname des Empfängers, für „an … gesendet ✓“ */ to?: string };
 
 const isId = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v);
 const NOT_FOUND = "Nicht gefunden. Vielleicht wurde es gerade gelöscht.";
@@ -101,7 +101,8 @@ export async function shareItem(input: ShareInput): Promise<ShareResult> {
     await notify([c.coach_id], { title: `${c.first_name} ${c.last_name} hat dir etwas geschickt`, body: `${meta.article}. Öffnen zum Ansehen.`, url: "/coach/posteingang?bereich=coachees", tag: `geteilt-${c.id}` });
   }
   refresh(c.id);
-  return { ok: coach ? `An ${c.first_name} gesendet.` : "An deinen Coach gesendet.", status };
+  const to = coach ? c.first_name : (await one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]))?.name.split(" ")[0];
+  return { ok: to ? `An ${to} gesendet.` : "An deinen Coach gesendet.", status, to };
 }
 
 /** Neue Nachricht ohne Anhang: Coachee an den eigenen Coach, Coach an einen ausgewählten eigenen Coachee */

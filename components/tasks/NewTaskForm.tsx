@@ -42,7 +42,7 @@ export function NewTaskForm({ coachees, defaultFor = "" }: { coachees?: { id: st
         </label>
         <div className="flex flex-wrap gap-1 pb-1">
           {presets.map(([l, f]) => (
-            <button key={l} type="button" onClick={() => due.current && (due.current.value = f())} className="rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold text-muted transition hover:border-accent/40 hover:text-accent">{l}</button>
+            <button key={l} type="button" onClick={() => due.current && (due.current.value = f())} className="tap rounded-full border border-line px-2.5 py-1 text-[11px] font-semibold max-sm:px-3 max-sm:text-xs text-muted transition hover:border-accent/40 hover:text-accent">{l}</button>
           ))}
         </div>
       </div>

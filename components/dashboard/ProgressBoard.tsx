@@ -1,43 +1,46 @@
 import Link from "next/link";
 import { toggleMilestone } from "@/app/actions/dashboard";
-import { formatDate, formatUnits } from "@/components/ui";
+import { formatDate, formatHours, formatUnits, ueToHours } from "@/components/ui";
 import type { Links, Progress } from "@/lib/dashboard/progress";
 import { Meter, Ring, WeekBars, toneFor } from "./Charts";
 
 const de = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 1 });
 
-/** Unterrichtseinheiten: Ring mit Rest in der Mitte, Tempo bis zum Ende, Balken pro Woche */
+/** Unterrichtseinheiten: Ring mit Rest in der Mitte, Tempo bis zum Ende, Balken pro Woche. Coachees sehen Zeitstunden statt UE. */
 export function UnitsCard({ p, href, you }: { p: Progress; href: string; you: boolean }) {
   const u = p.units;
   const low = u.rest != null && u.total ? u.rest / u.total <= 0.1 : false;
+  const fmt = you ? formatHours : formatUnits;
+  const num = (n: number) => de(you ? ueToHours(n) : n);
+  const weeks = you ? p.weeks.map((w) => ({ ...w, units: ueToHours(w.units) })) : p.weeks;
   return (
     <section className="card space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="h2">Unterrichtseinheiten</h2>
+        <h2 className="h2">{you ? "Deine Coaching-Stunden" : "Unterrichtseinheiten"}</h2>
         <Link href={href} className="link text-sm">Termine</Link>
       </div>
       <div className="flex flex-wrap items-center gap-5">
         <Ring pct={u.pct ?? 0} size={128} stroke={14} tone={low ? "danger" : "accent"}>
           {u.rest != null ? (
             <div>
-              <p className="font-[family-name:var(--font-display)] text-2xl font-bold tabular-nums">{de(u.rest)}</p>
-              <p className="text-[11px] text-muted">UE übrig</p>
+              <p className="font-[family-name:var(--font-display)] text-2xl font-bold tabular-nums">{num(u.rest)}</p>
+              <p className="text-[11px] text-muted">{you ? "Stunden übrig" : "UE übrig"}</p>
             </div>
           ) : (
             <p className="text-xs text-muted">kein<br />Kontingent</p>
           )}
         </Ring>
         <dl className="grid min-w-0 flex-1 basis-40 grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <div><dt className="text-xs text-muted">Verbraucht</dt><dd className="font-semibold tabular-nums">{formatUnits(u.used)}</dd></div>
-          <div><dt className="text-xs text-muted">Bewilligt</dt><dd className="font-semibold tabular-nums">{u.total != null ? formatUnits(u.total) : "–"}</dd></div>
+          <div><dt className="text-xs text-muted">Verbraucht</dt><dd className="font-semibold tabular-nums">{fmt(u.used)}</dd></div>
+          <div><dt className="text-xs text-muted">Bewilligt</dt><dd className="font-semibold tabular-nums">{u.total != null ? fmt(u.total) : "–"}</dd></div>
           <div><dt className="text-xs text-muted">Noch Wochen</dt><dd className="font-semibold tabular-nums">{u.weeksLeft != null ? de(u.weeksLeft) : "–"}</dd></div>
-          <div><dt className="text-xs text-muted">Nötig pro Woche</dt><dd className={`font-semibold tabular-nums ${u.perWeek && u.perWeek > 6 ? "text-danger" : ""}`}>{u.perWeek != null ? `${de(u.perWeek)} UE` : "–"}</dd></div>
+          <div><dt className="text-xs text-muted">Nötig pro Woche</dt><dd className={`font-semibold tabular-nums ${u.perWeek && u.perWeek > 6 ? "text-danger" : ""}`}>{u.perWeek != null ? (you ? fmt(u.perWeek) : `${de(u.perWeek)} UE`) : "–"}</dd></div>
           <div className="col-span-2"><dt className="text-xs text-muted">{you ? "Dein letzter Termin" : "Letzter Termin"}</dt><dd className="font-semibold">{formatDate(u.last)}</dd></div>
         </dl>
       </div>
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">UE pro Kalenderwoche</p>
-        <WeekBars weeks={p.weeks} height={96} />
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{you ? "Stunden pro Kalenderwoche" : "UE pro Kalenderwoche"}</p>
+        <WeekBars weeks={weeks} height={96} unit={you ? "Stunden" : "UE"} />
       </div>
     </section>
   );
