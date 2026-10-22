@@ -24,6 +24,7 @@ import { JobTips, JobTipsSkeleton } from "@/components/dashboard/JobTips";
 import { FoerderCard, FoerderWahl } from "@/components/handbuch/FoerderCard";
 import { FOERDERUNGEN } from "@/lib/handbuch/foerderung";
 import { inboxEntries, inboxThread, inboxUnread, type InboxEntry } from "@/lib/coachee-inbox";
+import { VideoTeaser } from "@/components/erklaervideo/VideoTeaser";
 
 const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stelle", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin", lebenslauf: "Lebenslauf", businessplan: "Businessplan", finanzplan: "Finanzplan" };
 const entryTitle = (e: InboxEntry) =>
@@ -196,6 +197,8 @@ export default async function MyArea() {
               {closed && <p className="max-w-xl text-sm text-white/70">Dein Portal bleibt für dich da: Lebenslauf, {gruendung ? "Businessplan, Finanzplan" : "Stellen, Bewerbungen"}, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.</p>}
             </div>
             {next && !closed && <NextStep label={next.action} hint={next.hint} href={nextHref} />}
+            {/* Erklärvideo: in den ersten Tagen hier oben, bis gesehen oder weggeklickt */}
+            {!c.video_seen_at && !c.video_card_hidden_at && <VideoTeaser coacheeId={c.id} firstName={c.first_name} type={c.coaching_type} lang={c.language} />}
             <div className="flex flex-wrap gap-2 text-sm">
               {unread > 0 && (
                 <Link href={newMessages ? "/mein-bereich/posteingang?offen=nachrichten" : "/mein-bereich/posteingang"} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-danger px-3.5 py-1.5 font-semibold text-white transition hover:brightness-110">

@@ -192,6 +192,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
               <p className="px-3 pt-1.5 pb-1 text-xs text-muted">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</p>
               <div className="my-1 border-t border-line-soft" />
               <Link href="?tab=stammdaten" role="menuitem" className={menuItem}><Icon name="settings" className="size-4 text-muted" />Stammdaten und Zugang</Link>
+              <Link href={`/coach/coachees/${c.id}/erklaervideo`} role="menuitem" className={menuItem}><Icon name="play" className="size-4 text-muted" />Erklärvideo ansehen</Link>
               <Link href="?tab=stammdaten#abschluss" role="menuitem" className={menuItem}><Icon name="check" className="size-4 text-muted" />{done ? "Coaching wieder aufnehmen" : "Coaching abschließen"}</Link>
             </MoreMenu>
           </div>
@@ -287,6 +288,14 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
               <h2 className="h2">Coaching {done ? "abgeschlossen" : "abschließen"}</h2>
               <p className="text-sm text-muted">{done ? "Das Coaching ist abgeschlossen. Der Zugang bleibt bestehen." : "Wenn alle Termine erledigt sind. Der Zugang bleibt bestehen."}</p>
               <CloseCoaching key={c.status} coacheeId={c.id} firstName={c.first_name} done={done} />
+            </div>
+            <div className="card space-y-3">
+              <h2 className="h2">Erklärvideo</h2>
+              <p className="text-sm text-muted">
+                „So funktioniert dein Portal“ mit Begrüßung für {c.first_name}, auf {c.language === "tr" ? "Türkisch" : "Deutsch"}.
+                {c.video_seen_at ? ` Angesehen am ${formatDate(c.video_seen_at)}.` : " Noch nicht angesehen."}
+              </p>
+              <Link href={`/coach/coachees/${c.id}/erklaervideo`} className="btn-ghost w-full justify-center"><Icon name="play" className="size-4" />Erklärvideo ansehen</Link>
             </div>
             <FeatureBlock coachId={coach.id} coachee={c} />
             <div className="card space-y-3 border-danger/30">

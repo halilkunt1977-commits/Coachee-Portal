@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { SetupHint } from "@/components/coach/SetupHint";
+import { greetingVoiceEnabled } from "@/lib/greeting-audio";
 import { FeatureToggle } from "@/components/features/FeatureToggle";
 import { LimitForm, MonthMeter, UsageLine } from "@/components/features/Parts";
 import { Avatar, PageHeader } from "@/components/shell/AppShell";
@@ -76,6 +78,12 @@ export default async function Freigaben() {
           Neue Coachees starten ohne Freigaben. Coachees sehen nur die freigegebenen Hilfen, ohne Hinweis auf KI; was nur du nutzen kannst
           (Assistent, Businessplan-Entwürfe, Stellensuche, Formulierungen im Lebenslauf), steht hier nicht.
         </p>
+        {!greetingVoiceEnabled() && (
+          <div className="text-xs text-muted">
+            <p>Erklärvideo: Die Begrüßung mit Vornamen steht gerade nur als Text auf der Titelkarte, ohne gesprochenen Gruß.</p>
+            <SetupHint>Für die gesprochene Begrüßung in den Einstellungen der App ELEVENLABS_API_KEY eintragen, dann neu starten.</SetupHint>
+          </div>
+        )}
       </div>
     </>
   );

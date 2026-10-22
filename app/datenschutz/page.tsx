@@ -29,6 +29,9 @@ export default function Datenschutz() {
       <h2>KI-Funktionen</h2>
       <p>Für einzelne Funktionen (zum Beispiel Textvorschläge für Lebenslauf oder Businessplan) werden die nötigen Inhalte an einen KI-Dienst übermittelt, mit dem ein Vertrag zur Auftragsverarbeitung besteht. Die Inhalte werden dort nicht zum Training verwendet. Diese Funktionen werden erst genutzt, wenn sie im Portal ausdrücklich angeboten werden.</p>
 
+      <h2>Sprachausgabe der persönlichen Begrüßung (ElevenLabs)</h2>
+      <p>Das Erklärvideo „So funktioniert dein Portal“ begrüßt dich mit deinem Vornamen. Für die gesprochene Begrüßung wird nur der Begrüßungssatz mit deinem Vornamen an den Sprachausgabe-Dienst ElevenLabs übermittelt, keine anderen Angaben aus dem Coaching. Die fertige Tonaufnahme speichern wir verschlüsselt im Portal, damit sie nur einmal erzeugt wird; sie wird mit deiner Akte gelöscht. Ist die Sprachausgabe nicht eingerichtet, erscheint die Begrüßung nur als Text und es wird nichts übermittelt.</p>
+
       <h2>Wie lange</h2>
       <p>Wir speichern die Daten für die Dauer des Coachings und danach so lange, wie es die Nachweispflichten gegenüber dem Kostenträger verlangen. Danach werden sie gelöscht.</p>
 

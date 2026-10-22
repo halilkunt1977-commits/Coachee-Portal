@@ -29,6 +29,11 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
           <option value="sonstiges">Ohne Förderung / Sonstiges</option>
         </Select>
         <p className="hint self-end sm:pb-2.5">Nur bei Gründungscoaching. Danach richten sich die Infos auf der Startseite und das Handbuch des Coachees.</p>
+        <Select label="Sprache für das Erklärvideo" name="language" defaultValue={c?.language ?? "de"}>
+          <option value="de">Deutsch</option>
+          <option value="tr">Türkisch (Türkçe)</option>
+        </Select>
+        <p className="hint self-end sm:pb-2.5">Das Video „So funktioniert dein Portal“ begrüßt den Coachee mit Vornamen in dieser Sprache. Er kann sie dort selbst umstellen.</p>
         <Field label="Gutschein- / Kunden-Nummer" name="voucher_number" defaultValue={c?.voucher_number ?? ""} hint="Steht im Kopf der Beratungsdokumentation." />
         <Field label="Maßnahmeart" name="measure_type" defaultValue={c?.measure_type ?? ""} placeholder="z. B. 04-ORC (40 UE)" />
         <Field label="Bewilligte Unterrichtseinheiten" name="units_total" inputMode="decimal" defaultValue={c?.units_total ?? ""} hint="Zum Beispiel 40. Wird mit der Anwesenheit verrechnet." />

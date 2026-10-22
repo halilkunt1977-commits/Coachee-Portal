@@ -21,6 +21,11 @@ export type Coachee = {
   features: string[];
   /** Eigene Monatsgrenze für die Hilfen; null = AI_COACHEE_MONTHLY_LIMIT */
   ai_monthly_limit: number | null;
+  /** Sprache für das Erklärvideo und die Begrüßung */
+  language: "de" | "tr";
+  /** Erklärvideo bis zum Ende angesehen bzw. Hinweis auf der Startseite weggeklickt */
+  video_seen_at: string | null;
+  video_card_hidden_at: string | null;
   voucher_number: string | null;
   measure_type: string | null;
   start_date: string | null;
