@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SetupHint } from "@/components/coach/SetupHint";
 import { markAllRead, markMailUnread, setMailCategory, setMailCoachee, toggleMailDone, attachmentToDocuments } from "@/app/actions/postfach";
 import { FetchNow } from "@/components/attendance/Forms";
 import { Avatar, PageHeader } from "@/components/shell/AppShell";
@@ -62,9 +63,9 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
     <nav className="mb-5 grid grid-cols-2 rounded-xl border border-line bg-surface p-1 text-sm font-semibold sm:inline-grid sm:w-auto" aria-label="Bereich">
       {([
         ["coachees", "Von Coachees", coacheeUnread],
-        ["mails", "Bildungsträger", mailUnread?.n ?? 0],
+        ["mails", "Träger-Mails", mailUnread?.n ?? 0],
       ] as const).map(([key, label, n]) => (
-        <Link key={key} href={`/coach/posteingang?bereich=${key}`} aria-current={bereich === key ? "page" : undefined} className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 transition ${bereich === key ? "bg-accent text-white" : "text-muted hover:text-ink"}`}>
+        <Link key={key} href={`/coach/posteingang?bereich=${key}`} aria-current={bereich === key ? "page" : undefined} className={`flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 py-2 transition sm:min-h-0 ${bereich === key ? "bg-accent text-white" : "text-muted hover:text-ink"}`}>
           {label}
           {n > 0 && <span className={`rounded-full px-1.5 text-[11px] ${bereich === key ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span>}
         </Link>
@@ -130,7 +131,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
     return `/coach/posteingang?${q}`;
   };
   const chip = (key: string | null, label: string, n?: number, dot?: string) => (
-    <Link key={key ?? "alle"} href={href({ art: key, mail: null })} className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${art === key ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent/40 hover:text-accent"}`}>
+    <Link key={key ?? "alle"} href={href({ art: key, mail: null })} className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition sm:min-h-0 ${art === key ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent/40 hover:text-accent"}`}>
       {dot && <span className={`size-2 rounded-full ${dot}`} />}
       {label}
       {n ? <span className={`rounded-full px-1.5 text-[11px] ${art === key ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span> : null}
@@ -156,9 +157,9 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
         }
       />
       {tabs}
-      {!imapConfigured() && <div className="mb-4"><Notice tone="error">Der Postfach-Abruf ist nicht eingerichtet: In Coolify fehlen IMAP_USER und IMAP_PASS.</Notice></div>}
+      {!imapConfigured() && <div className="mb-4"><Notice tone="error">Das E-Mail-Postfach ist noch nicht verbunden. Die Zugangsdaten müssen auf dem Server hinterlegt werden.<SetupHint>In den Einstellungen der App Mailadresse und Passwort des Postfachs als IMAP_USER und IMAP_PASS eintragen, dann neu starten.</SetupHint></Notice></div>}
 
-      <nav className="no-scrollbar -mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Art">
+      <nav className="mb-3 flex flex-wrap gap-2 pb-1" aria-label="Art">
         {chip(null, "Alle", undefined)}
         {chip("neu", "Ungelesen", unread)}
         {chip("offen", "Nicht erledigt")}
@@ -169,7 +170,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
       </nav>
       <nav className="mb-5 flex gap-1 text-sm" aria-label="Absender">
         {([null, "avocons", "erfolgspfad"] as const).map((q) => (
-          <Link key={q ?? "alle"} href={href({ quelle: q, mail: null })} className={`rounded-lg px-3 py-1 font-semibold transition ${quelle === q ? "bg-surface text-accent shadow-sm" : "text-muted hover:text-ink"}`}>
+          <Link key={q ?? "alle"} href={href({ quelle: q, mail: null })} className={`inline-flex min-h-11 items-center rounded-lg px-3 py-1 font-semibold transition sm:min-h-0 ${quelle === q ? "bg-surface text-accent shadow-sm" : "text-muted hover:text-ink"}`}>
             {q ? SOURCES[q] : "Alle Absender"}
           </Link>
         ))}

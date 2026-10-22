@@ -94,7 +94,7 @@ export default async function CoacheeList({ searchParams }: PageProps<"/coach/co
                 </div>
               </div>
               <dl className="grid grid-cols-3 gap-2 text-xs text-muted">
-                <div><dt>Stunden</dt><dd className="text-sm font-semibold text-ink">{formatUnits(c.units_used)}{c.units_total ? ` / ${c.units_total}` : ""}</dd></div>
+                <div><dt>UE</dt><dd className="text-sm font-semibold text-ink">{c.units_total ? `${Number(c.units_used ?? 0).toLocaleString("de-DE", { maximumFractionDigits: 2 })} von ${c.units_total}` : formatUnits(c.units_used)}</dd></div>
                 <div><dt>Offene Aufgaben</dt><dd className="text-sm font-semibold text-ink">{c.open_tasks}</dd></div>
                 <div><dt>Letztes Gespräch</dt><dd className="text-sm font-semibold text-ink">{formatDate(c.last_meeting)}</dd></div>
               </dl>

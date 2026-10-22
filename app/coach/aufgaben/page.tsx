@@ -33,7 +33,7 @@ export default async function CoachTasks({ searchParams }: PageProps<"/coach/auf
   const count = (k: string) => groups.find((g) => g.key === k)?.items.length ?? 0;
   const withTasks = coachees.filter((c) => tasks.some((t) => t.coachee_id === c.id && !t.done_at));
   const chip = (key: string, label: string, n?: number) => (
-    <Link key={key} href={key ? `/coach/aufgaben?fuer=${key}` : "/coach/aufgaben"} className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition ${filter === key ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent/40 hover:text-accent"}`}>
+    <Link key={key} href={key ? `/coach/aufgaben?fuer=${key}` : "/coach/aufgaben"} className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition sm:min-h-0 ${filter === key ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent/40 hover:text-accent"}`}>
       {label}{n ? <span className={`text-xs ${filter === key ? "text-white/70" : "text-muted"}`}>{n}</span> : null}
     </Link>
   );
@@ -46,7 +46,7 @@ export default async function CoachTasks({ searchParams }: PageProps<"/coach/auf
           <section className="card rise">
             <NewTaskForm coachees={coachees} defaultFor={filter && filter !== "ich" ? filter : ""} />
           </section>
-          <nav className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Filter">
+          <nav className="flex flex-wrap gap-2 pb-1" aria-label="Filter">
             {chip("", "Alle", tasks.filter((t) => !t.done_at).length)}
             {chip("ich", "Meine", tasks.filter((t) => !t.coachee_id && !t.done_at).length)}
             {withTasks.map((c) => chip(c.id, c.name, tasks.filter((t) => t.coachee_id === c.id && !t.done_at).length))}

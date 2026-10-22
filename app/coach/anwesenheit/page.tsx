@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SetupHint } from "@/components/coach/SetupHint";
 import { PageHeader } from "@/components/shell/AppShell";
 import { setMailIgnored } from "@/app/actions/anwesenheit";
 import { AssignForm, FetchNow, PasteForm } from "@/components/attendance/Forms";
@@ -128,8 +129,9 @@ export default async function AttendanceInbox({ searchParams }: PageProps<"/coac
               </>
             ) : (
               <p className="text-sm text-muted">
-                Der automatische Abruf ist noch nicht eingerichtet. Dafür in Coolify bei der App <b>IMAP_USER</b> (Mailadresse des Postfachs) und <b>IMAP_PASS</b> (Passwort) eintragen und neu starten.
+                Das E-Mail-Postfach ist noch nicht verbunden, deshalb werden die Mails noch nicht automatisch abgerufen. Die Zugangsdaten müssen auf dem Server hinterlegt werden.
                 Bis dahin kannst du Mails unten einfügen.
+                <SetupHint>In den Einstellungen der App Mailadresse und Passwort des Postfachs als IMAP_USER und IMAP_PASS eintragen, dann neu starten.</SetupHint>
               </p>
             )}
           </div>

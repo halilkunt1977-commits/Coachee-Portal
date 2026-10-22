@@ -21,7 +21,7 @@ export async function analyzeJob(coacheeId: string, appId: string, _prev: FormSt
   if (fd.has("job_text")) await query("UPDATE applications SET job_text = $3 WHERE id = $1 AND coachee_id = $2", [appId, c.id, text(fd, "job_text", 20000)]);
   try {
     const r = await analyzeApplication(c, appId, coach.id);
-    if (!r) return { error: "Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt)." };
+    if (!r) return { error: "Die KI ist noch nicht eingerichtet. Der Zugang zur KI muss auf dem Server hinterlegt werden." };
   } catch (error) {
     console.error("[ai] stellenanalyse", error);
     return { error: error instanceof AiError ? error.message : "Die Analyse hat nicht geklappt. Bitte gleich noch einmal versuchen." };

@@ -9,7 +9,8 @@ import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
 import { OnlineCard } from "@/components/presence/Presence";
 import { ComposeButton } from "@/components/teilen/ComposeButton";
-import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
+import { CityForm, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
+import { Fold } from "@/components/coach/Fold";
 import { Empty, formatDate, formatUnits } from "@/components/ui";
 import { fullName, typeLabel, type Coachee } from "@/lib/access";
 import { requireCoach } from "@/lib/auth";
@@ -121,7 +122,7 @@ export default async function CoachDashboard() {
   const alerts: Alert[] = [];
   for (const l of leads)
     alerts.push({ tone: "danger", text: l.status === "neu" ? `Neue Anfrage: ${l.name || "ohne Namen"}, jetzt melden` : `Anfrage ${l.name || "ohne Namen"}: heute nachfassen`, href: `/coach/anfragen?anfrage=${l.id}#a-${l.id}` });
-  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Nachricht${inbox!.n > 1 ? "en" : ""} von AVOCONS oder Erfolgspfad`, href: "/coach/posteingang?art=neu" });
+  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Träger-Mail${inbox!.n > 1 ? "s" : ""} (AVOCONS oder Erfolgspfad)`, href: "/coach/posteingang?art=neu" });
   if ((inbox?.open ?? 0) > 0) alerts.push({ tone: "gold", text: `${inbox?.open} Mail${inbox!.open > 1 ? "s" : ""} ohne erkennbaren Coachee`, href: "/coach/posteingang?art=offen" });
   if ((openMails?.n ?? 0) > 0) alerts.push({ tone: "gold", text: `${openMails?.n} Anwesenheits-Mail${openMails!.n > 1 ? "s" : ""} nicht zugeordnet`, href: "/coach/anwesenheit" });
   for (const { c, p } of items) {
@@ -155,96 +156,45 @@ export default async function CoachDashboard() {
   const founders = active.filter((i) => i.c.coaching_type === "gruendung");
   const jobs = active.filter((i) => i.c.coaching_type === "job");
   const firstName = user.name.split(" ")[0];
+  // Für die eingeklappte Zeile „Freigaben“: freigegeben von möglich (nur Funktionen, die zur Coaching-Art passen)
+  const possible = FEATURES.flatMap((f) => rows.filter((c) => (f.types as readonly string[]).includes(c.coaching_type)).map((c) => hasFeature(c, f.key)));
+  const released = possible.filter(Boolean).length;
   const board = [...items].sort((a, b) => (a.c.status === b.c.status ? a.p.overall - b.p.overall : a.c.status === "aktiv" ? -1 : 1));
 
   return (
     <div className="space-y-6">
-      <section className="rise night relative -mx-4 -mt-6 overflow-hidden px-5 pt-8 pb-7 sm:mx-0 sm:mt-0 sm:rounded-[28px] sm:px-9 sm:py-9">
+      <section className="rise night relative -mx-4 -mt-6 overflow-hidden px-5 pt-6 pb-5 sm:mx-0 sm:mt-0 sm:rounded-[24px] sm:px-8 sm:py-6">
         <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative grid gap-8 xl:grid-cols-[1fr_330px]">
-          <div className="min-w-0 space-y-6">
-            <div>
-              <p className="text-sm text-white/70">{todayLong()}</p>
-              <h1 className="font-[family-name:var(--font-display)] text-[34px] leading-[1.05] font-bold tracking-tight sm:text-5xl">{greeting()}, <span className="text-gradient-gold">{firstName}</span>!</h1>
-              <p className="mt-1 text-white/80">
-                {todayCount ? `${todayCount} ${todayCount === 1 ? "Termin" : "Termine"} heute. ` : ""}
-                {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} deinen Blick.` : "Alles im grünen Bereich."}
-              </p>
-              {pick.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <ComposeButton coachees={pick} label="Nachricht an Coachee" className="btn-gold btn-sm" />
-                  <Link href="/coach/posteingang?bereich=coachees" className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10">
-                    <Icon name="mail" className="size-4" /> Von Coachees{unreadAll ? <span className="rounded-full bg-danger px-1.5 text-[11px]">{unreadAll}</span> : null}
-                  </Link>
-                </div>
-              )}
-            </div>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[
-                { label: "Aktive Coachees", value: String(active.length), sub: `${jobs.length} Job · ${founders.length} Gründung` },
-                { label: "UE diese Woche", value: de(thisWeek), sub: lastWeek ? `Vorwoche ${de(lastWeek)}` : "Vorwoche –" },
-                { label: "UE im " + new Date().toLocaleDateString("de-DE", { month: "long", timeZone: "Europe/Berlin" }), value: de(month?.units ?? 0), sub: `${closed?.n ?? 0} Coachings abgeschlossen` },
-                { label: "UE noch offen", value: de(restAll), sub: "über alle aktiven" },
-              ].map((k, i) => (
-                <div key={k.label} className="rise glass px-4 py-3" style={{ ["--i" as string]: i + 1 }}>
-                  <dt className="text-xs text-white/70">{k.label}</dt>
-                  <dd className="font-[family-name:var(--font-display)] text-[34px] leading-tight font-bold tabular-nums">{k.value}</dd>
-                  <dd className="text-[11px] text-white/60">{k.sub}</dd>
-                </div>
-              ))}
-            </dl>
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm text-white/70">{todayLong()}</p>
+            <h1 className="font-[family-name:var(--font-display)] text-[28px] leading-[1.1] font-bold tracking-tight sm:text-4xl">{greeting()}, <span className="text-gradient-gold">{firstName}</span>!</h1>
+            <p className="mt-1 text-white/80">
+              {todayCount ? `${todayCount} ${todayCount === 1 ? "Termin" : "Termine"} heute. ` : ""}
+              {alerts.length ? `${alerts.length} ${alerts.length === 1 ? "Punkt braucht" : "Punkte brauchen"} deinen Blick.` : "Alles im grünen Bereich."}
+            </p>
           </div>
-          <div className="space-y-4">
-            <div className="glass p-4">
-              <Suspense fallback={<WeatherSkeleton />}>
-                <WeatherBox city={me?.city ?? null} edit={<CityForm action={setCoachCity} city={me?.city ?? null} placeholder="Dein Ort, z. B. Köln" />} />
-              </Suspense>
+          {pick.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <ComposeButton coachees={pick} label="Nachricht an Coachee" className="btn-gold btn-sm min-h-11 sm:min-h-9" />
+              <Link href="/coach/posteingang?bereich=coachees" className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/25 px-3 text-xs font-semibold text-white transition hover:bg-white/10 sm:min-h-9">
+                <Icon name="mail" className="size-4" /> Von Coachees{unreadAll ? <span className="rounded-full bg-danger px-1.5 text-[11px]">{unreadAll}</span> : null}
+              </Link>
             </div>
-            <div className="glass flex items-center gap-4 p-4">
-              <Ring pct={avg} size={76} stroke={8} tone="white" track="rgba(255,255,255,.2)">
-                <span className="text-lg font-bold">{avg}%</span>
-              </Ring>
-              <div>
-                <p className="font-semibold">Durchschnittlicher Stand</p>
-                <p className="text-xs text-white/70">aller aktiven Coachings, aus Bausteinen und Etappen</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="relative mt-8">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">Unterrichtseinheiten pro Kalenderwoche</p>
-          <WeekBars weeks={weeks} height={110} light />
+          )}
         </div>
       </section>
-      <AppSetup publicKey={await pushPublicKey()} what="bei neuen Anfragen, Nachrichten und Mails" compact />
 
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-        <div className="space-y-6">
-        <OnlineCard style={{ ["--i" as string]: 1 }} />
-        <section className="rise card space-y-3" style={{ ["--i" as string]: 1 }}>
-          <div className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-[#eef0ff] text-[#5b5fc7]"><Icon name="calendar" className="size-4" /></span>
-            <h2 className="h2">Nächste Termine</h2>
-            <Link href="/coach/kalender?neu=1" className="ml-auto rounded-lg p-1.5 text-muted transition hover:bg-surface-2 hover:text-accent" aria-label="Neuer Termin" title="Neuer Termin"><Icon name="plus" className="size-4" /></Link>
-          </div>
-          {upcoming.length ? (
-            <UpcomingList items={upcoming} coach hrefFor={(a) => `/coach/kalender?datum=${a.day}&termin=${a.id}`} />
-          ) : (
-            <Empty>Keine Termine geplant. <Link href="/coach/kalender?neu=1" className="link">Termin anlegen</Link></Empty>
-          )}
-          <Link href="/coach/kalender" className="link block text-sm">Zum Kalender</Link>
-        </section>
-        </div>
-
-        <section className="rise card space-y-3" style={{ ["--i" as string]: 2 }}>
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <section className="rise card min-w-0 space-y-3" style={{ ["--i" as string]: 1 }}>
           <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-danger-soft text-danger"><Icon name="flag" className="size-4" /></span><h2 className="h2">Heute wichtig</h2>{alerts.length > 0 && <span className="ml-auto rounded-full bg-danger px-2 text-xs font-bold text-white">{alerts.length}</span>}</div>
           {alerts.length === 0 ? (
             <Empty>Nichts Dringendes. Gute Arbeit!</Empty>
           ) : (
-            <ul className="max-h-[420px] space-y-1.5 overflow-y-auto pr-1">
+            <ul className="grid gap-x-4 gap-y-1 xl:grid-cols-2">
               {alerts.map((a, i) => (
                 <li key={i}>
-                  <Link href={a.href} className="group flex items-start gap-3 rounded-xl px-2.5 py-2 text-sm transition hover:bg-surface-2">
+                  <Link href={a.href} className="group flex min-h-11 items-start gap-3 rounded-xl px-2.5 py-2 text-sm transition hover:bg-surface-2">
                     <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: `var(--${a.tone === "accent" ? "accent" : a.tone})` }} />
                     {a.c ? <Avatar name={fullName(a.c)} size="size-6" className="!text-[9px]" /> : null}
                     <span className="min-w-0 flex-1">{a.text}</span>
@@ -256,21 +206,74 @@ export default async function CoachDashboard() {
           )}
         </section>
 
-        <section className="rise card space-y-3 lg:col-span-2 xl:col-span-1" style={{ ["--i" as string]: 3 }}>
-          <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-tint text-accent"><Icon name="doc" className="size-4" /></span><h2 className="h2">Schlagzeilen</h2></div>
-          <Suspense fallback={<NewsSkeleton />}>
-            <NewsBox max={4} />
-          </Suspense>
-        </section>
+        <div className="space-y-6">
+          <OnlineCard style={{ ["--i" as string]: 2 }} />
+          <section className="rise card space-y-3" style={{ ["--i" as string]: 2 }}>
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-[#eef0ff] text-[#5b5fc7]"><Icon name="calendar" className="size-4" /></span>
+              <h2 className="h2">Nächste Termine</h2>
+              <Link href="/coach/kalender?neu=1" className="ml-auto grid size-11 place-items-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-accent sm:size-8" aria-label="Neuer Termin" title="Neuer Termin"><Icon name="plus" className="size-4" /></Link>
+            </div>
+            {upcoming.length ? (
+              <UpcomingList items={upcoming} coach hrefFor={(a) => `/coach/kalender?datum=${a.day}&termin=${a.id}`} />
+            ) : (
+              <Empty>Keine Termine geplant. <Link href="/coach/kalender?neu=1" className="link">Termin anlegen</Link></Empty>
+            )}
+            <Link href="/coach/kalender" className="link inline-flex min-h-11 items-center text-sm sm:min-h-0">Zum Kalender</Link>
+          </section>
+        </div>
       </div>
 
-      {rows.length > 0 && (
-        <section className="rise card space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-[#fbf1e3] text-gold"><Icon name="spark" className="size-4" /></span>
-            <h2 className="h2">Zusatzfunktionen</h2>
-            <Link href="/coach/freigaben" className="btn-ghost btn-sm ml-auto">Freigaben verwalten</Link>
+      <section className="rise night relative overflow-hidden rounded-[24px] px-5 py-6 sm:px-8 sm:py-7" style={{ ["--i" as string]: 3 }}>
+        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative grid gap-6 xl:grid-cols-[1fr_330px]">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:self-start">
+            {[
+              { label: "Aktive Coachees", value: String(active.length), sub: `${jobs.length} Job · ${founders.length} Gründung` },
+              { label: "UE diese Woche", value: de(thisWeek), sub: lastWeek ? `Vorwoche ${de(lastWeek)}` : "Vorwoche –" },
+              { label: "UE im " + new Date().toLocaleDateString("de-DE", { month: "long", timeZone: "Europe/Berlin" }), value: de(month?.units ?? 0), sub: `${closed?.n ?? 0} Coachings abgeschlossen` },
+              { label: "UE noch offen", value: de(restAll), sub: "über alle aktiven" },
+            ].map((k) => (
+              <div key={k.label} className="glass px-4 py-3">
+                <dt className="text-xs text-white/70">{k.label}</dt>
+                <dd className="font-[family-name:var(--font-display)] text-[30px] leading-tight font-bold tabular-nums">{k.value}</dd>
+                <dd className="text-[11px] text-white/60">{k.sub}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="glass flex items-center gap-4 p-4">
+              <Ring pct={avg} size={64} stroke={7} tone="white" track="rgba(255,255,255,.2)">
+                <span className="text-base font-bold">{avg}%</span>
+              </Ring>
+              <div>
+                <p className="font-semibold">Durchschnittlicher Stand</p>
+                <p className="text-xs text-white/70">aller aktiven Coachings, aus Bausteinen und Etappen</p>
+              </div>
+            </div>
+            <div className="glass p-4">
+              <Suspense fallback={<WeatherSkeleton />}>
+                <WeatherBox city={me?.city ?? null} edit={<CityForm action={setCoachCity} city={me?.city ?? null} placeholder="Dein Ort, z. B. Köln" />} />
+              </Suspense>
+            </div>
           </div>
+        </div>
+        <div className="relative mt-6">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/60">Unterrichtseinheiten pro Kalenderwoche</p>
+          <WeekBars weeks={weeks} height={100} light />
+        </div>
+      </section>
+      <AppSetup publicKey={await pushPublicKey()} what="bei neuen Anfragen, Nachrichten und Mails" compact />
+
+      {rows.length > 0 && (
+        <Fold
+          id="freigaben"
+          title="Freigaben"
+          icon="spark"
+          iconClass="bg-[#fbf1e3] text-gold"
+          summary={`${released} von ${possible.length} möglichen freigegeben`}
+          action={<Link href="/coach/freigaben" className="btn-ghost btn-sm min-h-11 sm:min-h-9">Freigaben verwalten</Link>}
+        >
           <div className="grid gap-2 sm:grid-cols-3">
             {FEATURES.map((f) => {
               const pool = rows.filter((c) => (f.types as readonly string[]).includes(c.coaching_type));
@@ -284,11 +287,19 @@ export default async function CoachDashboard() {
               );
             })}
           </div>
-        </section>
+        </Fold>
       )}
 
-      {founders.length > 0 && <Pipeline title="Wo stehen die Gründer?" stages={FOUNDER_STAGES} items={founders} />}
-      {jobs.length > 0 && <Pipeline title="Wo stehen die Jobsuchenden?" stages={JOB_STAGES} items={jobs} />}
+      {founders.length > 0 && (
+        <Fold id="gruender" title="Wo stehen die Gründer?" icon="flag" summary={`${founders.length} ${founders.length === 1 ? "Gründung" : "Gründungen"} in ${FOUNDER_STAGES.length} Stufen`}>
+          <Pipeline stages={FOUNDER_STAGES} items={founders} />
+        </Fold>
+      )}
+      {jobs.length > 0 && (
+        <Fold id="jobsuchende" title="Wo stehen die Jobsuchenden?" icon="briefcase" summary={`${jobs.length} Jobcoaching${jobs.length === 1 ? "" : "s"} in ${JOB_STAGES.length} Stufen`}>
+          <Pipeline stages={JOB_STAGES} items={jobs} />
+        </Fold>
+      )}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
@@ -352,32 +363,28 @@ export default async function CoachDashboard() {
   );
 }
 
-function Pipeline({ title, stages, items }: { title: string; stages: { key: string; label: string }[]; items: Item[] }) {
+/** Spalten je Stufe. Brechen in neue Zeilen um, statt rechts abgeschnitten zu werden. */
+function Pipeline({ stages, items }: { stages: { key: string; label: string }[]; items: Item[] }) {
   const by = new Map<string, Item[]>();
   for (const it of items) by.set(stageOf(it), [...(by.get(stageOf(it)) ?? []), it]);
   return (
-    <section className="card space-y-3">
-      <h2 className="h2">{title}</h2>
-      <div className="-mx-1 overflow-x-auto pb-1">
-        <div className="flex gap-2 px-1">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
           {stages.map((s, i) => {
             const list = by.get(s.key) ?? [];
             return (
-              <div key={s.key} className={`min-w-[132px] flex-1 rounded-xl p-3 ${list.length ? "bg-tint/70" : "bg-bg"}`}>
+              <div key={s.key} className={`min-w-0 rounded-xl p-3 ${list.length ? "bg-tint/70" : "bg-bg"}`}>
                 <div className="mb-2 flex items-baseline justify-between gap-1">
                   <p className="text-xs font-semibold leading-tight text-accent">{i + 1}. {s.label}</p>
                   <span className="text-sm font-bold tabular-nums">{list.length}</span>
                 </div>
                 <ul className="space-y-1">
                   {list.map(({ c }) => (
-                    <li key={c.id}><Link href={`/coach/coachees/${c.id}`} className="block truncate rounded-md bg-surface px-2 py-1 text-xs font-medium hover:text-accent">{fullName(c)}</Link></li>
+                    <li key={c.id}><Link href={`/coach/coachees/${c.id}`} className="block truncate rounded-md bg-surface px-2 py-2 text-xs font-medium hover:text-accent sm:py-1">{fullName(c)}</Link></li>
                   ))}
                 </ul>
               </div>
             );
           })}
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }

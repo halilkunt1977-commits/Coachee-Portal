@@ -46,14 +46,14 @@ export function LimitForm({ coacheeId, limit, id }: { coacheeId: string; limit: 
   );
 }
 
-/** Block „Zusatzfunktionen“ in der Akte: dieselben Schalter wie unter Freigaben, nur für diesen Coachee */
+/** Block „Freigaben“ in der Akte: dieselben Schalter wie unter Freigaben, nur für diesen Coachee */
 export async function FeatureBlock({ coachId, coachee: c }: { coachId: string; coachee: Coachee }) {
   const usage = (await usageFor(coachId, c.id)).get(c.id);
   const list = FEATURES.filter((f) => (f.types as readonly string[]).includes(c.coaching_type) || hasFeature(c, f.key));
   return (
     <div className="card space-y-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="h2">Zusatzfunktionen</h2>
+        <h2 className="h2">Freigaben</h2>
         <Link href="/coach/freigaben" className="link text-xs">Alle Freigaben</Link>
       </div>
       <p className="text-xs text-muted">Hilfen mit KI, die {c.first_name} selbst nutzen darf. {c.first_name} sieht nur, was freigegeben ist, ohne Hinweis auf KI.</p>

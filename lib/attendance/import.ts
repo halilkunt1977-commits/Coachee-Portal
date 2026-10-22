@@ -253,9 +253,9 @@ async function run(opts: { full?: boolean }): Promise<ImportResult> {
     client.close();
     const err = e as Error & { authenticationFailed?: boolean; code?: string; responseText?: string };
     const msg = err.authenticationFailed
-      ? "Anmeldung am Postfach abgelehnt. Stimmen IMAP_USER (komplette Mailadresse) und IMAP_PASS?"
+      ? "Das E-Mail-Postfach hat die Anmeldung abgelehnt. Bitte die hinterlegte Mailadresse und das Passwort des Postfachs prüfen."
       : /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|timeout/i.test(`${err.code} ${err.message}`)
-        ? `Postfach-Server nicht erreichbar (${process.env.IMAP_HOST || "imap.strato.de"}:${process.env.IMAP_PORT || 993}).`
+        ? `Der Server des E-Mail-Postfachs ist gerade nicht erreichbar (${process.env.IMAP_HOST || "imap.strato.de"}). Später noch einmal versuchen.`
         : `Abruf fehlgeschlagen: ${err.responseText || err.message}`.slice(0, 300);
     console.error("[anwesenheit] Abruf", err);
     await query("UPDATE mail_import_state SET last_error = $1 WHERE id = 1", [msg]).catch(() => {});

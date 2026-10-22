@@ -169,7 +169,7 @@ ${cats}`;
 export async function analyzeMeeting(coacheeId: string, meetingId: string): Promise<FormState> {
   const coach = await requireCoach();
   const c = await coacheeFor(coach, coacheeId);
-  if (!aiEnabled()) return { error: "Die KI ist noch nicht eingerichtet. Trage OPENAI_API_KEY in Coolify ein." };
+  if (!aiEnabled()) return { error: "Die KI ist noch nicht eingerichtet. Der Zugang zur KI muss auf dem Server hinterlegt werden." };
   const meeting = await one<{ title: string; held_on: string; notes: string; results: string; next_steps: string }>("SELECT title, held_on, notes, results, next_steps FROM meetings WHERE id = $1 AND coachee_id = $2", [meetingId, coacheeId]);
   if (!meeting) return { error: "Gespräch nicht gefunden." };
   if (meeting.notes.trim().length < 20) return { error: "Die Notizen sind zu kurz für eine Auswertung." };

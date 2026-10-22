@@ -5,7 +5,7 @@ import { Icon } from "../shell/icons";
 import { ShareButton } from "../teilen/ShareButton";
 import { Empty, formatDate, formatDateTime } from "../ui";
 
-export type Task = { id: string; title: string; details: string; due_on: string | null; done_at: string | null };
+export type Task = { id: string; title: string; details: string; due_on: string | null; done_at: string | null; /** vom Coachee selbst angelegt: kein „An … senden“ */ by_coachee?: boolean };
 export type Message = { id: string; body: string; created_at: string; author_id: string | null; author_name: string | null; read_at?: string | null; ref_kind?: string | null; ref_title?: string | null };
 
 /** Spalten für MessageList (Platzhalter m = messages, u = users) */
@@ -30,7 +30,7 @@ export function TaskList({ coacheeId, tasks, coach, recipient }: { coacheeId: st
           </div>
           {coach && (
             <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-              {recipient && !t.done_at && <ShareButton kind="aufgabe" refId={t.id} role="coach" coacheeId={coacheeId} recipient={recipient} title={t.title} className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline" />}
+              {recipient && !t.done_at && !t.by_coachee && <ShareButton kind="aufgabe" refId={t.id} role="coach" coacheeId={coacheeId} recipient={recipient} title={t.title} className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline" />}
               <form action={deleteTask.bind(null, coacheeId, t.id)}>
                 <button className="text-xs text-muted hover:text-danger">Löschen</button>
               </form>
