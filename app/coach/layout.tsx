@@ -3,10 +3,12 @@ import { AppShell, Avatar } from "@/components/shell/AppShell";
 import { requireCoach } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { coachNav } from "@/lib/nav";
+import { presenceFor } from "@/lib/presence-store";
+import { PresenceDot, PresenceProvider } from "@/components/presence/Presence";
 
 export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
   const user = await requireCoach();
-  const [counts, active] = await Promise.all([
+  const [counts, active, presence] = await Promise.all([
     query<{ mails: number; unread: number; tasks: number; today: number; inbox: number; leads: number; backup: number }>(
       `SELECT (SELECT count(*) FROM attendance_mails WHERE coach_id = $1 AND status = 'offen')::int AS mails,
               (SELECT count(*) FROM tasks t LEFT JOIN coachees c ON c.id = t.coachee_id
@@ -28,13 +30,17 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
         ORDER BY c.updated_at DESC LIMIT 8`,
       [user.id],
     ),
+    presenceFor(user.id),
   ]);
   const extra = active.length > 0 && (
     <div className="mt-8 space-y-1">
       <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">Aktive Coachings</p>
       {active.map((c) => (
         <Link key={c.id} href={`/coach/coachees/${c.id}`} className="flex items-center gap-2.5 rounded-xl px-3 py-1.5 text-[13px] text-white/70 transition hover:bg-white/[0.06] hover:text-white">
-          <Avatar name={c.name} size="size-6" className="!text-[9px]" />
+          <span className="relative">
+            <Avatar name={c.name} size="size-6" className="!text-[9px]" />
+            <PresenceDot id={c.id} dark className="absolute -right-0.5 -bottom-0.5 !size-2.5 ring-2 ring-night" />
+          </span>
           <span className="min-w-0 flex-1 truncate">{c.name}</span>
           {c.unread > 0 ? <span className="size-2 rounded-full bg-gold" title="Neue Nachricht" /> : <span className="text-[10px] text-white/30">{c.type === "job" ? "Job" : "Gründung"}</span>}
         </Link>
@@ -42,8 +48,10 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
     </div>
   );
   return (
-    <AppShell user={user} groups={coachNav({ ...counts[0], inbox: counts[0].inbox + counts[0].unread })} extra={extra}>
-      {children}
-    </AppShell>
+    <PresenceProvider initial={{ now: new Date().toISOString(), list: presence }}>
+      <AppShell user={user} groups={coachNav({ ...counts[0], inbox: counts[0].inbox + counts[0].unread })} extra={extra}>
+        {children}
+      </AppShell>
+    </PresenceProvider>
   );
 }

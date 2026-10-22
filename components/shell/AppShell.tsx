@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { logout } from "@/app/login/actions";
 import { mobileTabs, type NavGroup } from "@/lib/nav";
+import { Heartbeat } from "@/components/presence/Heartbeat";
 import { Icon } from "./icons";
 import { MobileNav, SideNav } from "./Nav";
 
@@ -83,6 +84,7 @@ export function AppShell({ user, groups, extra, wide, children }: Props) {
 
   return (
     <div className="min-h-screen">
+      {user.role === "coachee" && <Heartbeat />}
       <aside className="night fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col overflow-y-auto px-5 py-6 scroll-soft lg:flex">
         <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative flex min-h-full flex-col">

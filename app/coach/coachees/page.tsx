@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Avatar, PageHeader } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
+import { PresenceDot } from "@/components/presence/Presence";
 import { Empty, Notice, formatDate, formatUnits } from "@/components/ui";
 import { requireCoach } from "@/lib/auth";
 import { fullName, statusLabel, typeLabel, type Coachee } from "@/lib/access";
@@ -75,7 +76,10 @@ export default async function CoacheeList({ searchParams }: PageProps<"/coach/co
             <Link key={c.id} href={`/coach/coachees/${c.id}`} className={`card card-hover block ${c.status === "abgeschlossen" ? "!border-ok/40 !bg-[#eef6f0]" : ""}`}>
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-3">
-                <Avatar name={fullName(c)} />
+                <span className="relative">
+                  <Avatar name={fullName(c)} />
+                  <PresenceDot id={c.id} className="absolute -right-0.5 -bottom-0.5 !size-3 ring-2 ring-surface" />
+                </span>
                 <div className="min-w-0">
                   <p className="font-semibold">{fullName(c)}</p>
                   <p className="text-sm text-muted">{typeLabel[c.coaching_type]}</p>
