@@ -274,7 +274,7 @@ export default async function CoachDashboard() {
           summary={`${released} von ${possible.length} möglichen freigegeben`}
           action={<Link href="/coach/freigaben" className="btn-ghost btn-sm min-h-11 sm:min-h-9">Freigaben verwalten</Link>}
         >
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {FEATURES.map((f) => {
               const pool = rows.filter((c) => (f.types as readonly string[]).includes(c.coaching_type));
               const on = pool.filter((c) => hasFeature(c, f.key));
@@ -282,7 +282,10 @@ export default async function CoachDashboard() {
               return (
                 <Link key={f.key} href="/coach/freigaben" className="rounded-xl bg-surface-2/70 px-3 py-2.5 text-sm transition hover:bg-surface-2">
                   <span className="block font-semibold">{f.label}</span>
-                  <span className="block text-xs text-muted"><b className="text-ink tabular-nums">{on.length}</b> von {pool.length} freigegeben · <b className="text-ink tabular-nums">{uses}</b> Aufrufe im Monat</span>
+                  <span className="block text-xs text-muted">
+                    <b className="text-ink tabular-nums">{on.length}</b> von {pool.length} freigegeben ·{" "}
+                    {f.ai ? <><b className="text-ink tabular-nums">{uses}</b> Aufrufe im Monat</> : <><b className="text-ink tabular-nums">{on.filter((c) => c.video_seen_at).length}</b> angesehen</>}
+                  </span>
                 </Link>
               );
             })}

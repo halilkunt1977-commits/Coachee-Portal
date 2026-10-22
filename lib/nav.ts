@@ -27,7 +27,7 @@ export const coachNav = (b: { mails?: number; unread?: number; tasks?: number; t
   },
 ];
 
-export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number; inbox?: number } = {}): NavGroup[] => [
+export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposals?: number; tasks?: number; today?: number; inbox?: number; video?: boolean } = {}): NavGroup[] => [
   {
     items: [
       { href: "/mein-bereich", label: "Start", icon: "home", exact: true },
@@ -55,7 +55,8 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
       { href: "/mein-bereich/handbuch", label: "Mein Handbuch", icon: "book" },
       { href: "/mein-bereich/lebenslauf", label: "Lebenslauf", icon: "idcard" },
       { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "doc" },
-      { href: "/mein-bereich/hilfe", label: "So funktioniert’s", icon: "play" },
+      // Erklärvideo nur, wenn der Coach es freigegeben hat
+      ...(b.video ? [{ href: "/mein-bereich/hilfe", label: "So funktioniert’s", icon: "play" as const }] : []),
     ],
   },
 ];

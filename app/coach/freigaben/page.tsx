@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SetupHint } from "@/components/coach/SetupHint";
 import { greetingVoiceEnabled } from "@/lib/greeting-audio";
 import { FeatureToggle } from "@/components/features/FeatureToggle";
-import { LimitForm, MonthMeter, UsageLine } from "@/components/features/Parts";
+import { FeatureUse, LimitForm, MonthMeter } from "@/components/features/Parts";
 import { Avatar, PageHeader } from "@/components/shell/AppShell";
 import { Empty, formatDate } from "@/components/ui";
 import { fullName, typeLabel, type Coachee } from "@/lib/access";
@@ -39,18 +39,23 @@ export default async function Freigaben() {
         description="Welche Hilfen deine Coachees selbst nutzen dürfen und wie oft sie sie nutzen. Ein Klick auf den Schalter gibt frei oder sperrt, sofort."
       />
       <div className="space-y-6">
-        <section className="grid gap-3 md:grid-cols-3">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {FEATURES.map((f, i) => {
             const pool = running.filter((c) => applies(f, c));
             const on = pool.filter((c) => hasFeature(c, f.key)).length;
             const month = running.reduce((a, c) => a + usage.get(c.id).features[f.key].month, 0);
+            const seen = pool.filter((c) => hasFeature(c, f.key) && c.video_seen_at).length;
             return (
               <div key={f.key} className="rise card space-y-2 !p-4" style={{ ["--i" as string]: i + 1 }}>
                 <p className="font-semibold">{f.label}</p>
                 <p className="text-xs text-muted">{f.description}</p>
                 <p className="flex flex-wrap gap-x-3 gap-y-1 pt-1 text-sm">
                   <span><b className="tabular-nums">{on}</b> von {pool.length} freigegeben</span>
-                  <span className="text-muted"><b className="text-ink tabular-nums">{month}</b> Aufrufe diesen Monat</span>
+                  {f.ai ? (
+                    <span className="text-muted"><b className="text-ink tabular-nums">{month}</b> Aufrufe diesen Monat</span>
+                  ) : (
+                    <span className="text-muted"><b className="text-ink tabular-nums">{seen}</b> angesehen</span>
+                  )}
                 </p>
               </div>
             );
@@ -75,7 +80,7 @@ export default async function Freigaben() {
 
         <p className="text-xs text-muted">
           Gezählt werden nur Aufrufe, die der Coachee selbst auslöst, nicht deine eigenen in der Akte. Ohne eigene Grenze gelten {defaultMonthlyLimit()} Aufrufe pro Monat.
-          Neue Coachees starten ohne Freigaben. Coachees sehen nur die freigegebenen Hilfen, ohne Hinweis auf KI; was nur du nutzen kannst
+          Neue Coachees starten ohne Freigaben, auch ohne Erklärvideo. Coachees sehen nur, was freigegeben ist, bei den Hilfen ohne Hinweis auf KI; was nur du nutzen kannst
           (Assistent, Businessplan-Entwürfe, Stellensuche, Formulierungen im Lebenslauf), steht hier nicht.
         </p>
         {!greetingVoiceEnabled() && (
@@ -115,7 +120,7 @@ function Matrix({ rows, usage }: { rows: Row[]; usage: { get: (id: string) => Co
                       {applies(f, c) || hasFeature(c, f.key) ? (
                         <div className="space-y-1">
                           <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${fullName(c)}`} />
-                          <UsageLine u={u.features[f.key]} className="block text-xs text-muted" />
+                          <FeatureUse f={f} u={u.features[f.key]} c={c} className="block text-xs text-muted" />
                         </div>
                       ) : (
                         <span className="text-xs text-muted" title={`Nur bei ${f.types.map((t) => typeLabel[t]).join(" und ")}`}>–</span>
@@ -145,7 +150,7 @@ function Matrix({ rows, usage }: { rows: Row[]; usage: { get: (id: string) => Co
                   <li key={f.key} className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold">{f.label}</p>
-                      <UsageLine u={u.features[f.key]} />
+                      <FeatureUse f={f} u={u.features[f.key]} c={c} />
                     </div>
                     <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${fullName(c)}`} showState={false} />
                   </li>

@@ -5,7 +5,7 @@ import { isVideoLanguage } from "@/lib/erklaervideo";
 import { greetingAudio } from "@/lib/greeting-audio";
 
 /**
- * Gesprochene Begrüßung vor dem Erklärvideo. Hören dürfen sie nur der Coachee selbst und sein Coach.
+ * Gesprochene Begrüßung vor dem Erklärvideo. Hören dürfen sie nur der Coachee selbst (nach Freigabe) und sein Coach.
  * 204 heißt: keine Sprachausgabe (nicht eingerichtet oder gerade nicht erreichbar), der Player zeigt dann Text.
  */
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/begruessung/[id]">) {
@@ -13,8 +13,10 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/begruess
   const session = await getSession();
   if (!session || (session.user.totp_enabled && !session.mfaPassed)) return new NextResponse("Nicht angemeldet", { status: 401 });
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new NextResponse("Nicht gefunden", { status: 404 });
+  // Der Coachee nur, wenn der Coach ihm das Erklärvideo freigegeben hat; der Coach immer (Vorschau)
   const c = await one<{ id: string; first_name: string; language: string }>(
-    "SELECT id, first_name, language FROM coachees WHERE id = $1 AND (coach_id = $2 OR user_id = $2)",
+    `SELECT id, first_name, language FROM coachees
+      WHERE id = $1 AND (coach_id = $2 OR (user_id = $2 AND 'erklaervideo' = ANY(features)))`,
     [id, session.user.id],
   );
   if (!c) return new NextResponse("Nicht gefunden", { status: 404 });
