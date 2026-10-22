@@ -8,7 +8,7 @@ import { text, type FormState } from "@/lib/forms";
 
 const refresh = (coacheeId: string) => {
   revalidatePath("/coach/freigaben");
-  revalidatePath(`/coach/coachees/${coacheeId}`);
+  revalidatePath(`/coach/coachees/${coacheeId}`, "layout");
   revalidatePath("/coach");
 };
 

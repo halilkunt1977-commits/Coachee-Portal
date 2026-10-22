@@ -3,6 +3,7 @@ import { ownCoachee } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { one } from "@/lib/db";
 import { inboxUnread } from "@/lib/coachee-inbox";
+import { hasFeature } from "@/lib/features";
 import { coacheeNav } from "@/lib/nav";
 
 export default async function CoacheeLayout({ children }: LayoutProps<"/mein-bereich">) {
@@ -22,7 +23,7 @@ export default async function CoacheeLayout({ children }: LayoutProps<"/mein-ber
       ])
     : [null, 0];
   return (
-    <AppShell user={user} groups={coacheeNav(c?.coaching_type, { proposals: b?.proposals, tasks: b?.tasks, today: b?.today, inbox })}>
+    <AppShell user={user} groups={coacheeNav(c?.coaching_type, { proposals: b?.proposals, tasks: b?.tasks, today: b?.today, inbox, video: c ? hasFeature(c, "erklaervideo") : false })}>
       {children}
     </AppShell>
   );

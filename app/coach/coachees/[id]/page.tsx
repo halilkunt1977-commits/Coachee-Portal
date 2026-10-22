@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { FeatureToggle } from "@/components/features/FeatureToggle";
+import { hasFeature } from "@/lib/features";
 import { AkteMails } from "@/components/inbox/AkteMails";
 import { deleteMeeting } from "@/app/actions/akte";
 import { MeetingForm } from "@/components/akte/MeetingForm";
@@ -290,10 +292,15 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
               <CloseCoaching key={c.status} coacheeId={c.id} firstName={c.first_name} done={done} />
             </div>
             <div className="card space-y-3">
-              <h2 className="h2">Erklärvideo</h2>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="h2">Erklärvideo</h2>
+                <FeatureToggle coacheeId={c.id} feature="erklaervideo" on={hasFeature(c, "erklaervideo")} label={`Erklärvideo für ${c.first_name}`} />
+              </div>
               <p className="text-sm text-muted">
                 „So funktioniert dein Portal“ mit Begrüßung für {c.first_name}, auf {c.language === "tr" ? "Türkisch" : "Deutsch"}.
-                {c.video_seen_at ? ` Angesehen am ${formatDate(c.video_seen_at)}.` : " Noch nicht angesehen."}
+                {hasFeature(c, "erklaervideo")
+                  ? c.video_seen_at ? ` Angesehen am ${formatDate(c.video_seen_at)}.` : " Freigegeben, noch nicht angesehen."
+                  : ` ${c.first_name} sieht es erst, wenn du es freigibst.`}
               </p>
               <Link href={`/coach/coachees/${c.id}/erklaervideo`} className="btn-ghost w-full justify-center"><Icon name="play" className="size-4" />Erklärvideo ansehen</Link>
             </div>

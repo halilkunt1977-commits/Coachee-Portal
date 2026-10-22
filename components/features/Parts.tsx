@@ -2,7 +2,7 @@ import Link from "next/link";
 import { setAiLimit } from "@/app/actions/freigaben";
 import type { Coachee } from "@/lib/access";
 import { limitOf, usageFor, type UsageCount } from "@/lib/feature-usage";
-import { FEATURES, defaultMonthlyLimit, hasFeature } from "@/lib/features";
+import { FEATURES, defaultMonthlyLimit, hasFeature, type Feature } from "@/lib/features";
 import { ActionForm } from "../akte/ActionForm";
 import { Meter } from "../dashboard/Charts";
 import { SubmitButton } from "../SubmitButton";
@@ -17,6 +17,12 @@ export function UsageLine({ u, className = "text-xs text-muted" }: { u: UsageCou
       <b className="font-semibold text-ink tabular-nums">{u.month}</b> im Monat · <span className="tabular-nums">{u.total}</span> gesamt · zuletzt {formatDate(u.last)}
     </span>
   );
+}
+
+/** Nutzung einer Freigabe: Aufrufe bei den KI-Hilfen, beim Erklärvideo ob es angesehen wurde */
+export function FeatureUse({ f, u, c, className = "text-xs text-muted" }: { f: Feature; u: UsageCount; c: Pick<Coachee, "video_seen_at">; className?: string }) {
+  if (f.ai) return <UsageLine u={u} className={className} />;
+  return <span className={className}>{c.video_seen_at ? `Angesehen am ${formatDate(c.video_seen_at)}` : "Noch nicht angesehen"}</span>;
 }
 
 /** Aufrufe in diesem Monat gegen die Monatsgrenze */
@@ -56,14 +62,14 @@ export async function FeatureBlock({ coachId, coachee: c }: { coachId: string; c
         <h2 className="h2">Freigaben</h2>
         <Link href="/coach/freigaben" className="link text-xs">Alle Freigaben</Link>
       </div>
-      <p className="text-xs text-muted">Hilfen mit KI, die {c.first_name} selbst nutzen darf. {c.first_name} sieht nur, was freigegeben ist, ohne Hinweis auf KI.</p>
+      <p className="text-xs text-muted">Was {c.first_name} selbst nutzen darf. {c.first_name} sieht nur, was freigegeben ist, bei den Hilfen ohne Hinweis auf KI.</p>
       <ul className="space-y-3">
         {list.map((f) => (
           <li key={f.key} className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold">{f.label}</p>
               <p className="text-xs text-muted">{f.where}</p>
-              <UsageLine u={usage.features[f.key]} />
+              <FeatureUse f={f} u={usage.features[f.key]} c={c} />
             </div>
             <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${c.first_name}`} showState={false} />
           </li>

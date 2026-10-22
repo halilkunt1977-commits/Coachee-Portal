@@ -1,5 +1,5 @@
-// Zusatzfunktionen, die der Coach jedem Coachee einzeln freigibt (coachees.features). Alle laufen über die KI und zählen
-// zur Monatsgrenze (lib/ai.ts assertAiAllowed). Beschreibungen sind für den Coach; Coachees sehen nirgends das Wort „KI“.
+// Zusatzfunktionen, die der Coach jedem Coachee einzeln freigibt (coachees.features). Die mit `ai: true` laufen über die KI
+// und zählen zur Monatsgrenze (lib/ai.ts assertAiAllowed); das Erklärvideo ist nur eine Freigabe ohne Verbrauch. Beschreibungen sind für den Coach; Coachees sehen nirgends das Wort „KI“.
 // Was nur der Coach nutzen kann (Assistent, Businessplan-Entwürfe, Stellensuche, Lebenslauf-Formulierungen, Lebenslauf aus dem
 // Erfahrungsbogen, Gesprächsauswertung), steht hier nicht: das bleibt coachOnly.
 
@@ -11,6 +11,7 @@ export const FEATURES = [
     where: "Lebenslauf › Neuer Lebenslauf",
     purposes: ["cv_import"],
     types: ["job", "gruendung"],
+    ai: true,
   },
   {
     key: "erfahrungsbogen",
@@ -19,6 +20,7 @@ export const FEATURES = [
     where: "Erfahrungsbogen",
     purposes: ["survey_build", "survey_station", "survey_import"],
     types: ["job", "gruendung"],
+    ai: true,
   },
   {
     key: "anschreiben",
@@ -27,8 +29,18 @@ export const FEATURES = [
     where: "Bewerbungen › Anschreiben",
     purposes: ["anschreiben"],
     types: ["job"],
+    ai: true,
   },
-] as const satisfies readonly { key: string; label: string; description: string; where: string; purposes: readonly string[]; types: readonly ("job" | "gruendung")[] }[];
+  {
+    key: "erklaervideo",
+    label: "Erklärvideo",
+    description: "Video „So funktioniert dein Portal“ mit persönlicher Begrüßung, im Menü und oben auf der Startseite.",
+    where: "So funktioniert’s",
+    purposes: [],
+    types: ["job", "gruendung"],
+    ai: false,
+  },
+] as const satisfies readonly { key: string; label: string; description: string; where: string; purposes: readonly string[]; types: readonly ("job" | "gruendung")[]; ai: boolean }[];
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];
 export type Feature = (typeof FEATURES)[number];
