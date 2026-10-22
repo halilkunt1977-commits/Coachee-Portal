@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { removeTask, toggleTaskDone } from "@/app/actions/aufgaben";
 import { Avatar } from "@/components/shell/AppShell";
+import { ConfirmButton } from "@/components/ConfirmButton";
+import { Icon } from "@/components/shell/icons";
 import { ShareButton } from "@/components/teilen/ShareButton";
 import { addDays, dayMedium, relativeDay, todayBerlin, weekStart } from "@/lib/calendar/dates";
 
@@ -46,12 +48,12 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref, coachees }: { tas
           <ul className="card divide-y divide-line-soft !p-0">
             {g.items.map((t) => (
               <li key={t.id} id={`aufgabe-${t.id}`} className="group flex scroll-mt-24 items-start gap-3 px-4 py-3 sm:px-5">
-                <form action={toggleTaskDone.bind(null, t.id)}>
-                  <button
-                    aria-label={t.done_at ? "Als offen markieren" : "Als erledigt markieren"}
-                    className={`mt-0.5 grid size-[22px] place-items-center rounded-full border-2 transition ${t.done_at ? "border-ok bg-ok text-white" : "border-line bg-surface hover:border-ok hover:bg-ok-soft"}`}
-                  >
-                    {t.done_at && <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3.5 8.5l3 3 6-7" /></svg>}
+                <form action={toggleTaskDone.bind(null, t.id)} className="-my-2.5 -ml-2.5 shrink-0">
+                  {/* Trefferfläche 44 px, sichtbar ein Kreis */}
+                  <button aria-label={t.done_at ? "Als offen markieren" : "Als erledigt markieren"} className="group/check grid size-11 place-items-center rounded-full">
+                    <span className={`grid size-7 place-items-center rounded-full border-2 transition sm:size-[22px] ${t.done_at ? "border-ok bg-ok text-white" : "border-line bg-surface group-hover/check:border-ok group-hover/check:bg-ok-soft"}`}>
+                      {t.done_at && <svg viewBox="0 0 16 16" className="size-3.5 sm:size-3" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3.5 8.5l3 3 6-7" /></svg>}
+                    </span>
                   </button>
                 </form>
                 <div className="min-w-0 flex-1">
@@ -66,7 +68,8 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref, coachees }: { tas
                     )}
                     {coach && !t.coachee_id && <span className="rounded-full bg-tint px-2 py-0.5 font-semibold text-accent">Meine Aufgabe</span>}
                     {t.by_coachee && <span>{coach ? "vom Coachee angelegt" : "von dir angelegt"}</span>}
-                    {!t.done_at && !(coach && t.by_coachee) && (t.coachee_id || coachees?.length) && (
+                    {/* Zeigen ergibt nur Sinn für eigene Aufgaben: Was die andere Seite angelegt hat, kennt sie schon */}
+                    {!t.done_at && (coach ? !t.by_coachee : t.by_coachee) && (t.coachee_id || coachees?.length) && (
                       <ShareButton
                         kind="aufgabe"
                         refId={t.id}
@@ -81,9 +84,17 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref, coachees }: { tas
                   </div>
                 </div>
                 {(coach || t.created_by === selfId) && (
-                  <form action={removeTask.bind(null, t.id)} className="opacity-0 transition group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
-                    <button className="text-xs text-muted hover:text-danger">Löschen</button>
-                  </form>
+                  // Löschen liegt im „…“-Menü, weg vom Haken, und fragt noch einmal nach
+                  <details className="relative -my-2.5 -mr-2.5 shrink-0">
+                    <summary aria-label="Weitere Aktionen" title="Weitere Aktionen" className="grid size-11 cursor-pointer list-none place-items-center rounded-full text-muted transition hover:bg-surface-2 hover:text-ink [&::-webkit-details-marker]:hidden">
+                      <Icon name="dots" className="size-5" />
+                    </summary>
+                    <div className="absolute right-0 z-20 mt-1 rounded-xl border border-line-soft bg-surface p-2 shadow-lg">
+                      <form action={removeTask.bind(null, t.id)} className="whitespace-nowrap">
+                        <ConfirmButton label="Aufgabe löschen" />
+                      </form>
+                    </div>
+                  </details>
                 )}
               </li>
             ))}

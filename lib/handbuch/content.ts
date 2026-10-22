@@ -59,7 +59,7 @@ function welcome(ctx: HandbookContext, v: Variant): Chapter {
   const blocks: Block[] = [
     {
       kind: "text",
-      text: `Hallo ${ctx.firstName}, ${ctx.closed ? "unser Coaching ist abgeschlossen" : "dieses Handbuch begleitet dich durch die Zeit nach unserem Coaching"}. ${
+      text: `Hallo ${ctx.firstName}, ${ctx.closed ? "unser Coaching ist abgeschlossen" : "dieses Handbuch begleitet dich durch die Zeit während und nach dem Coaching"}. ${
         gruendung
           ? "Jetzt kommt der spannende Teil: Aus dem Plan wird dein Unternehmen. Damit dabei nichts untergeht, stehen hier alle Schritte, Fristen und Ansprechpartner, die in den ersten Monaten wichtig sind."
           : "Jetzt geht es darum, dranzubleiben, bis der neue Job unterschrieben ist, und dann gut anzukommen. Hier stehen alle Schritte, Fristen und Ansprechpartner, die dir dabei helfen."
@@ -73,7 +73,7 @@ function welcome(ctx: HandbookContext, v: Variant): Chapter {
     title: "Gut zu wissen",
     text: `Das Handbuch ersetzt keine Rechts- oder Steuerberatung. Verbindlich sind immer dein Bescheid und die Auskunft der Stelle, die zuständig ist. Stand der Informationen: ${STAND}.`,
   });
-  return { key: "willkommen", title: "Willkommen", lead: gruendung ? "Dein Leitfaden für die Gründung nach dem Coaching." : "Dein Leitfaden für Jobsuche, Start und Probezeit.", blocks };
+  return { key: "willkommen", title: "Willkommen", lead: gruendung ? (ctx.closed ? "Dein Leitfaden für die Gründung nach dem Coaching." : "Dein Leitfaden für die Gründung, während und nach dem Coaching.") : "Dein Leitfaden für Jobsuche, Start und Probezeit.", blocks };
 }
 
 function foerderChapter(info: FoerderInfo, v: "gz" | "esg"): Chapter {

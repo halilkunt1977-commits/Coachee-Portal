@@ -4,7 +4,7 @@ import { createCv } from "@/app/actions/lebenslauf";
 import { SubmitButton } from "../SubmitButton";
 import { Notice } from "../ui";
 
-export function NewCvForm({ coacheeId, ai, coach, first }: { coacheeId: string; ai: boolean; coach: boolean; first: boolean }) {
+export function NewCvForm({ coacheeId, ai, coach, defaultName }: { coacheeId: string; ai: boolean; coach: boolean; /** z. B. „Lebenslauf 22.10.2026“, damit sich mehrere auseinanderhalten lassen */ defaultName: string }) {
   const [state, action] = useActionState(createCv.bind(null, coacheeId), undefined);
   const [start, setStart] = useState(ai ? "datei" : "akte");
   const options = [
@@ -17,8 +17,8 @@ export function NewCvForm({ coacheeId, ai, coach, first }: { coacheeId: string; 
       {state?.error && <Notice tone="error">{state.error}</Notice>}
       <label className="block">
         <span className="label">Name</span>
-        <input name="name" className="input" defaultValue={first ? "Mein Lebenslauf" : ""} placeholder="z. B. Lebenslauf Lagerlogistik" required maxLength={120} />
-        <span className="hint block">Für jede Bewerbung kann es eine eigene Fassung geben.</span>
+        <input name="name" className="input" defaultValue={defaultName} placeholder="z. B. Lebenslauf Lagerlogistik" required maxLength={120} />
+        <span className="hint block">Für jede Bewerbung kann es eine eigene Fassung geben. Ein Name mit Ziel hilft, z. B. „Lebenslauf Lagerlogistik“.</span>
       </label>
       <fieldset className="space-y-2">
         <legend className="label">Wie starten?</legend>

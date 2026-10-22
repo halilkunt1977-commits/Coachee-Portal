@@ -49,13 +49,13 @@ export function EmailEditor(p: Props) {
   // ---------- Automatisch speichern ----------
   const latest = useRef(own);
   const timer = useRef<number | null>(null);
-  const first = useRef(true);
+  // Öffnen allein speichert nie (auch nicht unter StrictMode): erst nach einer echten Änderung
+  const [initialJson] = useState(() => JSON.stringify(p.stored));
+  const changed = useRef(false);
   useEffect(() => {
     latest.current = own;
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (!changed.current && JSON.stringify(own) === initialJson) return;
+    changed.current = true;
     setSave("dirty");
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(async () => {
@@ -63,7 +63,7 @@ export function EmailEditor(p: Props) {
       const res = await saveEmail(p.applicationId, latest.current).catch(() => ({ ok: false as const, error: "" }));
       setSave(res.ok ? "saved" : "error");
     }, 900);
-  }, [own, p.applicationId]);
+  }, [own, p.applicationId, initialJson]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -271,7 +271,7 @@ function EmailInput({ label, value, onChange, changed, onReset, resetTitle, type
 }
 
 function SaveBadge({ state }: { state: SaveState }) {
-  const text = { saved: "Gespeichert", dirty: "Änderungen …", saving: "Speichert …", error: "Nicht gespeichert" }[state];
+  const text = { saved: "Gespeichert ✓", dirty: "Wird gleich gespeichert", saving: "Wird gespeichert …", error: "Nicht gespeichert" }[state];
   const tone = state === "error" ? "text-danger" : state === "saved" ? "text-ok" : "text-muted";
-  return <span className={`shrink-0 text-xs font-medium ${tone}`} aria-live="polite">{text}</span>;
+  return <span className={`shrink-0 whitespace-nowrap text-sm font-medium ${tone}`} aria-live="polite">{text}</span>;
 }

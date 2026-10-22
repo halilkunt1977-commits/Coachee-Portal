@@ -40,11 +40,13 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
     ? [{ label: "Meine Gründung", items: [
         { href: "/mein-bereich/businessplan", label: "Businessplan", icon: "doc" as const },
         { href: "/mein-bereich/finanzplan", label: "Finanzplan", icon: "chart" as const },
+        { href: "/mein-bereich/rechner", label: "Rechner & Wissen", icon: "euro" as const },
       ] }]
     : type === "job"
       ? [{ label: "Meine Jobsuche", items: [
           { href: "/mein-bereich/stellen", label: "Stellen finden", icon: "search" as const },
           { href: "/mein-bereich/bewerbungen", label: "Bewerbungen", icon: "briefcase" as const, badge: b.proposals },
+          { href: "/mein-bereich/rechner", label: "Brutto-Netto-Rechner", icon: "euro" as const },
         ] }]
       : []),
   {
@@ -57,5 +59,13 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
   },
 ];
 
+/** Coachees am Handy: Start, Aufgaben, das Hauptwerkzeug (Bewerbungen bzw. Businessplan), Posteingang. Kalender steht auf Start und im Menü. */
+const COACHEE_TABS = ["/mein-bereich", "/mein-bereich/aufgaben", "/mein-bereich/bewerbungen", "/mein-bereich/businessplan", "/mein-bereich/posteingang"];
+
 /** Die wichtigsten Einträge für die Leiste unten am Handy (höchstens vier, der fünfte ist „Menü“) */
-export const mobileTabs = (groups: NavGroup[]) => groups.flatMap((g) => g.items).filter((i) => i.icon !== "plus").slice(0, 4);
+export const mobileTabs = (groups: NavGroup[]) => {
+  const items = groups.flatMap((g) => g.items).filter((i) => i.icon !== "plus");
+  if (!items.some((i) => i.href === "/mein-bereich")) return items.slice(0, 4);
+  const first = COACHEE_TABS.map((h) => items.find((i) => i.href === h)).filter((i): i is NavItem => Boolean(i));
+  return [...first, ...items.filter((i) => !first.includes(i))].slice(0, 4);
+};

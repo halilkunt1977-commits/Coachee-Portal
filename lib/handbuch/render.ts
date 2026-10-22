@@ -145,7 +145,7 @@ h3 { font-size: 8pt; text-transform: uppercase; letter-spacing: .1em; color: #1d
 </div>
 <div class="front">
   <p class="dear">Für ${esc(meta.name)}</p>
-  <p class="intro">Dieses Büchlein ist für die Zeit nach unserem Coaching gedacht: zum Nachschlagen, Abhaken und Mitnehmen. Die aktuelle Fassung findest du immer in deinem Portal unter „Mein Handbuch“.<br><em>${esc(meta.coach)}</em></p>
+  <p class="intro">Dieses Büchlein ist für die Zeit während und nach dem Coaching gedacht: zum Nachschlagen, Abhaken und Mitnehmen. Die aktuelle Fassung findest du immer in deinem Portal unter „Mein Handbuch“.<br><em>${esc(meta.coach)}</em></p>
   <h2>Inhalt</h2>
   <ol class="toc">${toc}</ol>
 </div>

@@ -38,6 +38,8 @@ export function JobSearch(p: Props) {
   const [page, setPage] = useState(1);
   const [ran, setRan] = useState<JobQuery | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Suche fehlgeschlagen (Arbeitsagentur nicht erreichbar o. Ä.): eigene Meldung mit „Noch einmal versuchen“ statt „0 Stellen“
+  const [failed, setFailed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [known, setKnown] = useState(p.known);
   const [fits, setFits] = useState<Record<string, Fit>>({});
@@ -52,16 +54,20 @@ export function JobSearch(p: Props) {
     const id = ++req.current;
     setLoading(true);
     setError(null);
-    const res = await runSearch(p.coacheeId, q, nextPage);
+    setFailed(null);
+    const res = await runSearch(p.coacheeId, q, nextPage).catch(() => ({ jobs: [], total: 0, hidden: 0, error: "Die Suche hat nicht geklappt." }));
     if (id !== req.current) return;
     setLoading(false);
-    setRan(q);
-    setPage(nextPage);
     if (res.error) {
-      setError(res.error);
+      if (!q.was && !q.wo) return setError(res.error);
+      setRan(q);
+      setPage(nextPage);
+      setFailed(res.error);
       if (nextPage === 1) setJobs([]);
       return;
     }
+    setRan(q);
+    setPage(nextPage);
     setTotal(res.total);
     setJobs((prev) => {
       if (nextPage === 1) return res.jobs;
@@ -264,16 +270,24 @@ export function JobSearch(p: Props) {
       {ran && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <p className="text-sm text-muted">
-              {loading && page === 1 ? "Suche läuft …" : `${total.toLocaleString("de-DE")} ${total === 1 ? "Stelle" : "Stellen"} für ${describeQuery(ran)}`}
-            </p>
+            {!failed && (
+              <p className="text-sm text-muted">
+                {loading && page === 1 ? "Suche läuft …" : `${total.toLocaleString("de-DE")} ${total === 1 ? "Stelle" : "Stellen"} für ${describeQuery(ran)}`}
+              </p>
+            )}
             {p.ai && jobs.length > 0 && unrated && (
               <button type="button" className="btn-ghost btn-sm" disabled={rating} onClick={rate}>
                 {rating ? "Stellen werden geprüft …" : p.coach ? `✦ KI: Passen die Stellen zu ${p.firstName}?` : "✦ Passen die Stellen zu mir?"}
               </button>
             )}
           </div>
-          {!loading && !error && jobs.length === 0 && (
+          {failed && !loading && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f8e6e3] px-4 py-3 text-sm">
+              <p className="min-w-0 flex-1 basis-60 text-danger">Die Stellensuche hat gerade nicht geklappt. Das liegt meist an der Verbindung zur Jobbörse und geht gleich wieder.</p>
+              <button type="button" className="btn btn-sm tap" onClick={() => void search(ran, page)}>Noch einmal versuchen</button>
+            </div>
+          )}
+          {!loading && !error && !failed && jobs.length === 0 && (
             <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-muted">Keine Stellen gefunden. Versuch einen allgemeineren Begriff oder einen größeren Umkreis.</p>
           )}
           <ul className="space-y-2">

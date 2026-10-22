@@ -39,8 +39,8 @@ const kw = (iso: string) => {
 };
 const de = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 1 });
 
-/** Unterrichtseinheiten pro Kalenderwoche, die aktuelle Woche hervorgehoben */
-export function WeekBars({ weeks, height = 120, light = false }: { weeks: { week: string; units: number }[]; height?: number; light?: boolean }) {
+/** Unterrichtseinheiten (bzw. Stunden) pro Kalenderwoche, die aktuelle Woche hervorgehoben */
+export function WeekBars({ weeks, height = 120, light = false, unit = "UE" }: { weeks: { week: string; units: number }[]; height?: number; light?: boolean; /** Beschriftung im Tooltip, z. B. „Stunden“ für Coachees */ unit?: string }) {
   const max = Math.max(1, ...weeks.map((w) => w.units));
   const n = weeks.length;
   return (
@@ -50,7 +50,7 @@ export function WeekBars({ weeks, height = 120, light = false }: { weeks: { week
           const h = w.units ? Math.max(6, (w.units / max) * (height - 18)) : 3;
           const current = i === n - 1;
           return (
-            <div key={w.week} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`KW ${kw(w.week)}: ${de(w.units)} UE`}>
+            <div key={w.week} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`KW ${kw(w.week)}: ${de(w.units)} ${unit}`}>
               <span className={`text-[10px] font-semibold tabular-nums ${light ? "text-white/80" : "text-muted"} ${w.units ? "" : "invisible"}`}>{de(w.units)}</span>
               <div
                 className="bar-grow w-full rounded-md transition-opacity group-hover:opacity-80"

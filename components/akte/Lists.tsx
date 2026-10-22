@@ -2,6 +2,7 @@ import Link from "next/link";
 import { deleteTask, toggleTask } from "@/app/actions/akte";
 import { isShareKind, SHARE_META, sharedHref, type ShareKind } from "@/lib/teilen-shared";
 import { Icon } from "../shell/icons";
+import { ConfirmButton } from "../ConfirmButton";
 import { ShareButton } from "../teilen/ShareButton";
 import { Empty, formatDate, formatDateTime } from "../ui";
 
@@ -18,9 +19,12 @@ export function TaskList({ coacheeId, tasks, coach, recipient }: { coacheeId: st
     <ul className="divide-y divide-line-soft">
       {tasks.map((t) => (
         <li key={t.id} id={`aufgabe-${t.id}`} className="flex scroll-mt-24 items-start gap-3 py-3">
-          <form action={toggleTask.bind(null, coacheeId, t.id)}>
-            <button aria-label={t.done_at ? "Als offen markieren" : "Als erledigt markieren"} className={`mt-0.5 grid size-5 place-items-center rounded-md border ${t.done_at ? "border-ok bg-ok text-white" : "border-line bg-surface hover:border-accent"}`}>
-              {t.done_at && <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3.5 8.5l3 3 6-7" /></svg>}
+          <form action={toggleTask.bind(null, coacheeId, t.id)} className="-my-2.5 -ml-2.5 shrink-0">
+            {/* Trefferfläche 44 px, sichtbar ein Kästchen */}
+            <button aria-label={t.done_at ? "Als offen markieren" : "Als erledigt markieren"} className="group/check grid size-11 place-items-center rounded-lg">
+              <span className={`grid size-6 place-items-center rounded-md border sm:size-5 ${t.done_at ? "border-ok bg-ok text-white" : "border-line bg-surface group-hover/check:border-accent"}`}>
+                {t.done_at && <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3.5 8.5l3 3 6-7" /></svg>}
+              </span>
             </button>
           </form>
           <div className="min-w-0 flex-1">
@@ -32,7 +36,7 @@ export function TaskList({ coacheeId, tasks, coach, recipient }: { coacheeId: st
             <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-3">
               {recipient && !t.done_at && !t.by_coachee && <ShareButton kind="aufgabe" refId={t.id} role="coach" coacheeId={coacheeId} recipient={recipient} title={t.title} className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline" />}
               <form action={deleteTask.bind(null, coacheeId, t.id)}>
-                <button className="text-xs text-muted hover:text-danger">Löschen</button>
+                <ConfirmButton label="Löschen" />
               </form>
             </div>
           )}

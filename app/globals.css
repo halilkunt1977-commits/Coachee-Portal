@@ -92,6 +92,8 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition duration-150 hover:border-accent/40 hover:bg-surface-2 hover:text-accent active:scale-[.98] disabled:opacity-50;
   }
   .btn-sm { @apply rounded-lg px-3 py-1.5 text-xs; }
+  /* Am Handy mindestens 44 px hoch, damit sich Knöpfe sicher treffen lassen */
+  .tap { @apply max-sm:min-h-11; }
   .input { @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] outline-none transition placeholder:text-muted/60 focus:border-accent-2 focus:ring-4 focus:ring-accent-2/10; }
   .label { @apply mb-1.5 block text-sm font-medium text-ink; }
   .hint { @apply mt-1 text-xs text-muted; }
