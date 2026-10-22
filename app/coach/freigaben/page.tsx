@@ -34,7 +34,7 @@ export default async function Freigaben() {
       <PageHeader
         eyebrow="Verwaltung"
         title="Freigaben"
-        description="Welche Zusatzfunktionen deine Coachees selbst nutzen dürfen und wie oft sie sie nutzen. Ein Klick auf den Schalter gibt frei oder sperrt, sofort."
+        description="Welche Hilfen deine Coachees selbst nutzen dürfen und wie oft sie sie nutzen. Ein Klick auf den Schalter gibt frei oder sperrt, sofort."
       />
       <div className="space-y-6">
         <section className="grid gap-3 md:grid-cols-3">
@@ -72,8 +72,8 @@ export default async function Freigaben() {
         )}
 
         <p className="text-xs text-muted">
-          Gezählt werden nur Aufrufe, die der Coachee selbst auslöst, nicht deine eigenen in der Akte. Ohne eigene Grenze gelten {defaultMonthlyLimit()} Aufrufe pro Monat
-          (AI_COACHEE_MONTHLY_LIMIT). Neue Coachees starten ohne Zusatzfunktionen. Coachees sehen nur die freigegebenen Hilfen, ohne Hinweis auf KI; was nur du nutzen kannst
+          Gezählt werden nur Aufrufe, die der Coachee selbst auslöst, nicht deine eigenen in der Akte. Ohne eigene Grenze gelten {defaultMonthlyLimit()} Aufrufe pro Monat.
+          Neue Coachees starten ohne Freigaben. Coachees sehen nur die freigegebenen Hilfen, ohne Hinweis auf KI; was nur du nutzen kannst
           (Assistent, Businessplan-Entwürfe, Stellensuche, Formulierungen im Lebenslauf), steht hier nicht.
         </p>
       </div>

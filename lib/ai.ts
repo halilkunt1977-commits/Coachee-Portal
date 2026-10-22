@@ -19,6 +19,8 @@ let client: OpenAI | null = null;
 const openai = () => (client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY }));
 
 export class AiError extends Error {}
+/** Meldung für den Coach, wenn die KI nicht eingerichtet ist (Einrichtung: OPENAI_API_KEY in den Einstellungen der App) */
+export const AI_MISSING = "Die KI ist noch nicht eingerichtet. Der Zugang zur KI muss auf dem Server hinterlegt werden.";
 
 /** Namen im Text durch Platzhalter ersetzen, damit die KI keine Klarnamen bekommt. */
 export function pseudonymize(text: string, names: string[]) {
@@ -51,7 +53,7 @@ export async function assertAiAllowed(user: User, opts: AiCheck) {
     if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
     return;
   }
-  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (!aiEnabled()) throw new AiError(AI_MISSING);
 }
 
 type Usage = { coacheeId: string | null; userId: string; purpose: string };
@@ -62,7 +64,7 @@ async function logUsage(u: Usage, model: string, input = 0, output = 0) {
 
 /** Antwort als JSON nach festem Schema (Structured Outputs). */
 export async function jsonResponse<T>(opts: Usage & { instructions: string; input: string; schemaName: string; schema: Record<string, unknown>; maxTokens?: number }): Promise<T> {
-  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (!aiEnabled()) throw new AiError(AI_MISSING);
   if (mockAi()) {
     const { mockJson } = await import("./ai-mock");
     await logUsage(opts, "mock");
@@ -88,7 +90,7 @@ export async function jsonResponse<T>(opts: Usage & { instructions: string; inpu
 
 /** Sprache zu Text. Die Aufnahme wird nur im Arbeitsspeicher gehalten und nirgends abgelegt. */
 export async function transcribe(file: File, usage: Usage) {
-  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (!aiEnabled()) throw new AiError(AI_MISSING);
   const model = TRANSCRIBE_MODEL();
   const result = await openai().audio.transcriptions.create({ file, model, language: "de", response_format: "json" });
   await logUsage(usage, model);
@@ -97,7 +99,7 @@ export async function transcribe(file: File, usage: Usage) {
 
 /** Antwort Stück für Stück (für den Chat). Liefert Textteile, protokolliert am Ende den Verbrauch. */
 export async function* streamText(opts: Usage & { instructions: string; messages: { role: "user" | "assistant"; content: string }[]; maxTokens?: number; signal?: AbortSignal }) {
-  if (!aiEnabled()) throw new AiError("Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt).");
+  if (!aiEnabled()) throw new AiError(AI_MISSING);
   const model = MODEL();
   const stream = await openai().responses.create(
     {

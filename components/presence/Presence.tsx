@@ -3,7 +3,6 @@ import Link from "next/link";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
-import { Empty } from "@/components/ui";
 import { ago } from "@/lib/inbox/time";
 import { presenceState, presenceText, type Presence, type PresenceState } from "@/lib/presence";
 
@@ -101,15 +100,13 @@ export function OnlineCard({ style }: { style?: React.CSSProperties }) {
     </li>
   );
   return (
-    <section className="rise card space-y-3" style={style}>
+    <section className="rise card space-y-2 !p-4 sm:!p-5" style={style}>
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-lg bg-ok-soft text-ok"><Icon name="users" className="size-4" /></span>
         <h2 className="h2">Gerade online</h2>
-        {online.length > 0 && <span className="ml-auto rounded-full bg-emerald-500 px-2 text-xs font-bold text-white">{online.length}</span>}
+        {online.length > 0 ? <span className="ml-auto rounded-full bg-emerald-500 px-2 text-xs font-bold text-white">{online.length}</span> : <span className="ml-auto text-sm text-muted">niemand</span>}
       </div>
-      {online.length === 0 ? (
-        <Empty>Gerade ist niemand online.</Empty>
-      ) : (
+      {online.length === 0 ? null : (
         <ul className="space-y-1">{online.map((p) => row(p, "online"))}</ul>
       )}
       {recent.length > 0 && (

@@ -41,7 +41,7 @@ async function surveyFor(user: User, id: string) {
 export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
   const c = await coacheeFor(user, coacheeId);
-  if (!aiEnabled()) return { error: user.role === "coach" ? "Die KI ist noch nicht eingerichtet (OPENAI_API_KEY fehlt)." : "Der Bogen ist gerade nicht verfügbar. Bitte sag deinem Coach Bescheid." };
+  if (!aiEnabled()) return { error: user.role === "coach" ? "Die KI ist noch nicht eingerichtet. Der Zugang zur KI muss auf dem Server hinterlegt werden." : "Der Bogen ist gerade nicht verfügbar. Bitte sag deinem Coach Bescheid." };
   const today = await one<{ n: number }>("SELECT count(*)::int AS n FROM experience_surveys WHERE coachee_id = $1 AND created_at > now() - interval '1 day'", [c.id]);
   if (user.role !== "coach" && (today?.n ?? 0) >= 5) return { error: "Für heute ist genug hochgeladen. Morgen geht es weiter, oder dein Coach hilft dir." };
 

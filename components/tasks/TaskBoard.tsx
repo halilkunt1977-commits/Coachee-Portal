@@ -66,7 +66,7 @@ export function TaskBoard({ tasks, selfId, coach, coacheeHref, coachees }: { tas
                     )}
                     {coach && !t.coachee_id && <span className="rounded-full bg-tint px-2 py-0.5 font-semibold text-accent">Meine Aufgabe</span>}
                     {t.by_coachee && <span>{coach ? "vom Coachee angelegt" : "von dir angelegt"}</span>}
-                    {!t.done_at && (t.coachee_id || coachees?.length) && (
+                    {!t.done_at && !(coach && t.by_coachee) && (t.coachee_id || coachees?.length) && (
                       <ShareButton
                         kind="aufgabe"
                         refId={t.id}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SetupHint } from "@/components/coach/SetupHint";
 import { PageHeader } from "@/components/shell/AppShell";
 import { BackupNow, RefreshWhileRunning } from "@/components/backup/Controls";
 import { Empty, Notice, formatDateTime } from "@/components/ui";
@@ -87,10 +88,12 @@ export default async function BackupPage() {
         )}
         {setup.offsite && lastOk?.offsite === "fehler" && <Notice tone="error">Die letzte Kopie außer Haus ist fehlgeschlagen: {lastOk.offsite_error}</Notice>}
         <Notice>
-          <strong>Wichtig:</strong> Lege <Code>APP_SECRET</Code>
-          {setup.keySource === "BACKUP_KEY" && <> und <Code>BACKUP_KEY</Code></>} aus Coolify in deinem Passwort-Manager ab, nicht nur auf dem Server.
+          <strong>Wichtig:</strong> Lege {setup.keySource === "BACKUP_KEY" ? "die beiden geheimen Schlüssel" : "den geheimen Schlüssel"} aus den Einstellungen der App in deinem Passwort-Manager ab, nicht nur auf dem Server.
           Ohne {setup.keySource === "BACKUP_KEY" ? "diese Schlüssel" : "diesen Schlüssel"} lassen sich die Sicherungen nach einem Serverausfall nicht mehr öffnen.
-          {setup.keySource === "APP_SECRET" && <> Zurzeit wird mit einem aus APP_SECRET abgeleiteten Schlüssel verschlüsselt; besser ist ein eigener <Code>BACKUP_KEY</Code>.</>}
+          {setup.keySource === "APP_SECRET" && <> Besser ist ein eigener Schlüssel nur für die Sicherungen (Anleitung unten).</>}
+          <SetupHint>
+            Gemeint {setup.keySource === "BACKUP_KEY" ? <>sind <Code>APP_SECRET</Code> und <Code>BACKUP_KEY</Code></> : <>ist <Code>APP_SECRET</Code>; der eigene Schlüssel heißt <Code>BACKUP_KEY</Code></>}.
+          </SetupHint>
         </Notice>
       </div>
 
@@ -107,7 +110,7 @@ export default async function BackupPage() {
           value={setup.offsite ? (lastOk?.offsite === "fehler" ? "Fehlgeschlagen" : "Ja") : "Nein"}
           note={setup.offsite ? `${setup.offsite.host}, Bucket ${setup.offsite.bucket}` : "S3-Speicher nicht eingerichtet"}
         />
-        <Tile label="Nächste Sicherung" value={setup.disabled ? "Ausgeschaltet" : formatDateTime(next.toISOString())} note={setup.disabled ? "BACKUP_DISABLED=1 ist gesetzt" : "Automatisch, jede Nacht"} tone={setup.disabled ? "bad" : "plain"} />
+        <Tile label="Nächste Sicherung" value={setup.disabled ? "Ausgeschaltet" : formatDateTime(next.toISOString())} note={setup.disabled ? "In den Einstellungen der App ausgeschaltet" : "Automatisch, jede Nacht"} tone={setup.disabled ? "bad" : "plain"} />
         <Tile label="Aufbewahrt" value={`${backups.length} Sicherung${backups.length === 1 ? "" : "en"}`} note={`${bytes(total)} auf dem Server · ${RETENTION.daily} Tage, ${RETENTION.weekly} Wochen, ${RETENTION.monthly} Monate`} />
       </div>
 
@@ -165,8 +168,8 @@ export default async function BackupPage() {
 
         <aside className="space-y-6">
           <section className="card space-y-3 text-sm">
-            <h2 className="h2">Einrichten in Coolify</h2>
-            <p>In Coolify bei der App unter <em>Environment Variables</em> eintragen, dann neu deployen:</p>
+            <h2 className="h2">Für die Einrichtung</h2>
+            <p>Damit eine Kopie außer Haus entsteht, braucht die App einen Speicher bei einem Anbieter und einen eigenen Schlüssel. Diese Angaben werden in den Einstellungen der App auf dem Server eingetragen (Coolify, <em>Environment Variables</em>), danach die App neu starten:</p>
             <dl className="space-y-2.5">
               {[
                 ["BACKUP_KEY", <>Eigener Schlüssel für die Sicherungen, erzeugen mit <Code>openssl rand -hex 32</Code>. Sofort im Passwort-Manager ablegen, nie ändern.</>],
@@ -189,7 +192,7 @@ export default async function BackupPage() {
               <li><strong className="text-ink">Backblaze B2</strong>: Region EU Central (Amsterdam), Endpunkt https://s3.eu-central-003.backblazeb2.com.</li>
               <li><strong className="text-ink">IONOS S3 Object Storage</strong>: Frankfurt, Endpunkt https://s3.eu-central-1.ionoscloud.com.</li>
             </ul>
-            <p className="text-muted">Die genaue Adresse steht beim Anbieter im Bucket. Nach dem Deploy hier „Jetzt sichern“ drücken; bei „Kopie außer Haus“ muss dann „Ja“ stehen.</p>
+            <p className="text-muted">Die genaue Adresse steht beim Anbieter im Bucket. Nach dem Neustart hier „Jetzt sichern“ drücken; bei „Kopie außer Haus“ muss dann „Ja“ stehen.</p>
             <p className="text-muted">Optional: <Code>BACKUP_TIME</Code> (Standard 02:30), <Code>BACKUP_DIR</Code> (Standard {setup.dir}), <Code>S3_PATH_STYLE=false</Code> für Anbieter, die nur Bucket-Subdomains kennen.</p>
           </section>
 

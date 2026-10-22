@@ -33,11 +33,11 @@ export function mailProblem(e: unknown): "aus" | "anmeldung" | "verbindung" | "a
 }
 
 export const MAIL_PROBLEM_TEXT: Record<string, string> = {
-  aus: "Der E-Mail-Versand ist nicht eingerichtet: In Coolify fehlen SMTP_HOST, SMTP_USER oder SMTP_PASS.",
-  anmeldung: "Der Mailserver hat die Anmeldung abgelehnt. SMTP_USER muss die komplette E-Mail-Adresse sein und SMTP_PASS das Passwort genau dieses Postfachs.",
-  verbindung: "Der Mailserver war nicht erreichbar. Stimmen SMTP_HOST (Strato: smtp.strato.de) und SMTP_PORT (465)? Manche Server sperren ausgehende Mail-Ports.",
-  absender: "Der Mailserver hat Absender oder Empfänger abgelehnt. MAIL_FROM muss zur Adresse in SMTP_USER passen.",
-  sonst: "Die E-Mail konnte nicht verschickt werden. Die genaue Meldung steht im Log der App in Coolify unter „[mail]“.",
+  aus: "Der E-Mail-Versand ist noch nicht eingerichtet. Die Zugangsdaten des Postfachs müssen auf dem Server hinterlegt werden.",
+  anmeldung: "Der Mailserver hat die Anmeldung abgelehnt. Bitte die hinterlegte Mailadresse (komplett) und das Passwort genau dieses Postfachs prüfen.",
+  verbindung: "Der Mailserver war nicht erreichbar. Bitte Serveradresse und Port des Postfachs prüfen (Strato: smtp.strato.de, 465).",
+  absender: "Der Mailserver hat Absender oder Empfänger abgelehnt. Die Absenderadresse muss zur Adresse des Postfachs passen.",
+  sonst: "Die E-Mail konnte nicht verschickt werden. Die genaue Meldung steht im Protokoll der App auf dem Server.",
 };
 
 export async function sendMail({ to, subject, text, html, replyTo, calendar }: { to: string; subject: string; text: string; html: string; replyTo?: string | null; calendar?: { method: "REQUEST" | "CANCEL"; content: string } | null }) {

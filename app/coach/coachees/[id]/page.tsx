@@ -9,7 +9,6 @@ import { CvList } from "@/components/cv/CvList";
 import { AttendancePanel } from "@/components/attendance/Panel";
 import { DocumentsPanel } from "@/components/documents/Panel";
 import { SurveyPanel } from "@/components/survey/Panel";
-import { setCoachingStatus } from "@/app/actions/dokumente";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
@@ -31,6 +30,9 @@ import { Icon } from "@/components/shell/icons";
 import { PresenceLine } from "@/components/presence/Presence";
 import { Ring } from "@/components/dashboard/Charts";
 import InviteLink from "./InviteLink";
+import MoreMenu from "./MoreMenu";
+import { SetupHint } from "@/components/coach/SetupHint";
+import CloseCoaching from "./CloseCoaching";
 import StammdatenForm from "./StammdatenForm";
 import { progressFor, type Links } from "@/lib/dashboard/progress";
 import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
@@ -49,7 +51,7 @@ const TABS = [
   { key: "anwesenheit", label: "Anwesenheit", group: "coaching" },
   { key: "aufgaben", label: "Aufgaben", group: "coaching" },
   { key: "nachrichten", label: "Nachrichten", group: "coaching" },
-  { key: "mails", label: "Mails", group: "coaching" },
+  { key: "mails", label: "Träger-Mails", group: "coaching" },
   { key: "assistent", label: "KI-Assistent", group: "coaching" },
   { key: "wissen", label: "Kompetenzprofil", group: "ziel" },
   { key: "stellen", label: "Stellen", group: "ziel" },
@@ -73,6 +75,7 @@ const GROUPS = [
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
+const de2 = (n: number) => n.toLocaleString("de-DE", { maximumFractionDigits: 2 });
 const formatLabel: Record<string, string> = { praesenz: "Vor Ort", online: "Online", telefon: "Telefon" };
 const actionLabel: Record<string, string> = {
   login: "Anmeldung", logout: "Abmeldung", login_failed: "Fehlgeschlagene Anmeldung", mfa_passed: "Zweiter Faktor bestätigt",
@@ -94,7 +97,7 @@ const actionLabel: Record<string, string> = {
   coachee_deleted: "Coachee gelöscht", milestone_done: "Etappe abgehakt", milestone_undone: "Etappe zurückgenommen",
   appointment_created: "Termin angelegt", appointment_updated: "Termin geändert", appointment_cancelled: "Termin abgesagt", appointment_deleted: "Termin gelöscht",
   handbook_pdf: "Handbuch als PDF geladen", contact_updated: "Eigene Kontaktdaten geändert",
-  feature_enabled: "Zusatzfunktion freigegeben", feature_disabled: "Zusatzfunktion gesperrt", ai_limit_set: "Monatsgrenze für Hilfen geändert",
+  feature_enabled: "Freigabe erteilt", feature_disabled: "Freigabe entzogen", ai_limit_set: "Monatsgrenze für Hilfen geändert",
   access_disabled: "Zugang gesperrt", access_enabled: "Zugang freigegeben", akte_viewed: "Akte geöffnet", shared: "Geteilt (an Coach oder Coachee gesendet)",
 };
 
@@ -130,6 +133,8 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
     key === "nachrichten" ? stats?.unread : key === "bewerbungen" ? stats?.due : key === "wissen" ? stats?.suggestions : key === "erfahrung" ? stats?.survey_new : 0;
   const groupBadge = (g: string) => tabs.filter((t) => t.group === g).reduce((a, t) => a + (badge(t.key) ?? 0), 0);
   const done = c.status === "abgeschlossen";
+  const quick = "inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-sm font-semibold transition hover:bg-white/20 sm:min-h-9 sm:text-xs";
+  const menuItem = "flex min-h-11 items-center gap-2.5 rounded-lg px-3 font-medium transition hover:bg-surface-2";
 
   return (
     <div className="space-y-6">
@@ -137,72 +142,87 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
         <span className="rotate-180"><Icon name="arrow" className="size-4" /></span> Alle Coachees
       </Link>
 
-      <section className={`rise relative overflow-hidden rounded-[24px] px-5 py-6 sm:px-8 sm:py-7 ${done ? "bg-gradient-to-br from-[#1f6b45] to-[#123f29] text-white" : "night"}`}>
-        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative flex flex-wrap items-center gap-6">
-          <Avatar name={fullName(c)} size="size-16 sm:size-20" className="!text-xl ring-4 ring-white/10" />
-          <div className="min-w-0 flex-1 basis-64 space-y-2">
-            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight sm:text-3xl">{fullName(c)}</h1>
-            <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
-              <span className="rounded-full bg-white/15 px-2.5 py-1">{typeLabel[c.coaching_type]}</span>
-              {c.coaching_type === "gruendung" && c.foerderart && <span className="rounded-full bg-gold/90 px-2.5 py-1 text-night">{foerderartLabel[c.foerderart]}</span>}
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-white/75">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
-              <span className={`rounded-full px-2.5 py-1 ${done ? "bg-white text-ok" : "bg-white/10 text-white/75"}`}>{done ? "✓ " : ""}{statusLabel[c.status]}</span>
-              {account && !account.has_password && <span className="rounded-full bg-gold px-2.5 py-1 text-night">Einladung offen</span>}
-              {account && !account.active && <span className="rounded-full bg-danger px-2.5 py-1">Zugang gesperrt</span>}
+      <section className={`rise relative rounded-[24px] px-4 py-4 sm:px-8 sm:py-7 ${done ? "bg-gradient-to-br from-[#1f6b45] to-[#123f29] text-white" : "night"}`}>
+        <div className="night-grid pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]" aria-hidden />
+        <div className="relative flex flex-wrap items-center gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-1 basis-64 items-center gap-3 sm:gap-5">
+            <Avatar name={fullName(c)} size="size-12 sm:size-20" className="!text-base ring-4 ring-white/10 sm:!text-xl" />
+            <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
+              <h1 className="font-[family-name:var(--font-display)] text-xl leading-tight font-bold tracking-tight break-words sm:text-3xl">{fullName(c)}</h1>
+              <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                <span className="rounded-full bg-white/15 px-2.5 py-1">{typeLabel[c.coaching_type]}</span>
+                {c.coaching_type === "gruendung" && c.foerderart && <span className="rounded-full bg-gold/90 px-2.5 py-1 text-night">{foerderartLabel[c.foerderart]}</span>}
+                <span className="hidden rounded-full bg-white/10 px-2.5 py-1 text-white/75 sm:inline">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</span>
+                <span className={`rounded-full px-2.5 py-1 ${done ? "bg-white text-ok" : "bg-white/10 text-white/75"}`}>{done ? "✓ " : ""}{statusLabel[c.status]}</span>
+                {account && !account.has_password && <span className="rounded-full bg-gold px-2.5 py-1 text-night">Einladung offen</span>}
+                {account && !account.active && <span className="rounded-full bg-danger px-2.5 py-1">Zugang gesperrt</span>}
+              </div>
+              <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/65">
+                <PresenceLine id={c.id} />
+                <span className="hidden items-center gap-1.5 sm:inline-flex"><Icon name="mail" className="size-4" />{c.email}</span>
+                {c.phone && <span className="hidden sm:inline">{c.phone}</span>}
+                {(c.start_date || c.end_date) && <span className="inline-flex items-center gap-1.5"><Icon name="calendar" className="size-4" />{formatDate(c.start_date)} bis {formatDate(c.end_date)}</span>}
+              </p>
             </div>
-            <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/65">
-              <PresenceLine id={c.id} />
-              <span className="inline-flex items-center gap-1.5"><Icon name="mail" className="size-4" />{c.email}</span>
-              {c.phone && <span>{c.phone}</span>}
-              {(c.start_date || c.end_date) && <span className="inline-flex items-center gap-1.5"><Icon name="calendar" className="size-4" />{formatDate(c.start_date)} bis {formatDate(c.end_date)}</span>}
-            </p>
           </div>
-          <div className="glass flex items-center gap-4 p-4">
-            <Ring pct={pct ?? 0} size={68} stroke={7} tone="white" track="rgba(255,255,255,.18)">
-              <span className="text-sm font-bold">{pct != null ? `${pct}%` : "–"}</span>
+          <div className="glass flex w-full items-center gap-3 px-3 py-2.5 sm:w-auto sm:gap-4 sm:p-4" aria-label="Kontingent an Unterrichtseinheiten">
+            <Ring pct={pct ?? 0} size={44} stroke={5} tone="white" track="rgba(255,255,255,.18)">
+              <Icon name="clock" className="size-4 text-white/80" />
             </Ring>
-            <div className="space-y-0.5">
+            <div className="min-w-0">
               <p className="text-xs text-white/60">Unterrichtseinheiten</p>
-              <p className="font-[family-name:var(--font-display)] text-xl font-bold tabular-nums">{formatUnits(used)}</p>
-              <p className="text-xs text-white/60">{c.units_total ? `von ${c.units_total} · ${(Math.max(0, c.units_total - used)).toLocaleString("de-DE", { maximumFractionDigits: 2 })} übrig` : "kein Kontingent"}</p>
+              <p className="font-[family-name:var(--font-display)] text-lg leading-tight font-bold tabular-nums sm:text-xl">
+                {c.units_total ? `${de2(used)} von ${c.units_total} UE` : formatUnits(used)}
+              </p>
+              <p className="text-xs text-white/60">{c.units_total ? `${de2(Math.max(0, c.units_total - used))} UE übrig` : "kein Kontingent hinterlegt"}</p>
             </div>
           </div>
         </div>
-        <div className="relative mt-5 flex flex-wrap gap-2">
-          <Link href="?tab=termine&neu=1" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="calendar" className="size-4" />Termin planen</Link>
-          <Link href="?tab=nachrichten" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="chat" className="size-4" />Nachricht schreiben</Link>
-          <Link href="?tab=gespraeche" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="plus" className="size-4" />Gespräch erfassen</Link>
-          <Link href="?tab=anwesenheit" className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/20"><Icon name="clock" className="size-4" />Anwesenheit</Link>
-          <form action={setCoachingStatus.bind(null, c.id, done ? "aktiv" : "abgeschlossen")} className="ml-auto">
-            <button title={done ? undefined : "Der Coachee behält seinen Zugang mit Lebenslauf, Werkzeugen und Handbuch, kostenlos."} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${done ? "bg-white/15 hover:bg-white/25" : "bg-ok/90 hover:bg-ok"}`}>{done ? "Coaching wieder aufnehmen" : "✓ Coaching abschließen"}</button>
-          </form>
+        <div className="relative mt-4 flex flex-wrap items-center gap-2 sm:mt-5">
+          <Link href="?tab=termine&neu=1" className={quick}><Icon name="calendar" className="size-4" />Termin planen</Link>
+          <Link href="?tab=nachrichten" className={quick}><Icon name="chat" className="size-4" /><span>Nachricht<span className="hidden sm:inline"> schreiben</span></span></Link>
+          <Link href="?tab=gespraeche" className={`${quick} max-sm:!hidden`}><Icon name="plus" className="size-4" />Gespräch erfassen</Link>
+          <Link href="?tab=anwesenheit" className={`${quick} max-sm:!hidden`}><Icon name="clock" className="size-4" />Anwesenheit</Link>
+          <div className="ml-auto">
+            <MoreMenu>
+              <Link href="?tab=gespraeche" role="menuitem" className={`${menuItem} sm:hidden`}><Icon name="plus" className="size-4 text-muted" />Gespräch erfassen</Link>
+              <Link href="?tab=anwesenheit" role="menuitem" className={`${menuItem} sm:hidden`}><Icon name="clock" className="size-4 text-muted" />Anwesenheit</Link>
+              <a href={`mailto:${c.email}`} role="menuitem" className={menuItem}><Icon name="mail" className="size-4 shrink-0 text-muted" /><span className="truncate">{c.email}</span></a>
+              {c.phone && <a href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} role="menuitem" className={menuItem}><span className="w-4 text-center text-muted">☎</span>{c.phone}</a>}
+              <p className="px-3 pt-1.5 pb-1 text-xs text-muted">{fundingLabel[c.funding]}{c.voucher_number ? ` · ${c.voucher_number}` : ""}</p>
+              <div className="my-1 border-t border-line-soft" />
+              <Link href="?tab=stammdaten" role="menuitem" className={menuItem}><Icon name="settings" className="size-4 text-muted" />Stammdaten und Zugang</Link>
+              <Link href="?tab=stammdaten#abschluss" role="menuitem" className={menuItem}><Icon name="check" className="size-4 text-muted" />{done ? "Coaching wieder aufnehmen" : "Coaching abschließen"}</Link>
+            </MoreMenu>
+          </div>
         </div>
       </section>
 
-      <nav className="rise sticky top-[57px] z-20 -mx-4 space-y-2 bg-bg/90 px-4 py-2 backdrop-blur-xl sm:mx-0 sm:px-0 lg:top-0" style={{ ["--i" as string]: 1 }}>
-        <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+      <nav className="rise z-20 space-y-2 sm:sticky sm:top-[57px] sm:-mx-0 sm:bg-bg/90 sm:py-2 sm:backdrop-blur-xl lg:top-0" style={{ ["--i" as string]: 1 }} aria-label="Bereiche der Akte">
+        <div className="grid grid-cols-5 gap-1 sm:flex sm:flex-wrap sm:gap-1.5">
           {GROUPS.map((g) => {
             const first = tabs.find((t) => t.group === g.key);
             if (!first) return null;
             const active = g.key === activeGroup;
             const n = groupBadge(g.key);
             return (
-              <Link key={g.key} href={`?tab=${first.key}`} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${active ? "bg-accent text-white shadow-[0_6px_14px_-8px_rgba(29,58,102,.8)]" : "bg-surface text-muted ring-1 ring-line-soft hover:text-ink"}`}>
-                <Icon name={g.icon} className="size-4" />
-                {g.label || (c.coaching_type === "gruendung" ? "Gründung" : "Bewerbung")}
-                {n > 0 && <span className={`rounded-full px-1.5 text-[11px] ${active ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span>}
+              <Link key={g.key} href={`?tab=${first.key}`} aria-current={active ? "true" : undefined}
+                className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[11px] font-semibold transition sm:min-h-0 sm:flex-row sm:gap-2 sm:px-3.5 sm:py-2 sm:text-sm ${active ? "bg-accent text-white shadow-[0_6px_14px_-8px_rgba(29,58,102,.8)]" : "bg-surface text-muted ring-1 ring-line-soft hover:text-ink"}`}>
+                <Icon name={g.icon} className="size-5 sm:size-4" />
+                <span className="max-w-full truncate">{g.label || (c.coaching_type === "gruendung" ? "Gründung" : "Bewerbung")}</span>
+                {n > 0 && <span className={`rounded-full px-1.5 text-[11px] max-sm:absolute max-sm:top-1 max-sm:right-1 ${active ? "bg-white/20" : "bg-danger text-white"}`}>{n}</span>}
               </Link>
             );
           })}
         </div>
         {tabs.filter((t) => t.group === activeGroup).length > 1 && (
-          <div className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line-soft">
+          <div className="flex flex-wrap gap-1.5 sm:gap-1 sm:border-b sm:border-line-soft">
             {tabs.filter((t) => t.group === activeGroup).map((t) => (
-              <Link key={t.key} href={`?tab=${t.key}`} className={`relative whitespace-nowrap px-3 py-2 text-sm font-medium transition ${tab === t.key ? "text-accent" : "text-muted hover:text-ink"}`}>
+              <Link key={t.key} href={`?tab=${t.key}`} aria-current={tab === t.key ? "page" : undefined}
+                className={`relative inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-medium transition max-sm:ring-1 sm:min-h-0 sm:rounded-none sm:py-2 ${tab === t.key ? "text-accent max-sm:bg-tint max-sm:ring-accent/30" : "text-muted hover:text-ink max-sm:bg-surface max-sm:ring-line-soft"}`}>
                 {t.label}
                 {(badge(t.key) ?? 0) > 0 && <span className="ml-1.5 rounded-full bg-danger px-1.5 text-[11px] text-white">{t.key === "erfahrung" ? "neu" : badge(t.key)}</span>}
-                {tab === t.key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-accent" />}
+                {tab === t.key && <span className="absolute inset-x-2 -bottom-px hidden h-0.5 rounded-full bg-accent sm:block" />}
               </Link>
             ))}
           </div>
@@ -213,6 +233,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {typeof sp.eingeladen === "string" && sp.eingeladen !== "1" && (
         <Notice tone="error">
           {MAIL_PROBLEM_TEXT[sp.eingeladen === "link" ? "aus" : sp.eingeladen] ?? MAIL_PROBLEM_TEXT.sonst} Bis dahin unter „Stammdaten“ einen Einladungslink erzeugen und selbst weitergeben.
+          <SetupHint>In den Einstellungen der App SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS und MAIL_FROM prüfen.</SetupHint>
         </Notice>
       )}
 
@@ -239,7 +260,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
       {tab === "handbuch" && <AkteHandbook coachee={c} />}
       {tab === "aufgaben" && <Tasks coacheeId={c.id} firstName={c.first_name} />}
       {tab === "mails" && <AkteMails coacheeId={c.id} />}
-      {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} />}
+      {tab === "nachrichten" && <Messages coacheeId={c.id} selfId={coach.id} firstName={c.first_name} />}
       {tab === "stammdaten" && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="card"><StammdatenForm c={c} /></div>
@@ -255,12 +276,17 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
                   <form action={resendInvite.bind(null, c.id)}><button className="btn w-full">{account.has_password ? "Link zum Passwort-Zurücksetzen mailen" : "Einladung erneut mailen"}</button></form>
                   <InviteLink coacheeId={c.id} />
                   <form action={setAccess.bind(null, c.id, !account.active)}>
-                    <button className={`text-sm ${account.active ? "text-danger" : "text-ok"} hover:underline`}>{account.active ? "Zugang sperren" : "Zugang wieder freigeben"}</button>
+                    <button className={`min-h-11 text-sm sm:min-h-0 ${account.active ? "text-danger" : "text-ok"} hover:underline`}>{account.active ? "Zugang sperren" : "Zugang wieder freigeben"}</button>
                   </form>
                 </>
               ) : (
                 <p className="text-sm text-muted">Kein Zugang verknüpft.</p>
               )}
+            </div>
+            <div id="abschluss" className="card scroll-mt-28 space-y-3">
+              <h2 className="h2">Coaching {done ? "abgeschlossen" : "abschließen"}</h2>
+              <p className="text-sm text-muted">{done ? "Das Coaching ist abgeschlossen. Der Zugang bleibt bestehen." : "Wenn alle Termine erledigt sind. Der Zugang bleibt bestehen."}</p>
+              <CloseCoaching key={c.status} coacheeId={c.id} firstName={c.first_name} done={done} />
             </div>
             <FeatureBlock coachId={coach.id} coachee={c} />
             <div className="card space-y-3 border-danger/30">
@@ -293,7 +319,7 @@ async function Overview({ coachee, stats }: { coachee: Coachee; stats: { meeting
   const { id: coacheeId, goal, internal_note: note } = coachee;
   const [last, tasks, progress] = await Promise.all([
     one<Meeting>("SELECT * FROM meetings WHERE coachee_id = $1 ORDER BY held_on DESC, created_at DESC LIMIT 1", [coacheeId]),
-    query<Task>("SELECT * FROM tasks WHERE coachee_id = $1 AND done_at IS NULL ORDER BY due_on NULLS LAST, created_at LIMIT 5", [coacheeId]),
+    query<Task>("SELECT t.*, (c.user_id IS NOT NULL AND t.created_by = c.user_id) AS by_coachee FROM tasks t JOIN coachees c ON c.id = t.coachee_id WHERE t.coachee_id = $1 AND t.done_at IS NULL ORDER BY t.due_on NULLS LAST, t.created_at LIMIT 5", [coacheeId]),
     progressFor(coachee),
   ]);
   return (
@@ -418,7 +444,7 @@ async function Meetings({ coachee, edit }: { coachee: Coachee; edit: string | nu
 }
 
 async function Tasks({ coacheeId, firstName }: { coacheeId: string; firstName: string }) {
-  const tasks = await query<Task>("SELECT * FROM tasks WHERE coachee_id = $1 ORDER BY done_at IS NOT NULL, due_on NULLS LAST, created_at", [coacheeId]);
+  const tasks = await query<Task>("SELECT t.*, (c.user_id IS NOT NULL AND t.created_by = c.user_id) AS by_coachee FROM tasks t JOIN coachees c ON c.id = t.coachee_id WHERE t.coachee_id = $1 ORDER BY t.done_at IS NOT NULL, t.due_on NULLS LAST, t.created_at", [coacheeId]);
   return (
     <div className="card space-y-5">
       <TaskForm coacheeId={coacheeId} coach />
@@ -427,7 +453,7 @@ async function Tasks({ coacheeId, firstName }: { coacheeId: string; firstName: s
   );
 }
 
-async function Messages({ coacheeId, selfId }: { coacheeId: string; selfId: string }) {
+async function Messages({ coacheeId, selfId, firstName }: { coacheeId: string; selfId: string; firstName: string }) {
   const messages = await query<Message>(
     `SELECT ${MESSAGE_COLUMNS} FROM messages m LEFT JOIN users u ON u.id = m.author_id WHERE m.coachee_id = $1 ORDER BY m.created_at`,
     [coacheeId],
@@ -435,6 +461,7 @@ async function Messages({ coacheeId, selfId }: { coacheeId: string; selfId: stri
   await query("UPDATE messages SET read_at = now() WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2", [coacheeId, selfId]);
   return (
     <div className="card mx-auto max-w-3xl space-y-5">
+      <p className="text-xs text-muted">Nachrichten zwischen dir und {firstName} hier im Portal. Mails von AVOCONS und Erfolgspfad stehen unter <Link href="?tab=mails" className="link">Träger-Mails</Link>.</p>
       <MessageList messages={messages} selfId={selfId} />
       <MessageForm coacheeId={coacheeId} />
     </div>

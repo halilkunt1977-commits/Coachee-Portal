@@ -24,7 +24,7 @@ export function FeatureToggle({ coacheeId, feature, on, label, showState = true 
             if (!r.ok) setError(r.error);
           });
         }}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:ring-4 focus-visible:ring-accent-2/20 focus-visible:outline-none ${optimistic ? "bg-ok" : "bg-line"} ${pending ? "opacity-70" : ""}`}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition before:absolute before:-inset-y-2.5 before:inset-x-0 before:content-[""] focus-visible:ring-4 focus-visible:ring-accent-2/20 focus-visible:outline-none ${optimistic ? "bg-ok" : "bg-line"} ${pending ? "opacity-70" : ""}`}
       >
         <span className={`inline-block size-5 rounded-full bg-white shadow transition ${optimistic ? "translate-x-[22px]" : "translate-x-0.5"}`} />
       </button>

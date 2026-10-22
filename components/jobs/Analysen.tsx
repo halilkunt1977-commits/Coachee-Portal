@@ -43,7 +43,7 @@ async function List({ coachee, coachId }: { coachee: Coachee; coachId: string })
   if (!apps.length) return <p className="card text-sm text-muted">Noch keine gemerkte Stelle. Sobald der Coachee oder du eine Stelle merkt, erscheint hier die Analyse.</p>;
   return (
     <div className="space-y-3">
-      {!ai && <p className="card text-sm text-muted">Für die Analyse fehlt noch OPENAI_API_KEY in Coolify.</p>}
+      {!ai && <p className="card text-sm text-muted">Die KI ist noch nicht eingerichtet, deshalb gibt es hier noch keine Analyse. Der Zugang zur KI muss auf dem Server hinterlegt werden.</p>}
       {apps.map((a) => <Card key={a.id} app={a} coacheeId={coachee.id} ai={ai} />)}
     </div>
   );
