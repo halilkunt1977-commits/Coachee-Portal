@@ -55,6 +55,7 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
       { href: "/mein-bereich/handbuch", label: "Mein Handbuch", icon: "book" },
       { href: "/mein-bereich/lebenslauf", label: "Lebenslauf", icon: "idcard" },
       { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "doc" },
+      { href: "/mein-bereich/hilfe", label: "So funktioniert’s", icon: "play" },
     ],
   },
 ];

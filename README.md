@@ -48,6 +48,8 @@ npm run dev                  # http://localhost:3000
 - KI (OpenAI): Namen werden vor dem Senden durch Platzhalter ersetzt, Antworten werden bei OpenAI nicht gespeichert
   (`store: false`), jede Anfrage wird mit Tokenzahl in `ai_usage` protokolliert. Gesundheitsthemen landen nur intern
   und nur mit Einwilligung des Coachees.
+- Sprachausgabe (ElevenLabs) für die Begrüßung im Erklärvideo: übermittelt wird nur „Hallo {Vorname}, …“, nie andere
+  Daten. Die MP3 liegt verschlüsselt in `DATA_DIR/begruessung` und wird mit der Akte gelöscht.
 - Hochgeladene Dateien liegen AES-256-verschlüsselt im Volume und werden nur nach Prüfung der Akte ausgeliefert.
 - Beim Einlesen eines alten Lebenslaufs werden Name, E-Mail und Telefon vor der KI entfernt und danach lokal eingesetzt.
   Coachees nutzen nur die Zusatzfunktionen, die der Coach unter „Freigaben“ (oder in der Akte) einzeln freigibt, und nur begrenzt (`AI_COACHEE_MONTHLY_LIMIT`, Standard 40 Aufrufe im Monat; je Coachee änderbar).
@@ -66,6 +68,8 @@ npm run dev                  # http://localhost:3000
    `APP_SECRET` einmal mit `openssl rand -hex 32` erzeugen, sicher aufbewahren und nie ändern.
    Für die KI zusätzlich `OPENAI_API_KEY` (optional `OPENAI_MODEL`, `OPENAI_TRANSCRIBE_MODEL`). Ohne Schlüssel läuft
    alles, nur die KI-Knöpfe fehlen.
+   Für die gesprochene Begrüßung im Erklärvideo `ELEVENLABS_API_KEY` (optional `ELEVENLABS_VOICE_DE`, `ELEVENLABS_VOICE_TR`,
+   `ELEVENLABS_MODEL`). Ohne Schlüssel steht die Begrüßung nur als Text auf der Titelkarte.
    Für die Anwesenheit aus Erfolgspfad-Mails `IMAP_USER` (komplette Mailadresse des Postfachs, z. B. kunt@kuntsolutions.de) und
    `IMAP_PASS`; optional `IMAP_HOST` (Standard `imap.strato.de`), `IMAP_PORT` (993), `IMAP_FOLDER` (Standard: alle Ordner außer Papierkorb, Spam, Gesendet, Entwürfe), `ATTENDANCE_SINCE` (erster Abruf ab diesem Datum, Standard 2026-01-01), `ATTENDANCE_FROM` (erfolgspfad), `INBOX_FROM` (Absender für den Posteingang, Standard `erfolgspfad,avocons,avgs-coaching,regus`; Regus für Besprechungsräume, die AVOCONS bucht).
    Sofort-Meldungen brauchen nichts: die Schlüssel (VAPID) erzeugt das Portal selbst und speichert sie verschlüsselt. Wer eigene will, setzt `VAPID_PUBLIC_KEY` und `VAPID_PRIVATE_KEY`, optional `VAPID_SUBJECT` (`mailto:…`).
