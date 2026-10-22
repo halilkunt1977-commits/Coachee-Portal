@@ -7,6 +7,7 @@ import { Meter, Ring, WeekBars, toneFor } from "@/components/dashboard/Charts";
 import { greeting, todayLong } from "@/components/dashboard/Hero";
 import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
+import { OnlineCard } from "@/components/presence/Presence";
 import { ComposeButton } from "@/components/teilen/ComposeButton";
 import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
 import { Empty, formatDate, formatUnits } from "@/components/ui";
@@ -218,6 +219,8 @@ export default async function CoachDashboard() {
       <AppSetup publicKey={await pushPublicKey()} what="bei neuen Anfragen, Nachrichten und Mails" compact />
 
       <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-6">
+        <OnlineCard style={{ ["--i" as string]: 1 }} />
         <section className="rise card space-y-3" style={{ ["--i" as string]: 1 }}>
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-lg bg-[#eef0ff] text-[#5b5fc7]"><Icon name="calendar" className="size-4" /></span>
@@ -231,6 +234,7 @@ export default async function CoachDashboard() {
           )}
           <Link href="/coach/kalender" className="link block text-sm">Zum Kalender</Link>
         </section>
+        </div>
 
         <section className="rise card space-y-3" style={{ ["--i" as string]: 2 }}>
           <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-danger-soft text-danger"><Icon name="flag" className="size-4" /></span><h2 className="h2">Heute wichtig</h2>{alerts.length > 0 && <span className="ml-auto rounded-full bg-danger px-2 text-xs font-bold text-white">{alerts.length}</span>}</div>

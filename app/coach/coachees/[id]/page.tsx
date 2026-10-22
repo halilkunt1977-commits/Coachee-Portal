@@ -28,6 +28,7 @@ import { resendInvite, setAccess } from "../../actions";
 import DeleteCoachee from "./DeleteCoachee";
 import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
+import { PresenceLine } from "@/components/presence/Presence";
 import { Ring } from "@/components/dashboard/Charts";
 import InviteLink from "./InviteLink";
 import StammdatenForm from "./StammdatenForm";
@@ -151,6 +152,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
               {account && !account.active && <span className="rounded-full bg-danger px-2.5 py-1">Zugang gesperrt</span>}
             </div>
             <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/65">
+              <PresenceLine id={c.id} />
               <span className="inline-flex items-center gap-1.5"><Icon name="mail" className="size-4" />{c.email}</span>
               {c.phone && <span>{c.phone}</span>}
               {(c.start_date || c.end_date) && <span className="inline-flex items-center gap-1.5"><Icon name="calendar" className="size-4" />{formatDate(c.start_date)} bis {formatDate(c.end_date)}</span>}

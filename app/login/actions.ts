@@ -4,6 +4,7 @@ import { audit, createSession, destroySession, getSession } from "@/lib/auth";
 import { decrypt, verifyPassword, verifyTotp } from "@/lib/crypto";
 import { one, query } from "@/lib/db";
 import { text, type FormState } from "@/lib/forms";
+import { clearPresence } from "@/lib/presence-store";
 
 const MAX_TRIES = 5;
 const LOCK_MINUTES = 15;
@@ -57,7 +58,11 @@ export async function verifyCode(_prev: FormState, fd: FormData): Promise<FormSt
 
 export async function logout() {
   const session = await getSession();
-  if (session) await audit(session.user.id, "logout");
+  if (session) {
+    await audit(session.user.id, "logout");
+    // Für die Online-Anzeige beim Coach sofort als abgemeldet zeigen
+    await clearPresence(session.user.id);
+  }
   await destroySession();
   redirect("/login");
 }
