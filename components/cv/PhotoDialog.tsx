@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { CvPhoto } from "@/lib/cv/types";
+import { useT } from "@/components/i18n/LangProvider";
 
 /** Ausschnitt des Bewerbungsfotos wählen: ziehen zum Verschieben, Regler zum Vergrößern. */
 export function PhotoDialog({ src, value, onCancel, onSave }: { src: string; value: CvPhoto; onCancel: () => void; onSave: (v: CvPhoto) => void }) {
+  const t = useT();
   const [v, setV] = useState(value);
   const drag = useRef<{ x: number; y: number; start: CvPhoto } | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -22,8 +24,8 @@ export function PhotoDialog({ src, value, onCancel, onSave }: { src: string; val
     <dialog ref={dialog} onCancel={onCancel} className="m-auto w-[min(92vw,420px)] rounded-2xl border border-line-soft bg-surface p-0 text-ink backdrop:bg-ink/40">
       <div className="space-y-4 p-5">
         <div>
-          <h2 className="h2">Foto zuschneiden</h2>
-          <p className="text-sm text-muted">Bild mit der Maus oder dem Finger verschieben, mit dem Regler vergrößern.</p>
+          <h2 className="h2">{t("Foto zuschneiden")}</h2>
+          <p className="text-sm text-muted">{t("Bild mit der Maus oder dem Finger verschieben, mit dem Regler vergrößern.")}</p>
         </div>
         <div
           className="mx-auto size-[180px] touch-none cursor-grab overflow-hidden rounded-xl bg-bg ring-1 ring-line active:cursor-grabbing"
@@ -38,12 +40,12 @@ export function PhotoDialog({ src, value, onCancel, onSave }: { src: string; val
           <img src={src} alt="" draggable={false} className="size-full select-none object-cover" style={{ objectPosition: `${v.x}% ${v.y}%`, transform: `scale(${v.zoom})`, transformOrigin: `${v.x}% ${v.y}%` }} />
         </div>
         <label className="block">
-          <span className="label">Größe</span>
+          <span className="label">{t("Größe")}</span>
           <input type="range" min={1} max={3} step={0.05} value={v.zoom} onChange={(e) => setV({ ...v, zoom: Number(e.target.value) })} className="w-full accent-[var(--accent)]" />
         </label>
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onCancel}>Abbrechen</button>
-          <button type="button" className="btn" onClick={() => onSave(v)}>Übernehmen</button>
+          <button type="button" className="btn-ghost" onClick={onCancel}>{t("Abbrechen")}</button>
+          <button type="button" className="btn" onClick={() => onSave(v)}>{t("Übernehmen")}</button>
         </div>
       </div>
     </dialog>

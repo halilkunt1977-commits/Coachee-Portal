@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
+import { useT } from "@/components/i18n/LangProvider";
 
 /** Deutsche Zahl lesen: "1.500,50", "1500.5", "12,5" */
 export function parseDe(v: string): number | null {
@@ -14,10 +15,11 @@ export function parseDe(v: string): number | null {
 const fmt = (n: number, digits: number) => n.toLocaleString("de-DE", { maximumFractionDigits: digits });
 
 export function Num({ label, value, onChange, suffix, digits = 2, className = "", hint }: { label: string; value: number; onChange: (n: number) => void; suffix?: string; digits?: number; className?: string; hint?: string }) {
+  const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted">{t(label)}</span>
       <span className="relative block">
         <input
           className={`input !py-2 text-right tabular-nums ${suffix ? (suffix.length > 1 ? "pr-12" : "pr-8") : ""}`}
@@ -36,28 +38,30 @@ export function Num({ label, value, onChange, suffix, digits = 2, className = ""
         />
         {suffix && <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-sm text-muted">{suffix}</span>}
       </span>
-      {hint && <span className="mt-0.5 block text-[11px] text-muted">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-[11px] text-muted">{t(hint)}</span>}
     </label>
   );
 }
 
 export function Text({ label, value, onChange, placeholder, className = "", max = 120, list }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; className?: string; max?: number; list?: string }) {
+  const t = useT();
   return (
     <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
-      <input className="input !py-2" value={value} maxLength={max} placeholder={placeholder} list={list} onChange={(e) => onChange(e.target.value)} />
+      <span className="mb-1 block text-xs font-medium text-muted">{t(label)}</span>
+      <input className="input !py-2" value={value} maxLength={max} placeholder={placeholder && t(placeholder)} list={list} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
 
 /** Kleines Zahlenfeld für Monatsmengen; zeigt beim Tippen den eigenen Text, sonst den Wert */
 export function QtyInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <input
       className={`input !px-1.5 !py-1.5 text-center text-sm tabular-nums ${value ? "font-semibold" : "text-muted"}`}
       inputMode="decimal"
-      aria-label={label}
+      aria-label={t(label)}
       value={draft ?? (value ? fmt(value, 2) : "0")}
       onFocus={(e) => {
         setDraft(value ? String(value).replace(".", ",") : "");
@@ -74,11 +78,12 @@ export function QtyInput({ value, onChange, label }: { value: number; onChange: 
 }
 
 export function Pick({ label, value, onChange, options, className = "" }: { label: string; value: string | number; onChange: (v: string) => void; options: { value: string | number; label: string }[]; className?: string }) {
+  const t = useT();
   return (
     <label className={`block min-w-0 ${className}`}>
-      <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted">{t(label)}</span>
       <select className="input !py-2" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map((o) => <option key={o.value} value={o.value}>{t(o.label)}</option>)}
       </select>
     </label>
   );
@@ -94,19 +99,20 @@ export function Rows<T>({ rows, onChange, render, make, addLabel, empty, presets
   empty: string;
   presets?: string[];
 }) {
+  const t = useT();
   return (
     <div className="space-y-2">
-      {rows.length === 0 && <p className="text-sm text-muted">{empty}</p>}
+      {rows.length === 0 && <p className="text-sm text-muted">{t(empty)}</p>}
       {rows.map((row, i) => (
         <div key={i} className="flex items-start gap-2 rounded-xl border border-line-soft bg-bg/50 p-3">
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-2 sm:flex sm:flex-wrap">{render(row, (patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r))), i)}</div>
-          <button type="button" aria-label="Zeile löschen" title="Löschen" className="mt-6 grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface hover:text-danger" onClick={() => onChange(rows.filter((_, j) => j !== i))}>✕</button>
+          <button type="button" aria-label={t("Zeile löschen")} title={t("Löschen")} className="mt-6 grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface hover:text-danger" onClick={() => onChange(rows.filter((_, j) => j !== i))}>✕</button>
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => onChange([...rows, make()])}>+ {addLabel}</button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => onChange([...rows, make()])}>+ {t(addLabel)}</button>
         {presets?.filter((p) => !rows.some((r) => (r as { label?: string }).label === p)).map((p) => (
-          <button key={p} type="button" className="rounded-full border border-line-soft px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => onChange([...rows, make(p)])}>+ {p}</button>
+          <button key={p} type="button" className="rounded-full border border-line-soft px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => onChange([...rows, make(p)])}>+ {t(p)}</button>
         ))}
       </div>
     </div>

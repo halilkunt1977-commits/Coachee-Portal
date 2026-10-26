@@ -1,5 +1,6 @@
 import "server-only";
 import { domainToASCII } from "node:url";
+import { translator, type Lang } from "./i18n";
 import { smtpSend } from "./smtp";
 
 /*
@@ -64,29 +65,33 @@ export async function sendMail({ to, subject, text, html, replyTo, calendar }: {
 }
 
 const NAVY = "#1f3a5f";
-export function layout(title: string, paragraphs: string[], button?: { label: string; href: string }) {
+export function layout(title: string, paragraphs: string[], button?: { label: string; href: string }, lang: Lang = "de") {
   const p = paragraphs.map((t) => `<p style="margin:0 0 14px;line-height:1.55">${esc(t)}</p>`).join("");
   const b = button
-    ? `<p style="margin:22px 0"><a href="${esc(button.href)}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">${esc(button.label)}</a></p><p style="font-size:12px;color:#6f6a60;word-break:break-all">Falls der Knopf nicht geht: ${esc(button.href)}</p>`
+    ? `<p style="margin:22px 0"><a href="${esc(button.href)}" style="display:inline-block;background:${NAVY};color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">${esc(button.label)}</a></p><p style="font-size:12px;color:#6f6a60;word-break:break-all">${esc(translator(lang)("Falls der Knopf nicht geht: {link}", { link: button.href }))}</p>`
     : "";
   return `<div style="font-family:Arial,Helvetica,sans-serif;color:#17181c;background:#f6f4ef;padding:24px"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:28px"><p style="font-weight:bold;font-size:20px;color:${NAVY};margin:0 0 18px">gründarium · Portal</p><h1 style="font-size:20px;margin:0 0 14px">${esc(title)}</h1>${p}${b}</div></div>`;
 }
 
-export function inviteMail(name: string, coachName: string, link: string) {
+export function inviteMail(name: string, coachName: string, link: string, lang: Lang = "de") {
+  const t = translator(lang);
   const lines = [
-    `Hallo ${name},`,
-    `${coachName} hat für dich einen Zugang zum Gründarium Portal eingerichtet. Dort findest du alles aus unserem Coaching an einem Ort: Termine, Aufgaben, Lebenslauf, Businessplan und mehr.`,
-    "Lege über den Link dein Passwort fest. Der Link ist 7 Tage gültig.",
+    t("Hallo {name},", { name }),
+    t("{coach} hat für dich einen Zugang zum Gründarium Portal eingerichtet. Dort findest du alles aus unserem Coaching an einem Ort: Termine, Aufgaben, Lebenslauf, Businessplan und mehr.", { coach: coachName }),
+    t("Lege über den Link dein Passwort fest. Der Link ist 7 Tage gültig."),
   ];
-  return { subject: "Dein Zugang zum Gründarium Portal", text: `${lines.join("\n\n")}\n\n${link}`, html: layout("Willkommen im Portal", lines, { label: "Passwort festlegen", href: link }) };
+  return { subject: t("Dein Zugang zum Gründarium Portal"), text: `${lines.join("\n\n")}\n\n${link}`, html: layout(t("Willkommen im Portal"), lines, { label: t("Passwort festlegen"), href: link }, lang) };
 }
 
-export function resetMail(name: string, link: string) {
-  const lines = [`Hallo ${name},`, "du hast ein neues Passwort angefordert. Der Link ist 2 Stunden gültig. Falls du das nicht warst, ignoriere diese Mail einfach."];
-  return { subject: "Neues Passwort für das Gründarium Portal", text: `${lines.join("\n\n")}\n\n${link}`, html: layout("Neues Passwort", lines, { label: "Passwort neu setzen", href: link }) };
+export function resetMail(name: string, link: string, lang: Lang = "de") {
+  const t = translator(lang);
+  const lines = [t("Hallo {name},", { name }), t("du hast ein neues Passwort angefordert. Der Link ist 2 Stunden gültig. Falls du das nicht warst, ignoriere diese Mail einfach.")];
+  return { subject: t("Neues Passwort für das Gründarium Portal"), text: `${lines.join("\n\n")}\n\n${link}`, html: layout(t("Neues Passwort"), lines, { label: t("Passwort neu setzen"), href: link }, lang) };
 }
 
-export function noticeMail(name: string, what: string) {
-  const lines = [`Hallo ${name},`, `${what} Melde dich im Portal an, um es anzusehen.`];
-  return { subject: "Neues im Gründarium Portal", text: `${lines.join("\n\n")}\n\n${portalUrl("/")}`, html: layout("Es gibt etwas Neues", lines, { label: "Zum Portal", href: portalUrl("/") }) };
+/** Hinweis ohne Inhalt; "what" ist ein deutscher Satz und wird in die Sprache des Empfängers übersetzt */
+export function noticeMail(name: string, what: string, lang: Lang = "de") {
+  const t = translator(lang);
+  const lines = [t("Hallo {name},", { name }), `${t(what)} ${t("Melde dich im Portal an, um es anzusehen.")}`];
+  return { subject: t("Neues im Gründarium Portal"), text: `${lines.join("\n\n")}\n\n${portalUrl("/")}`, html: layout(t("Es gibt etwas Neues"), lines, { label: t("Zum Portal"), href: portalUrl("/") }, lang) };
 }

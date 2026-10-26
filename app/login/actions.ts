@@ -1,4 +1,5 @@
 "use server";
+import { getT } from "@/lib/i18n-server";
 import { redirect } from "next/navigation";
 import { audit, createSession, destroySession, getSession } from "@/lib/auth";
 import { decrypt, verifyPassword, verifyTotp } from "@/lib/crypto";
@@ -48,7 +49,7 @@ export async function verifyCode(_prev: FormState, fd: FormData): Promise<FormSt
       await destroySession();
       redirect("/login?gesperrt=1");
     }
-    return { error: "Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben." };
+    return { error: (await getT())("Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben.") };
   }
   await query("UPDATE users SET failed_logins = 0 WHERE id = $1", [session.user.id]);
   await query("UPDATE auth_sessions SET mfa_passed = true WHERE id = $1", [session.sessionId]);

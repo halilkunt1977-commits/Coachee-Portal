@@ -103,7 +103,8 @@ export type BruttoNettoResult = {
   brutto: { monat: number; jahr: number };
   /** Zuschuss des Arbeitgebers zur privaten KV/PV im Monat (wird mit ausgezahlt) */
   pkvZuschuss: number;
-  hinweise: string[];
+  /** Hinweistexte mit {Platzhaltern}, damit die Oberfläche sie übersetzen kann */
+  hinweise: { text: string; vars?: Record<string, string | number> }[];
 };
 
 // ---------- Rundung ----------
@@ -255,7 +256,7 @@ export function bruttoNetto(raw: BruttoNettoInput): BruttoNettoResult {
   const sachsen = raw.bundesland === "SN";
   const kinderlos = raw.ab23 && kinder === 0;
   const pva = Math.max(0, Math.min(kinder, 5) - 1);
-  const hinweise: string[] = [];
+  const hinweise: { text: string; vars?: Record<string, string | number> }[] = [];
 
   // Sozialabgaben pro Monat, wie sie auf der Abrechnung stehen
   const gering = bruttoMonat <= MINIJOB_GRENZE;
@@ -270,7 +271,7 @@ export function bruttoNetto(raw: BruttoNettoInput): BruttoNettoResult {
   let pkvZuschuss = 0;
   const pkv = Math.max(0, raw.pkvBeitrag ?? 0);
   if (gering) {
-    hinweise.push(`Bis ${MINIJOB_GRENZE} € im Monat ist es ein Minijob: Abgaben zahlt meist nur der Arbeitgeber (Rentenversicherung auf Wunsch). Der Rechner zeigt dann kein genaues Ergebnis.`);
+    hinweise.push({ text: "Bis {grenze} € im Monat ist es ein Minijob: Abgaben zahlt meist nur der Arbeitgeber (Rentenversicherung auf Wunsch). Der Rechner zeigt dann kein genaues Ergebnis.", vars: { grenze: MINIJOB_GRENZE } });
   } else if (raw.gesetzlich) {
     kv = cent(kvBasis * (KV_AN + kvz / 200));
     pv = cent(kvBasis * pvSatz);
@@ -279,7 +280,7 @@ export function bruttoNetto(raw: BruttoNettoInput): BruttoNettoResult {
   }
   const rv = !gering && rvPflicht ? cent(rvBasis * RV_AN) : 0;
   const av = !gering && avPflicht ? cent(rvBasis * AV_AN) : 0;
-  if (midi) hinweise.push("Zwischen 603,01 € und 2.000 € im Monat (Übergangsbereich) sind die Sozialabgaben geringer. Das ist berücksichtigt.");
+  if (midi) hinweise.push({ text: "Zwischen 603,01 € und 2.000 € im Monat (Übergangsbereich) sind die Sozialabgaben geringer. Das ist berücksichtigt." });
 
   // Lohnsteuer nach PAP, auf den Monat umgelegt (abgerundet auf Cent)
   const r = lohnsteuerJahr({
@@ -302,8 +303,8 @@ export function bruttoNetto(raw: BruttoNettoInput): BruttoNettoResult {
 
   const pkvEigen = raw.gesetzlich ? 0 : cent(pkv - pkvZuschuss);
   const monatNetto = cent(bruttoMonat - lst - soli - kist - kv - rv - av - pv - pkvEigen);
-  if (!raw.gesetzlich) hinweise.push(`Privat versichert: Vom Beitrag zieht der Rechner deinen Anteil ab (Beitrag minus Zuschuss des Arbeitgebers, höchstens ${PKV_HOECHSTZUSCHUSS.toLocaleString("de-DE", { minimumFractionDigits: 2 })} € im Monat).`);
-  if (raw.steuerklasse === 6) hinweise.push("Steuerklasse VI gilt für einen zweiten Job. Freibeträge gibt es dort nicht.");
+  if (!raw.gesetzlich) hinweise.push({ text: "Privat versichert: Vom Beitrag zieht der Rechner deinen Anteil ab (Beitrag minus Zuschuss des Arbeitgebers, höchstens {betrag} € im Monat).", vars: { betrag: PKV_HOECHSTZUSCHUSS.toLocaleString("de-DE", { minimumFractionDigits: 2 }) } });
+  if (raw.steuerklasse === 6) hinweise.push({ text: "Steuerklasse VI gilt für einen zweiten Job. Freibeträge gibt es dort nicht." });
 
   const monat: Betraege = { lohnsteuer: lst, soli, kirchensteuer: kist, kv: raw.gesetzlich ? kv : pkvEigen, rv, av, pv, netto: monatNetto };
   const jahr = Object.fromEntries(Object.entries(monat).map(([k, v]) => [k, cent(v * 12)])) as Betraege;

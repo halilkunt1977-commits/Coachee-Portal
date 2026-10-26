@@ -4,6 +4,7 @@ import { audit, getSession } from "@/lib/auth";
 import { decrypt, verifyTotp } from "@/lib/crypto";
 import { one, query } from "@/lib/db";
 import { text, type FormState } from "@/lib/forms";
+import { getT } from "@/lib/i18n-server";
 
 export async function enableTotp(_prev: FormState, fd: FormData): Promise<FormState> {
   const session = await getSession();
@@ -11,7 +12,7 @@ export async function enableTotp(_prev: FormState, fd: FormData): Promise<FormSt
   if (session.user.totp_enabled) redirect("/");
   const row = await one<{ totp_secret: string | null }>("SELECT totp_secret FROM users WHERE id = $1", [session.user.id]);
   if (!row?.totp_secret || !verifyTotp(decrypt(row.totp_secret), text(fd, "code", 10))) {
-    return { error: "Der Code stimmt nicht. Prüfe, ob du den QR-Code gescannt hast, und gib den aktuellen Code ein." };
+    return { error: (await getT())("Der Code stimmt nicht. Prüfe, ob du den QR-Code gescannt hast, und gib den aktuellen Code ein.") };
   }
   await query("UPDATE users SET totp_enabled = true WHERE id = $1", [session.user.id]);
   await query("UPDATE auth_sessions SET mfa_passed = true WHERE id = $1", [session.sessionId]);

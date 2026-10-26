@@ -19,7 +19,7 @@ for (const d of ["app", "components", "lib"]) walk(path.join(root, d));
 const missing = new Map();
 for (const f of files) {
   const src = readFileSync(f, "utf8");
-  for (const m of src.matchAll(/\bt\(\s*"((?:[^"\\]|\\.)*)"/g)) {
+  for (const m of src.matchAll(/\btr?\(\s*"((?:[^"\\]|\\.)*)"/g)) {
     const key = JSON.parse(`"${m[1]}"`);
     if (!keys.has(key)) missing.set(key, path.relative(root, f));
   }

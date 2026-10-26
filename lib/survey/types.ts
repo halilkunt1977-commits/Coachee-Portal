@@ -2,7 +2,8 @@
 
 /** 0 = nicht gemacht, 1 = manchmal, 2 = oft / Hauptaufgabe */
 export type Level = 0 | 1 | 2;
-export type Choice = { text: string; level: Level; detail?: string };
+/** tr: Übersetzung nur zur Anzeige für türkischsprachige Coachees; gespeichert und weitergegeben wird immer text */
+export type Choice = { text: string; level: Level; detail?: string; tr?: string };
 /** arbeit = Stelle, ausbildung = Aus-/Weiterbildung oder Maßnahme (nur Ja/Nein), luecke = Zeit ohne Station im Lebenslauf */
 export type StationKind = "arbeit" | "ausbildung" | "luecke";
 export type Station = {
@@ -60,14 +61,16 @@ const choices = (v: unknown, max = 40): Choice[] =>
   Array.isArray(v)
     ? v
         .slice(0, max)
-        .map((x) => (typeof x === "string" ? { text: x, level: 0 as Level } : { text: s((x as Choice)?.text, 200), level: lvl((x as Choice)?.level), ...((x as Choice)?.detail ? { detail: s((x as Choice).detail, 200) } : {}) }))
+        .map((x) => (typeof x === "string" ? { text: x, level: 0 as Level } : { text: s((x as Choice)?.text, 200), level: lvl((x as Choice)?.level), ...((x as Choice)?.detail ? { detail: s((x as Choice).detail, 200) } : {}), ...((x as Choice)?.tr ? { tr: s((x as Choice).tr, 300) } : {}) }))
         .filter((c) => c.text.trim())
     : [];
 
 /** Liste ankreuzbarer Einträge aus Texten, ohne doppelte */
-export const toChoices = (list: string[], keep: Choice[] = []): Choice[] => {
+export const toChoices = (list: string[], keep: Choice[] = [], tr: string[] = []): Choice[] => {
   const out = [...keep];
-  for (const t of list) if (t.trim() && !out.some((c) => c.text.toLowerCase() === t.trim().toLowerCase())) out.push({ text: t.trim(), level: 0 });
+  list.forEach((t, i) => {
+    if (t.trim() && !out.some((c) => c.text.toLowerCase() === t.trim().toLowerCase())) out.push({ text: t.trim(), level: 0, ...(tr[i]?.trim() ? { tr: tr[i].trim() } : {}) });
+  });
   return out;
 };
 
@@ -115,4 +118,4 @@ export function progress(d: SurveyData) {
 }
 
 export const formatMonth = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? `${v.slice(5)}/${v.slice(0, 4)}` : v);
-export const period = (st: Pick<Station, "start" | "end" | "current">) => [formatMonth(st.start), st.current ? "heute" : formatMonth(st.end)].filter(Boolean).join(" – ");
+export const period = (st: Pick<Station, "start" | "end" | "current">, today = "heute") => [formatMonth(st.start), st.current ? today : formatMonth(st.end)].filter(Boolean).join(" – ");

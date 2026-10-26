@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { ics } from "@/lib/calendar/ics";
 import { icsEvent } from "@/lib/calendar/notify";
 import { appointmentFor } from "@/lib/calendar/store";
+import { serverLang } from "@/lib/i18n-server";
 
 /** Einzelner Termin als .ics zum Übernehmen in den eigenen Kalender */
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/termine/[id]/ics">) {
@@ -11,7 +12,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/termine
   if (!session || (session.user.totp_enabled && !session.mfaPassed)) return new NextResponse("Nicht angemeldet", { status: 401 });
   const a = await appointmentFor(session.user, id);
   if (!a) return new NextResponse("Nicht gefunden", { status: 404 });
-  const body = ics([{ ...icsEvent(a, a.status === "abgesagt"), organizer: null, attendees: [] }], { method: "PUBLISH" });
+  const body = ics([{ ...icsEvent(a, a.status === "abgesagt", await serverLang()), organizer: null, attendees: [] }], { method: "PUBLISH" });
   return new NextResponse(body, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",

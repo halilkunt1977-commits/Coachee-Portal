@@ -28,7 +28,7 @@ export async function createTask(_prev: FormState, fd: FormData): Promise<FormSt
   if (user.role === "coach" && c) {
     // Landet im Posteingang des Coachees; Sofort-Meldung immer, Mail nur auf Wunsch
     const url = await postToInbox(c.id, "aufgabe", task!.id, user.id);
-    if (c.user_id && fd.get("notify") === "on") await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.") }).catch(() => false);
+    if (c.user_id && fd.get("notify") === "on") await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.", c.language) }).catch(() => false);
     await notifyCoachee(c.user_id, { title: "Neue Aufgabe", body: "Dein Coach hat dir eine Aufgabe gegeben.", url, tag: "aufgabe" });
   }
   refresh(c?.id ?? null);

@@ -3,7 +3,8 @@ import { jsonResponse, pseudonymize } from "../ai";
 import type { CvData, CvSkill } from "../cv/types";
 import { GAP_CHOICES, HEALTH, newStationKey, normalizeSurvey, period, toChoices, type Choice, type Station, type SurveyData } from "./types";
 
-type Usage = { coacheeId: string; userId: string; names?: string[] };
+/** lang "tr": Tätigkeiten zusätzlich auf Türkisch, nur zur Anzeige für den Coachee */
+type Usage = { coacheeId: string; userId: string; names?: string[]; lang?: "de" | "tr" };
 const str = { type: "string" };
 const strs = { type: "array", items: str };
 const obj = (properties: Record<string, unknown>) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
@@ -12,6 +13,12 @@ const TASKS_RULES = `- tasks: 10 bis 16 typische, konkrete Tätigkeiten, die man
 - Bei Aus- und Weiterbildungen: die gelernten Inhalte und Fertigkeiten, dazu „Abschlussprüfung bestanden“ bzw. „Zertifikat erhalten“ und, wenn üblich, „Praktikum im Betrieb (wo?)“. Bei Coachings oder Maßnahmen: was dort gemacht wurde.
 - tools: bis zu 8 Maschinen, Geräte, Programme oder Verfahren, die dort typisch sind (z. B. „Gabelstapler“, „Handscanner / MDE“, „SAP“, „Heidenhain-Steuerung“). Leer, wenn nichts passt.
 - Einfache, verständliche Sprache. Nichts zur Gesundheit.`;
+
+const TR_RULES = `
+- tasks_tr und tools_tr: genau dieselben Zeilen in derselben Reihenfolge, übersetzt in einfaches, umgangssprachliches Türkisch, wie man es im Alltag spricht (Du-Form, keine Fachsprache, wo es geht). Maschinen- und Programmnamen bleiben, Fragen in Klammern ebenfalls übersetzen, z. B. „(hangisi?)“.`;
+const withTr = (u: Usage) => u.lang === "tr";
+const stationSchema = (u: Usage) => (withTr(u) ? obj({ tasks: strs, tools: strs, tasks_tr: strs, tools_tr: strs }) : obj({ tasks: strs, tools: strs }));
+type StationResult = { tasks: string[]; tools: string[]; tasks_tr?: string[]; tools_tr?: string[] };
 
 const SCHOOL = /schule|gymnasium|abitur|mittlere reife|schulabschluss|berufsvorbereitung|\bbvj\b/i;
 const month = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? Number(v.slice(0, 4)) * 12 + Number(v.slice(5)) - 1 : null);
@@ -50,22 +57,23 @@ export async function surveyFromCv(cv: CvData, u: Usage, keep?: SurveyData): Pro
   const input = entries
     .map((st, i) => `${i + 1}. ${st.kind === "ausbildung" ? "Aus-/Weiterbildung oder Maßnahme" : "Stelle"}: ${st.title} bei ${st.company || "unbekannt"}${st.location ? ` in ${st.location}` : ""} (${period(st)})\n${bullets(st)}`)
     .join("\n\n");
-  const result = await jsonResponse<{ stations: { tasks: string[]; tools: string[] }[]; software: string[]; languages: string[] }>({
+  const result = await jsonResponse<{ stations: StationResult[]; software: string[]; languages: string[] }>({
     coacheeId: u.coacheeId,
     userId: u.userId,
     purpose: "survey_build",
     instructions: `Du bereitest für ein Jobcoaching einen Fragebogen vor, in dem der Teilnehmer zu jeder Station seines Lebenslaufs ankreuzt, was er dort gemacht hat. Für jede Station (gleiche Reihenfolge, gleiche Anzahl) lieferst du:
-${TASKS_RULES}
+${TASKS_RULES}${withTr(u) ? TR_RULES : ""}
 Außerdem software: Programme und digitale Kenntnisse aus dem Lebenslauf (z. B. „OpenOffice“, „3D-Modellierung mit Blender“, „Videobearbeitung“, „CAD-Programm (welches?)“), ohne Word, Excel, Outlook, PowerPoint, SAP und Teams.
 Und languages: Sprachen aus dem Lebenslauf mit Niveau, z. B. „Englisch Grundkenntnisse“, ohne Deutsch.`,
     input: `${input}\n\nKenntnisse laut Lebenslauf: ${[...cv.skills.map((x) => x.name), ...cv.languages.map((x) => `${x.name} ${x.level}`), cv.interests].filter(Boolean).join(", ")}`,
     schemaName: "erfahrungsbogen",
-    schema: obj({ stations: { type: "array", items: obj({ tasks: strs, tools: strs }) }, software: strs, languages: strs }),
+    schema: obj({ stations: { type: "array", items: stationSchema(u) }, software: strs, languages: strs }),
     maxTokens: 10000,
   });
   entries.forEach((st, i) => {
-    st.tasks = toChoices(result.stations?.[i]?.tasks ?? []);
-    st.tools = toChoices(result.stations?.[i]?.tools ?? []);
+    const r = result.stations?.[i];
+    st.tasks = toChoices(r?.tasks ?? [], [], r?.tasks_tr);
+    st.tools = toChoices(r?.tools ?? [], [], r?.tools_tr);
   });
   const all = [...entries, ...gaps(entries)].sort((x, y) => (month(x.start) ?? 0) - (month(y.start) ?? 0));
   return {
@@ -78,17 +86,17 @@ Und languages: Sprachen aus dem Lebenslauf mit Niveau, z. B. „Englisch Grundke
 
 /** Typische Tätigkeiten für eine von Hand ergänzte Station */
 export async function tasksForStation(st: Pick<Station, "title" | "company">, u: Usage) {
-  const r = await jsonResponse<{ tasks: string[]; tools: string[] }>({
+  const r = await jsonResponse<StationResult>({
     coacheeId: u.coacheeId,
     userId: u.userId,
     purpose: "survey_station",
-    instructions: `Du bereitest für ein Jobcoaching einen Fragebogen vor. Für die genannte Stelle lieferst du:\n${TASKS_RULES}`,
+    instructions: `Du bereitest für ein Jobcoaching einen Fragebogen vor. Für die genannte Stelle lieferst du:\n${TASKS_RULES}${withTr(u) ? TR_RULES : ""}`,
     input: `${st.title} bei ${st.company || "unbekannt"}`,
     schemaName: "station",
-    schema: obj({ tasks: strs, tools: strs }),
+    schema: stationSchema(u),
     maxTokens: 2000,
   });
-  return { tasks: toChoices(r.tasks ?? []), tools: toChoices(r.tools ?? []) };
+  return { tasks: toChoices(r.tasks ?? [], [], r.tasks_tr), tools: toChoices(r.tools ?? [], [], r.tools_tr) };
 }
 
 /** Aus dem ausgefüllten Bogen Tätigkeitsbeschreibungen, Kurzprofil und Kenntnisse für den neuen Lebenslauf schreiben */
@@ -123,7 +131,7 @@ export async function cvFromSurvey(d: SurveyData, base: CvData, u: Usage): Promi
     userId: u.userId,
     purpose: "survey_cv",
     instructions: `Du schreibst für einen Lebenslauf aus einem ausgefüllten Erfahrungsbogen die Tätigkeitsbeschreibungen.
-- stations: gleiche Reihenfolge und Anzahl wie im Bogen. Je Stelle 4 bis 7 Stichpunkte, je Aus-/Weiterbildung 2 bis 4 Stichpunkte zu den Inhalten in knappem, starkem Lebenslauf-Deutsch (Verb am Ende oder Nominalstil, ohne „Ich“), Wichtigstes und „oft“ zuerst. Ähnliches zusammenfassen, Erfolge und Verantwortung mit Zahlen übernehmen. Nichts erfinden.
+- stations: gleiche Reihenfolge und Anzahl wie im Bogen. Je Stelle 4 bis 7 Stichpunkte, je Aus-/Weiterbildung 2 bis 4 Stichpunkte zu den Inhalten in knappem, starkem Lebenslauf-Deutsch (Verb am Ende oder Nominalstil, ohne „Ich“), Wichtigstes und „oft“ zuerst. Ähnliches zusammenfassen, Erfolge und Verantwortung mit Zahlen übernehmen. Nichts erfinden. Eigene Angaben des Teilnehmers können auch auf Türkisch sein; der Lebenslauf ist trotzdem immer auf Deutsch.
 - summary: Kurzprofil bzw. kurzer Pitch für Bewerbungen in 2 bis 3 Sätzen, passend zum Berufswunsch, mit den stärksten Belegen, ohne Namen.
 - headline: Berufsbezeichnung bzw. Wunschposition.
 - skills: 6 bis 12 Fach-, Programm- und persönliche Kenntnisse, level 1 bis 5 (oft = 4, manchmal = 3).`,
