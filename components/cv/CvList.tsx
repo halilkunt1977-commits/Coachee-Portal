@@ -12,15 +12,16 @@ import { Empty, formatDateTime } from "../ui";
 import { NewCvForm } from "./NewCvForm";
 import { ShareButton } from "../teilen/ShareButton";
 import type { ReactNode } from "react";
+import { getT } from "@/lib/i18n-server";
 
 /** Alle Lebensläufe eines Coachees, für Coach (Akte) und Coachee (Mein Bereich) gleich. */
 export async function CvList({ coacheeId, coach, aside, recipient, importAllowed = true }: { coacheeId: string; coach: boolean; aside?: ReactNode; /** Vorname des Coachees, für „An … senden“ */ recipient?: string; /** Lebenslauf aus Datei (Zusatzfunktion, für Coachees nur mit Freigabe) */ importAllowed?: boolean }) {
-  const cvs = await listCvs(coacheeId);
+  const [cvs, tr] = await Promise.all([listCvs(coacheeId), getT()]);
   const ai = aiEnabled() && (coach || importAllowed);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="space-y-3">
-        {cvs.length === 0 && <Empty>Noch kein Lebenslauf. Rechts lässt sich der erste anlegen{ai ? ", am schnellsten aus dem bisherigen Lebenslauf" : ""}.</Empty>}
+        {cvs.length === 0 && <Empty>{ai ? tr("Noch kein Lebenslauf. Rechts lässt sich der erste anlegen, am schnellsten aus dem bisherigen Lebenslauf.") : tr("Noch kein Lebenslauf. Rechts lässt sich der erste anlegen.")}</Empty>}
         {cvs.map((cv, i) => (
           <article key={cv.id} className="card flex items-start gap-4">
             <Link href={`/lebenslauf/${cv.id}`} aria-hidden tabIndex={-1} className="block h-[6.6rem] w-[4.6rem] shrink-0 overflow-hidden">
@@ -31,17 +32,17 @@ export async function CvList({ coacheeId, coach, aside, recipient, importAllowed
               {/* Liste ist nach letzter Änderung sortiert: der oberste ist der aktuelle */}
               <CvName id={cv.id} name={cv.name} current={i === 0 && cvs.length > 1} />
               <p className="text-sm text-muted">
-                Design {TEMPLATES.find((t) => t.key === cv.template)?.label ?? cv.template} · geändert {formatDateTime(cv.updated_at)}{cv.updated_by_name ? ` von ${cv.updated_by_name}` : ""}
+                {tr("Design")} {TEMPLATES.find((t) => t.key === cv.template)?.label ?? cv.template} · {cv.updated_by_name ? tr("geändert {wann} von {name}", { wann: formatDateTime(cv.updated_at), name: cv.updated_by_name }) : tr("geändert {wann}", { wann: formatDateTime(cv.updated_at) })}
               </p>
               {cv.source_file_id && (
-                <p className="text-xs text-muted">Aus der Datei <a href={`/api/dateien/${cv.source_file_id}`} className="link" target="_blank" rel="noreferrer">{cv.source_name}</a></p>
+                <p className="text-xs text-muted">{tr("Aus der Datei")} <a href={`/api/dateien/${cv.source_file_id}`} className="link" target="_blank" rel="noreferrer">{cv.source_name}</a></p>
               )}
               </div>
             <div className="flex flex-wrap gap-2">
-              <Link href={`/lebenslauf/${cv.id}`} className="btn btn-sm tap">Bearbeiten</Link>
+              <Link href={`/lebenslauf/${cv.id}`} className="btn btn-sm tap">{tr("Bearbeiten")}</Link>
               <a href={`/api/lebenslauf/${cv.id}/pdf`} className="btn-ghost btn-sm tap">PDF</a>
               <ShareButton kind="lebenslauf" refId={cv.id} role={coach ? "coach" : "coachee"} coacheeId={coacheeId} recipient={recipient} title={cv.name} />
-              <form action={duplicateCv.bind(null, cv.id)}><button className="btn-ghost btn-sm tap">Kopie für andere Bewerbung</button></form>
+              <form action={duplicateCv.bind(null, cv.id)}><button className="btn-ghost btn-sm tap">{tr("Kopie für andere Bewerbung")}</button></form>
               <form action={deleteCv.bind(null, cv.id)}><ConfirmButton /></form>
             </div>
             </div>
@@ -51,7 +52,7 @@ export async function CvList({ coacheeId, coach, aside, recipient, importAllowed
       <aside className="h-fit space-y-6">
         <div className="card space-y-3">
           <div className="flex items-baseline justify-between gap-2">
-            <h2 className="h2">Neuer Lebenslauf</h2>
+            <h2 className="h2">{tr("Neuer Lebenslauf")}</h2>
           </div>
           <NewCvForm coacheeId={coacheeId} ai={ai} coach={coach} defaultName={`Lebenslauf ${germanDate(todayBerlin())}`} />
         </div>

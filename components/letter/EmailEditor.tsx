@@ -15,6 +15,7 @@ import {
   type StoredEmail,
 } from "@/lib/letter/email";
 import type { LetterField } from "@/lib/letter/types";
+import { useT } from "@/components/i18n/LangProvider";
 
 type Props = {
   applicationId: string;
@@ -35,6 +36,7 @@ type SaveState = "saved" | "dirty" | "saving" | "error";
 const MAILTO_SAFE = 1900;
 
 export function EmailEditor(p: Props) {
+  const t = useT();
   const auto = useMemo(() => autoEmail(p.letter, p.app), [p.letter, p.app]);
   // Eigene Werte; null = automatisch aus dem Anschreiben
   const [own, setOwn] = useState<StoredEmail>(p.stored);
@@ -81,8 +83,8 @@ export function EmailEditor(p: Props) {
   const toInvalid = values.to.trim() !== "" && !looksLikeEmail(values.to);
   const extra = attachmentNames(p.letter.attachments).filter((n) => !/^(anschreiben|lebenslauf)$/i.test(n));
 
-  const draftLabel = p.coach ? "Kurzfassung mit KI vorschlagen" : "Kurzfassung vorschlagen";
-  const draftBusy = p.coach ? "Die KI schreibt eine Kurzfassung …" : "Der Text wird vorbereitet …";
+  const draftLabel = p.coach ? t("Kurzfassung mit KI vorschlagen") : t("Kurzfassung vorschlagen");
+  const draftBusy = p.coach ? t("Die KI schreibt eine Kurzfassung …") : t("Der Text wird vorbereitet …");
 
   async function download(href: string, letter: boolean) {
     if (letter) await p.flushLetter();
@@ -96,7 +98,7 @@ export function EmailEditor(p: Props) {
       <section className="card space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="h2">E-Mail-Bewerbung</h2>
+            <h2 className="h2">{t("E-Mail-Bewerbung")}</h2>
             <p className="mt-1 text-xs text-muted">
               Kurze Nachricht für den Versand per E-Mail. Sie entsteht aus dem Anschreiben; das Anschreiben selbst und der Lebenslauf kommen als PDF in den Anhang.
             </p>
@@ -107,26 +109,26 @@ export function EmailEditor(p: Props) {
         <EmailInput
           label="An"
           type="email"
-          placeholder="bewerbung@firma.de"
+          placeholder={t("bewerbung@firma.de")}
           value={values.to}
           onChange={set("to")}
           changed={own.to !== null}
           onReset={() => reset("to")}
-          resetTitle={auto.to ? `Aus der Bewerbung: ${auto.to}` : "Leer"}
+          resetTitle={auto.to ? t("Aus der Bewerbung: {wert}", { wert: auto.to }) : t("Leer")}
         />
         {toInvalid ? (
-          <p className="-mt-2 text-xs text-danger">Das sieht nicht nach einer E-Mail-Adresse aus.</p>
+          <p className="-mt-2 text-xs text-danger">{t("Das sieht nicht nach einer E-Mail-Adresse aus.")}</p>
         ) : (
-          !values.to.trim() && <p className="-mt-2 text-xs text-muted">In der Bewerbung ist keine E-Mail-Adresse hinterlegt. Sie steht meist in der Stellenanzeige.</p>
+          !values.to.trim() && <p className="-mt-2 text-xs text-muted">{t("In der Bewerbung ist keine E-Mail-Adresse hinterlegt. Sie steht meist in der Stellenanzeige.")}</p>
         )}
 
-        <EmailInput label="Betreff" value={values.subject} onChange={set("subject")} changed={own.subject !== null} onReset={() => reset("subject")} resetTitle={`Automatisch: ${auto.subject}`} />
+        <EmailInput label="Betreff" value={values.subject} onChange={set("subject")} changed={own.subject !== null} onReset={() => reset("subject")} resetTitle={t("Automatisch: {wert}", { wert: auto.subject })} />
 
         <div className="min-w-0">
           <FieldHead id={bodyId} label="Nachricht" changed={own.body !== null} onReset={() => reset("body")} resetTitle="Kurzfassung wieder aus dem Anschreiben erstellen" resetLabel="↺ aus dem Anschreiben" />
           <textarea id={bodyId} aria-describedby={`${bodyId}-hint`} className="input min-h-64 leading-relaxed" rows={13} value={values.body} disabled={drafting} onChange={(e) => set("body")(e.target.value)} />
           <span id={`${bodyId}-hint`} className="mt-1 block text-xs text-muted">
-            {drafting ? draftBusy : own.body === null ? "Kurzfassung des Anschreibens. Ändert sich der Brief, passt sich dieser Text an, solange er hier nicht von Hand geändert wurde." : "Von Hand geändert."}
+            {drafting ? draftBusy : own.body === null ? t("Kurzfassung des Anschreibens. Ändert sich der Brief, passt sich dieser Text an, solange er hier nicht von Hand geändert wurde.") : t("Von Hand geändert.")}
           </span>
         </div>
 
@@ -139,7 +141,7 @@ export function EmailEditor(p: Props) {
               onClick={async () => {
                 setDrafting(true);
                 setDraftError(null);
-                const res = await draftEmailText(p.applicationId).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
+                const res = await draftEmailText(p.applicationId).catch(() => ({ ok: false as const, error: t("Gerade keine Verbindung. Bitte noch einmal versuchen.") }));
                 setDrafting(false);
                 if (res.ok) setOwn((x) => ({ ...x, body: composeEmailBody(p.letter.salutation, res.text, p.letter.closing) }));
                 else setDraftError(res.error);
@@ -152,48 +154,48 @@ export function EmailEditor(p: Props) {
         )}
 
         <div>
-          <span className="label">Signatur <span className="font-normal text-muted">(aus dem Absender des Anschreibens)</span></span>
+          <span className="label">{t("Signatur")} <span className="font-normal text-muted">{t("(aus dem Absender des Anschreibens)")}</span></span>
           <pre className="whitespace-pre-wrap break-words rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 font-[inherit] text-[15px] text-muted">{signature || "–"}</pre>
         </div>
       </section>
 
       <div className="space-y-3 lg:sticky lg:top-20">
         <section className="card space-y-3">
-          <h2 className="h2">Versenden</h2>
-          <a href={mailto} className="btn w-full justify-center text-center">In E-Mail-Programm öffnen</a>
+          <h2 className="h2">{t("Versenden")}</h2>
+          <a href={mailto} className="btn w-full justify-center text-center">{t("In E-Mail-Programm öffnen")}</a>
           <div className="grid grid-cols-2 gap-2">
             <CopyButton label="Betreff kopieren" value={values.subject} />
             <CopyButton label="Text kopieren" value={text} />
           </div>
           {values.to.trim() && <CopyButton label="Adresse kopieren" value={values.to.trim()} wide />}
           <p className="text-xs text-muted">
-            Das Portal verschickt die E-Mail nicht.{" "}
-            {p.coach ? "Die Anhänge müssen im E-Mail-Programm von Hand hinzugefügt werden." : "Hänge die Unterlagen unten im E-Mail-Programm selbst an."}
-            {mailto.length > MAILTO_SAFE && " Der Text ist recht lang: Manche E-Mail-Programme kürzen ihn beim Öffnen. Dann lieber „Text kopieren“ nutzen."}
+            {t("Das Portal verschickt die E-Mail nicht.")}{" "}
+            {p.coach ? t("Die Anhänge müssen im E-Mail-Programm von Hand hinzugefügt werden.") : t("Hänge die Unterlagen unten im E-Mail-Programm selbst an.")}
+            {mailto.length > MAILTO_SAFE && <> {t("Der Text ist recht lang: Manche E-Mail-Programme kürzen ihn beim Öffnen. Dann lieber „Text kopieren“ nutzen.")}</>}
           </p>
         </section>
 
         <section className="card space-y-3">
           <div>
-            <h2 className="h2">Anhänge</h2>
-            <p className="mt-1 text-xs text-muted">{p.coach ? "Als PDF herunterladen und an die E-Mail hängen." : "Lade sie als PDF herunter und hänge sie an die E-Mail."}</p>
+            <h2 className="h2">{t("Anhänge")}</h2>
+            <p className="mt-1 text-xs text-muted">{p.coach ? t("Als PDF herunterladen und an die E-Mail hängen.") : t("Lade sie als PDF herunter und hänge sie an die E-Mail.")}</p>
           </div>
           <ul className="divide-y divide-line text-sm">
             <Attachment name="Anschreiben (PDF)">
-              <button type="button" className="btn-ghost btn-sm" onClick={() => download(`/api/anschreiben/${p.applicationId}/pdf`, true)}>Herunterladen</button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => download(`/api/anschreiben/${p.applicationId}/pdf`, true)}>{t("Herunterladen")}</button>
             </Attachment>
             <Attachment name="Lebenslauf (PDF)">
               {p.cvId ? (
-                <button type="button" className="btn-ghost btn-sm" onClick={() => download(`/api/lebenslauf/${p.cvId}/pdf`, false)}>Herunterladen</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => download(`/api/lebenslauf/${p.cvId}/pdf`, false)}>{t("Herunterladen")}</button>
               ) : p.coach ? (
-                <span className="text-xs text-muted">Noch kein Lebenslauf</span>
+                <span className="text-xs text-muted">{t("Noch kein Lebenslauf")}</span>
               ) : (
-                <Link href="/mein-bereich/lebenslauf" className="text-xs font-semibold text-accent hover:underline">Lebenslauf anlegen</Link>
+                <Link href="/mein-bereich/lebenslauf" className="text-xs font-semibold text-accent hover:underline">{t("Lebenslauf anlegen")}</Link>
               )}
             </Attachment>
             {extra.map((n) => (
               <Attachment key={n} name={n}>
-                <span className="text-right text-xs text-muted">{p.coach ? "selbst anhängen" : "selbst anhängen, z. B. eingescannt als PDF"}</span>
+                <span className="text-right text-xs text-muted">{p.coach ? t("selbst anhängen") : t("selbst anhängen, z. B. eingescannt als PDF")}</span>
               </Attachment>
             ))}
           </ul>
@@ -204,9 +206,10 @@ export function EmailEditor(p: Props) {
 }
 
 function Attachment({ name, children }: { name: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <li className="flex min-h-12 items-center justify-between gap-3 py-2">
-      <span className="min-w-0 truncate font-medium">{name}</span>
+      <span className="min-w-0 truncate font-medium">{t(name)}</span>
       {children}
     </li>
   );
@@ -232,6 +235,7 @@ async function copyText(value: string) {
 }
 
 function CopyButton({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  const t = useT();
   const [state, setState] = useState<"idle" | "ok" | "fail">("idle");
   const reset = useRef<number | null>(null);
   const click = useCallback(async () => {
@@ -241,19 +245,20 @@ function CopyButton({ label, value, wide }: { label: string; value: string; wide
   }, [value]);
   return (
     <button type="button" className={`btn-ghost justify-center ${wide ? "w-full" : ""}`} onClick={click} aria-live="polite">
-      {state === "ok" ? "Kopiert ✓" : state === "fail" ? "Ging nicht" : label}
+      {t(state === "ok" ? "Kopiert ✓" : state === "fail" ? "Ging nicht" : label)}
     </button>
   );
 }
 
 /** Label und „automatisch“-Knopf getrennt, damit das Feld einen sauberen Namen für Screenreader hat */
 function FieldHead({ id, label, changed, onReset, resetTitle, resetLabel }: { id: string; label: string; changed: boolean; onReset: () => void; resetTitle: string; resetLabel?: string }) {
+  const t = useT();
   return (
     <div className="label flex items-baseline justify-between gap-2">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>{t(label)}</label>
       {changed && (
-        <button type="button" className="text-xs font-normal text-muted hover:text-accent" onClick={onReset} title={resetTitle}>
-          {resetLabel ?? "↺ automatisch"}
+        <button type="button" className="text-xs font-normal text-muted hover:text-accent" onClick={onReset} title={t(resetTitle)}>
+          {t(resetLabel ?? "↺ automatisch")}
         </button>
       )}
     </div>
@@ -261,17 +266,19 @@ function FieldHead({ id, label, changed, onReset, resetTitle, resetLabel }: { id
 }
 
 function EmailInput({ label, value, onChange, changed, onReset, resetTitle, type, placeholder }: { label: string; value: string; onChange: (v: string) => void; changed: boolean; onReset: () => void; resetTitle: string; type?: string; placeholder?: string }) {
+  const t = useT();
   const id = useId();
   return (
     <div className="min-w-0">
       <FieldHead id={id} label={label} changed={changed} onReset={onReset} resetTitle={resetTitle} />
-      <input id={id} className="input" type={type ?? "text"} inputMode={type === "email" ? "email" : undefined} autoComplete="off" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input id={id} className="input" type={type ?? "text"} inputMode={type === "email" ? "email" : undefined} autoComplete="off" value={value} placeholder={placeholder && t(placeholder)} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
 
 function SaveBadge({ state }: { state: SaveState }) {
-  const text = { saved: "Gespeichert ✓", dirty: "Wird gleich gespeichert", saving: "Wird gespeichert …", error: "Nicht gespeichert" }[state];
+  const t = useT();
+  const text = t({ saved: "Gespeichert ✓", dirty: "Wird gleich gespeichert", saving: "Wird gespeichert …", error: "Nicht gespeichert" }[state]);
   const tone = state === "error" ? "text-danger" : state === "saved" ? "text-ok" : "text-muted";
   return <span className={`shrink-0 whitespace-nowrap text-sm font-medium ${tone}`} aria-live="polite">{text}</span>;
 }

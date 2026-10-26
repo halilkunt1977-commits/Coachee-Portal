@@ -3,12 +3,13 @@ import { ShareButton } from "@/components/teilen/ShareButton";
 import { fullName } from "@/lib/access";
 import { aiEnabled } from "@/lib/ai";
 import { hasFeature } from "@/lib/features";
+import { getT } from "@/lib/i18n-server";
 import { audit, requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { letterFor } from "@/lib/letter/store";
 import { signatureId } from "@/lib/signature";
 
-export const metadata = { title: "Anschreiben" };
+export const generateMetadata = async () => ({ title: (await getT())("Anschreiben") });
 
 export default async function LetterPage({ params, searchParams }: PageProps<"/anschreiben/[id]">) {
   const user = await requireUser();
@@ -38,7 +39,7 @@ export default async function LetterPage({ params, searchParams }: PageProps<"/a
       // Die Schreibhilfe hat der Coach immer, Coachees nur nach Freigabe in der Akte und ohne Hinweis auf die Technik dahinter
       draft={aiEnabled() && (coach || hasFeature(coachee, "anschreiben"))}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=bewerbungen` : "/mein-bereich/bewerbungen"}
-      backLabel={coach ? `${fullName(coachee)} · Bewerbungen` : "Meine Bewerbungen"}
+      backLabel={coach ? `${fullName(coachee)} · Bewerbungen` : (await getT())("Meine Bewerbungen")}
       share={<ShareButton kind="anschreiben" refId={app.id} role={user.role} coacheeId={coachee.id} recipient={coachee.first_name} title={[app.title, app.employer].filter(Boolean).join(" · ")} className="btn-ghost" />}
     />
   );

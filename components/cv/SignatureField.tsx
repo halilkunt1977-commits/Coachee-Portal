@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { removeSignature, saveSignature } from "@/app/actions/unterschrift";
 import { SIGNATURE_FONTS, SIGNATURE_SUBSETS, SUBSET_RANGE, signatureFontUrl } from "@/lib/signature-fonts";
+import { useT } from "@/components/i18n/LangProvider";
 
 const INK = "#17233d";
 
@@ -10,6 +11,7 @@ const INK = "#17233d";
  * in Handschrift aus dem Namen wählen. Alles wird im Browser zu einem PNG mit durchsichtigem Hintergrund, eng um die Schrift zugeschnitten.
  */
 export function SignatureField({ coacheeId, name, value, onChange }: { coacheeId: string; name: string; value: string | null; onChange: (id: string | null) => void }) {
+  const t = useT();
   const [drawing, setDrawing] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -22,41 +24,41 @@ export function SignatureField({ coacheeId, name, value, onChange }: { coacheeId
     setError(null);
     const fd = new FormData();
     fd.set("unterschrift", new File([blob], "unterschrift.png", { type: "image/png" }));
-    const res = await saveSignature(coacheeId, fd).catch(() => ({ ok: false as const, error: "Die Unterschrift konnte nicht gespeichert werden." }));
+    const res = await saveSignature(coacheeId, fd).catch(() => ({ ok: false as const, error: t("Die Unterschrift konnte nicht gespeichert werden.") }));
     setBusy(false);
-    if (!res.ok) return setError(res.error);
+    if (!res.ok) return setError(t(res.error));
     onChange(res.id);
   }
 
   async function onFile(file: File | undefined) {
     if (fileInput.current) fileInput.current.value = "";
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return setError("Bitte ein Bild als JPG, PNG oder WebP.");
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return setError(t("Bitte ein Bild als JPG, PNG oder WebP."));
     try {
       const blob = await cutOutSignature(file);
-      if (!blob) return setError("Auf dem Bild ist keine Unterschrift zu erkennen. Am besten mit dunklem Stift auf weißem Papier fotografieren.");
+      if (!blob) return setError(t("Auf dem Bild ist keine Unterschrift zu erkennen. Am besten mit dunklem Stift auf weißem Papier fotografieren."));
       await upload(blob);
     } catch {
-      setError("Das Bild konnte nicht gelesen werden.");
+      setError(t("Das Bild konnte nicht gelesen werden."));
     }
   }
 
   return (
     <div className="space-y-2">
-      <span className="label !mb-0">Digitale Unterschrift</span>
+      <span className="label !mb-0">{t("Digitale Unterschrift")}</span>
       <div className="flex flex-wrap items-center gap-3">
         <div className="grid h-20 w-56 max-w-full place-items-center rounded-xl border border-line bg-white px-3">
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/dateien/${value}`} alt="Deine Unterschrift" className="max-h-16 max-w-full object-contain" />
+            <img src={`/api/dateien/${value}`} alt={t("Deine Unterschrift")} className="max-h-16 max-w-full object-contain" />
           ) : (
-            <span className="text-xs text-muted">Noch keine Unterschrift</span>
+            <span className="text-xs text-muted">{t("Noch keine Unterschrift")}</span>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDrawing(true)}>{value ? "Neu unterschreiben" : "Unterschreiben"}</button>
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? "Speichert …" : "Bild hochladen"}</button>
-          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setSuggesting(true)}>Vorschläge</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDrawing(true)}>{value ? t("Neu unterschreiben") : t("Unterschreiben")}</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? t("Speichert …") : t("Bild hochladen")}</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setSuggesting(true)}>{t("Vorschläge")}</button>
           {value &&
             (confirm ? (
               <span className="flex items-center gap-2 text-xs">
@@ -72,15 +74,15 @@ export function SignatureField({ coacheeId, name, value, onChange }: { coacheeId
                 >
                   Ja
                 </button>
-                <button type="button" className="text-muted hover:text-ink" onClick={() => setConfirm(false)}>Nein</button>
+                <button type="button" className="text-muted hover:text-ink" onClick={() => setConfirm(false)}>{t("Nein")}</button>
               </span>
             ) : (
-              <button type="button" className="btn-ghost btn-sm" onClick={() => setConfirm(true)}>Entfernen</button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => setConfirm(true)}>{t("Entfernen")}</button>
             ))}
           <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
         </div>
       </div>
-      <p className="text-xs text-muted">Gilt für Lebenslauf und Anschreiben. Beim Hochladen wird der Papierhintergrund automatisch entfernt. Unter „Vorschläge“ gibt es deinen Namen in verschiedenen Handschriften zum Auswählen.</p>
+      <p className="text-xs text-muted">{t("Gilt für Lebenslauf und Anschreiben. Beim Hochladen wird der Papierhintergrund automatisch entfernt. Unter „Vorschläge“ gibt es deinen Namen in verschiedenen Handschriften zum Auswählen.")}</p>
       {error && <p className="text-sm text-danger" role="alert">{error}</p>}
       {suggesting && (
         <SuggestDialog
@@ -106,6 +108,7 @@ export function SignatureField({ coacheeId, name, value, onChange }: { coacheeId
 }
 
 function SignatureDialog({ onCancel, onSave }: { onCancel: () => void; onSave: (png: Blob) => void }) {
+  const t = useT();
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
@@ -174,8 +177,8 @@ function SignatureDialog({ onCancel, onSave }: { onCancel: () => void; onSave: (
     <dialog ref={dialog} onCancel={onCancel} className="m-auto w-[min(94vw,560px)] rounded-2xl border border-line-soft bg-surface p-0 text-ink backdrop:bg-ink/40">
       <div className="space-y-4 p-5">
         <div>
-          <h2 className="h2">Unterschreiben</h2>
-          <p className="text-sm text-muted">Mit dem Finger oder der Maus im Feld unterschreiben. Am Handy geht es quer etwas leichter.</p>
+          <h2 className="h2">{t("Unterschreiben")}</h2>
+          <p className="text-sm text-muted">{t("Mit dem Finger oder der Maus im Feld unterschreiben. Am Handy geht es quer etwas leichter.")}</p>
         </div>
         <div className="relative rounded-xl bg-white ring-1 ring-line">
           <canvas
@@ -185,16 +188,16 @@ function SignatureDialog({ onCancel, onSave }: { onCancel: () => void; onSave: (
             onPointerMove={move}
             onPointerUp={() => (last.current = null)}
             onPointerCancel={() => (last.current = null)}
-            aria-label="Feld für die Unterschrift"
+            aria-label={t("Feld für die Unterschrift")}
           />
           <div className="pointer-events-none absolute inset-x-6 bottom-10 border-b border-dashed border-line" />
-          {empty && <span className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-sm text-muted/70">Hier unterschreiben</span>}
+          {empty && <span className="pointer-events-none absolute inset-x-0 top-1/3 text-center text-sm text-muted/70">{t("Hier unterschreiben")}</span>}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <button type="button" className="btn-ghost btn-sm" onClick={clear} disabled={empty}>Neu anfangen</button>
+          <button type="button" className="btn-ghost btn-sm" onClick={clear} disabled={empty}>{t("Neu anfangen")}</button>
           <div className="flex gap-2">
-            <button type="button" className="btn-ghost" onClick={onCancel}>Abbrechen</button>
-            <button type="button" className="btn" onClick={save} disabled={empty}>Übernehmen</button>
+            <button type="button" className="btn-ghost" onClick={onCancel}>{t("Abbrechen")}</button>
+            <button type="button" className="btn" onClick={save} disabled={empty}>{t("Übernehmen")}</button>
           </div>
         </div>
       </div>
@@ -240,6 +243,7 @@ function drawName(c: HTMLCanvasElement, text: string, font: (typeof SIGNATURE_FO
 }
 
 function SuggestDialog({ name, onCancel, onSave }: { name: string; onCancel: () => void; onSave: (png: Blob) => void }) {
+  const t = useT();
   const dialog = useRef<HTMLDialogElement>(null);
   const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
   const [text, setText] = useState(name.trim());
@@ -274,11 +278,11 @@ function SuggestDialog({ name, onCancel, onSave }: { name: string; onCancel: () 
     <dialog ref={dialog} onCancel={onCancel} className="m-auto w-[min(94vw,640px)] rounded-2xl border border-line-soft bg-surface p-0 text-ink backdrop:bg-ink/40">
       <div className="space-y-4 p-5">
         <div>
-          <h2 className="h2">Unterschrift auswählen</h2>
-          <p className="text-sm text-muted">Dein Name in verschiedenen Handschriften. Tippe die an, die dir am besten gefällt.</p>
+          <h2 className="h2">{t("Unterschrift auswählen")}</h2>
+          <p className="text-sm text-muted">{t("Dein Name in verschiedenen Handschriften. Tippe die an, die dir am besten gefällt.")}</p>
         </div>
         <div className="space-y-2">
-          <label htmlFor="sig-name" className="label !mb-0">So soll die Unterschrift lauten</label>
+          <label htmlFor="sig-name" className="label !mb-0">{t("So soll die Unterschrift lauten")}</label>
           <input id="sig-name" className="input" value={text} maxLength={60} onChange={(e) => setText(e.target.value)} />
           {short && (
             <div className="flex flex-wrap gap-2 text-xs">
@@ -289,9 +293,9 @@ function SuggestDialog({ name, onCancel, onSave }: { name: string; onCancel: () 
           )}
         </div>
         {failed ? (
-          <p className="text-sm text-danger" role="alert">Die Schriften konnten nicht geladen werden. Bitte später noch einmal versuchen.</p>
+          <p className="text-sm text-danger" role="alert">{t("Die Schriften konnten nicht geladen werden. Bitte später noch einmal versuchen.")}</p>
         ) : (
-          <div role="radiogroup" aria-label="Vorschläge für die Unterschrift" className="grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2">
+          <div role="radiogroup" aria-label={t("Vorschläge für die Unterschrift")} className="grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2">
             {SIGNATURE_FONTS.map((f, i) => (
               <button
                 key={f.key}
@@ -303,15 +307,15 @@ function SuggestDialog({ name, onCancel, onSave }: { name: string; onCancel: () 
                 className={`relative rounded-xl bg-white p-1 ring-1 transition ${picked === i ? "ring-2 ring-accent" : "ring-line hover:ring-ink/30"}`}
               >
                 <canvas ref={(el) => { canvases.current[i] = el; }} width={SUGGEST_W} height={SUGGEST_H} className="block h-auto w-full" aria-hidden />
-                {!ready && <span className="absolute inset-0 grid place-items-center text-xs text-muted">Einen Moment …</span>}
+                {!ready && <span className="absolute inset-0 grid place-items-center text-xs text-muted">{t("Einen Moment …")}</span>}
                 {picked === i && <span className="absolute top-1.5 right-2 text-xs font-semibold text-accent">✓</span>}
               </button>
             ))}
           </div>
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onCancel}>Abbrechen</button>
-          <button type="button" className="btn" onClick={save} disabled={!ready || !text.trim()}>Übernehmen</button>
+          <button type="button" className="btn-ghost" onClick={onCancel}>{t("Abbrechen")}</button>
+          <button type="button" className="btn" onClick={save} disabled={!ready || !text.trim()}>{t("Übernehmen")}</button>
         </div>
       </div>
     </dialog>

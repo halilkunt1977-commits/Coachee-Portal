@@ -5,8 +5,9 @@ import { fullName } from "@/lib/access";
 import { audit, requireUser } from "@/lib/auth";
 import { cvFor, personalLockOf } from "@/lib/cv/store";
 import { signatureId } from "@/lib/signature";
+import { getT } from "@/lib/i18n-server";
 
-export const metadata = { title: "Lebenslauf bearbeiten" };
+export const generateMetadata = async () => ({ title: (await getT())("Lebenslauf bearbeiten") });
 
 export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) {
   const user = await requireUser();
@@ -24,7 +25,7 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
       initial={{ name: cv.name, template: cv.template, color: cv.color, data: cv.data, version: cv.version, photoId: cv.photo_file_id }}
       ai={aiEnabled() && coach}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=lebenslauf` : "/mein-bereich/lebenslauf"}
-      backLabel={coach ? fullName(coachee) : "Meine Lebensläufe"}
+      backLabel={coach ? fullName(coachee) : (await getT())("Meine Lebensläufe")}
       locked={coach ? null : personalLockOf(coachee)}
       share={<ShareButton kind="lebenslauf" refId={cv.id} role={user.role} coacheeId={coachee.id} recipient={coachee.first_name} title={cv.name} className="btn-ghost" />}
     />
