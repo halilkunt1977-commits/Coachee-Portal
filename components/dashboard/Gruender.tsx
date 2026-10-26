@@ -1,50 +1,53 @@
+import { getT } from "@/lib/i18n-server";
 import { DURCHSCHNITT, findeHebesatz } from "@/lib/tax/hebesaetze";
 import { GewerbesteuerRechner } from "./GewerbesteuerRechner";
 
 /** Ort eintragen, hell gestaltet (die Variante im Kopfband ist für dunklen Grund). Ohne action (Coach-Werkzeuge) nur als Suche über ?ort= */
-function OrtForm({ action, city }: { action?: (fd: FormData) => Promise<void>; city: string | null }) {
+async function OrtForm({ action, city }: { action?: (fd: FormData) => Promise<void>; city: string | null }) {
+  const t = await getT();
   return (
     <form action={action} className="flex flex-wrap gap-2">
-      <input name={action ? "city" : "ort"} defaultValue={city ?? ""} placeholder="z. B. Nürnberg" aria-label="Ort des Unternehmens" className="input min-w-0 flex-1 basis-40 py-2" />
-      <button className="btn-ghost">{action ? "Speichern" : "Anzeigen"}</button>
+      <input name={action ? "city" : "ort"} defaultValue={city ?? ""} placeholder={t("z. B. Nürnberg")} aria-label={t("Ort des Unternehmens")} className="input min-w-0 flex-1 basis-40 py-2" />
+      <button className="btn-ghost">{action ? t("Speichern") : t("Anzeigen")}</button>
     </form>
   );
 }
 
 /** Gewerbesteuer-Hebesatz am Ort des Coachees mit Erklärung und Beispielrechnung */
-export function HebesatzCard({ city, action, title = "Gewerbesteuer an deinem Ort" }: { city: string | null; action?: (fd: FormData) => Promise<void>; title?: string }) {
+export async function HebesatzCard({ city, action, title = "Gewerbesteuer an deinem Ort" }: { city: string | null; action?: (fd: FormData) => Promise<void>; title?: string }) {
+  const t = await getT();
   const found = findeHebesatz(city);
   const h = found?.treffer;
   return (
     <section className="card space-y-4">
       <div>
-        <h2 className="h2">{title}</h2>
-        <p className="text-sm text-muted">Jede Gemeinde legt mit dem Hebesatz selbst fest, wie hoch die Gewerbesteuer bei ihr ist.</p>
+        <h2 className="h2">{t(title)}</h2>
+        <p className="text-sm text-muted">{t("Jede Gemeinde legt mit dem Hebesatz selbst fest, wie hoch die Gewerbesteuer bei ihr ist.")}</p>
       </div>
       {h ? (
         <>
           <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-tint p-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Hebesatz {h.gemeinde}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">{t("Hebesatz {ort}", { ort: h.gemeinde })}</p>
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold tabular-nums">{h.hebesatz} %</p>
             </div>
             <div className="min-w-0 flex-1 basis-48 text-sm text-muted">
               <p>{h.landName} · {h.quelle}</p>
               <p>
-                Bundesdurchschnitt {DURCHSCHNITT.bund} %{DURCHSCHNITT.land[h.land] ? `, ${h.landName} ${DURCHSCHNITT.land[h.land]} %` : ""}
-                {h.hebesatz < DURCHSCHNITT.bund ? " – dein Ort liegt darunter." : h.hebesatz > DURCHSCHNITT.bund ? " – dein Ort liegt darüber." : "."}
+                {t("Bundesdurchschnitt {p} %", { p: DURCHSCHNITT.bund })}{DURCHSCHNITT.land[h.land] ? `, ${h.landName} ${DURCHSCHNITT.land[h.land]} %` : ""}
+                {h.hebesatz < DURCHSCHNITT.bund ? ` – ${t("dein Ort liegt darunter.")}` : h.hebesatz > DURCHSCHNITT.bund ? ` – ${t("dein Ort liegt darüber.")}` : "."}
               </p>
             </div>
           </div>
-          {h.jahr < 2025 && <p className="text-xs text-muted">Dieser Wert ist von {h.jahr}. Bitte auf der Website der Gemeinde nachsehen, ob er noch gilt (Stichwort „Hebesatzsatzung“).</p>}
+          {h.jahr < 2025 && <p className="text-xs text-muted">{t("Dieser Wert ist von {jahr}. Bitte auf der Website der Gemeinde nachsehen, ob er noch gilt (Stichwort „Hebesatzsatzung“).", { jahr: h.jahr })}</p>}
           {found.weitere.length > 0 && (
             <p className="text-xs text-muted">
-              Gleicher Name: {found.weitere.map((w) => `${w.gemeinde} (${w.landName}) ${w.hebesatz} %`).join(", ")}. Stimmt der Ort nicht, trag ihn unten genauer ein.
+              {t("Gleicher Name: {liste}. Stimmt der Ort nicht, trag ihn unten genauer ein.", { liste: found.weitere.map((w) => `${w.gemeinde} (${w.landName}) ${w.hebesatz} %`).join(", ") })}
             </p>
           )}
           <GewerbesteuerRechner hebesatz={h.hebesatz} ort={h.gemeinde} />
           <details className="text-sm" open={!action}>
-            <summary className="cursor-pointer text-muted">{action ? "Anderen Ort eintragen" : "Anderen Ort anzeigen"}</summary>
+            <summary className="cursor-pointer text-muted">{action ? t("Anderen Ort eintragen") : t("Anderen Ort anzeigen")}</summary>
             <div className="pt-2"><OrtForm action={action} city={city} /></div>
           </details>
         </>
@@ -52,12 +55,12 @@ export function HebesatzCard({ city, action, title = "Gewerbesteuer an deinem Or
         <div className="space-y-3">
           <p className="text-sm">
             {city
-              ? `Für „${city}“ haben wir keinen Hebesatz in unserer Liste. Sie enthält alle Städte ab 20.000 Einwohnern und alle Gemeinden in Mittelfranken. Den Wert findest du auf der Website deiner Gemeinde (Stichwort „Hebesatzsatzung“).`
-              : "Trag den Ort ein, an dem dein Unternehmen sitzen wird. Dann zeigen wir dir den Hebesatz und rechnen ein Beispiel."}
+              ? t("Für „{ort}“ haben wir keinen Hebesatz in unserer Liste. Sie enthält alle Städte ab 20.000 Einwohnern und alle Gemeinden in Mittelfranken. Den Wert findest du auf der Website deiner Gemeinde (Stichwort „Hebesatzsatzung“).", { ort: city })
+              : t("Trag den Ort ein, an dem dein Unternehmen sitzen wird. Dann zeigen wir dir den Hebesatz und rechnen ein Beispiel.")}
           </p>
           <OrtForm action={action} city={city} />
-          <p className="text-xs text-muted">Bis dahin rechnen wir mit dem Bundesdurchschnitt von {DURCHSCHNITT.bund} %.</p>
-          <GewerbesteuerRechner hebesatz={DURCHSCHNITT.bund} ort="Durchschnitt" />
+          <p className="text-xs text-muted">{t("Bis dahin rechnen wir mit dem Bundesdurchschnitt von {p} %.", { p: DURCHSCHNITT.bund })}</p>
+          <GewerbesteuerRechner hebesatz={DURCHSCHNITT.bund} ort={t("Durchschnitt")} />
         </div>
       )}
     </section>
@@ -153,30 +156,31 @@ const WISSEN: Block[] = [
 ];
 
 /** Wissen für Gründer: aufklappbare Abschnitte, auf dem Handy gut lesbar */
-export function GruenderWissen() {
+export async function GruenderWissen() {
+  const t = await getT();
   return (
     <section className="card space-y-3">
       <div>
-        <h2 className="h2">Wissen für Gründer</h2>
-        <p className="text-sm text-muted">Das Wichtigste in Kürze. Fragen dazu besprechen wir gern im nächsten Termin.</p>
+        <h2 className="h2">{t("Wissen für Gründer")}</h2>
+        <p className="text-sm text-muted">{t("Das Wichtigste in Kürze. Fragen dazu besprechen wir gern im nächsten Termin.")}</p>
       </div>
       <div className="divide-y divide-line-soft rounded-2xl border border-line-soft">
         {WISSEN.map((b) => (
           <details key={b.title} className="group px-4">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-3 font-semibold [&::-webkit-details-marker]:hidden">
-              {b.title}
+              {t(b.title)}
               <span className="text-muted transition group-open:rotate-90" aria-hidden>›</span>
             </summary>
             <div className="space-y-2 pb-4 text-sm leading-relaxed">
-              {b.intro && <p className="text-muted">{b.intro}</p>}
+              {b.intro && <p className="text-muted">{t(b.intro)}</p>}
               <ul className="list-disc space-y-1.5 pl-5">
-                {b.points.map((p) => <li key={p}>{p}</li>)}
+                {b.points.map((p) => <li key={p}>{t(p)}</li>)}
               </ul>
             </div>
           </details>
         ))}
       </div>
-      <p className="text-xs text-muted">Allgemeine Informationen, Stand 2026, keine Steuer- oder Rechtsberatung.</p>
+      <p className="text-xs text-muted">{t("Allgemeine Informationen, Stand 2026, keine Steuer- oder Rechtsberatung.")}</p>
     </section>
   );
 }
