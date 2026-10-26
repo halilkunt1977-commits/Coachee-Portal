@@ -32,6 +32,7 @@ export default async function LetterPage({ params, searchParams }: PageProps<"/a
       auto={auto}
       stored={stored}
       color={color}
+      signName={`${coachee.first_name} ${coachee.last_name}`}
       signatureId={await signatureId(coachee.id)}
       coach={coach}
       // Die Schreibhilfe hat der Coach immer, Coachees nur nach Freigabe in der Akte und ohne Hinweis auf die Technik dahinter

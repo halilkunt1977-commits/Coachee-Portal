@@ -1,15 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { removeSignature, saveSignature } from "@/app/actions/unterschrift";
+import { SIGNATURE_FONTS, SIGNATURE_SUBSETS, SUBSET_RANGE, signatureFontUrl } from "@/lib/signature-fonts";
 
 const INK = "#17233d";
 
 /**
- * Digitale Unterschrift: mit Finger oder Maus zeichnen oder ein Foto der Unterschrift hochladen.
- * Beides wird im Browser zu einem PNG mit durchsichtigem Hintergrund, eng um die Schrift zugeschnitten.
+ * Digitale Unterschrift: mit Finger oder Maus zeichnen, ein Foto der Unterschrift hochladen oder einen Vorschlag
+ * in Handschrift aus dem Namen wählen. Alles wird im Browser zu einem PNG mit durchsichtigem Hintergrund, eng um die Schrift zugeschnitten.
  */
-export function SignatureField({ coacheeId, value, onChange }: { coacheeId: string; value: string | null; onChange: (id: string | null) => void }) {
+export function SignatureField({ coacheeId, name, value, onChange }: { coacheeId: string; name: string; value: string | null; onChange: (id: string | null) => void }) {
   const [drawing, setDrawing] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -54,6 +56,7 @@ export function SignatureField({ coacheeId, value, onChange }: { coacheeId: stri
         <div className="flex flex-wrap gap-2">
           <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setDrawing(true)}>{value ? "Neu unterschreiben" : "Unterschreiben"}</button>
           <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => fileInput.current?.click()}>{busy ? "Speichert …" : "Bild hochladen"}</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => setSuggesting(true)}>Vorschläge</button>
           {value &&
             (confirm ? (
               <span className="flex items-center gap-2 text-xs">
@@ -77,8 +80,18 @@ export function SignatureField({ coacheeId, value, onChange }: { coacheeId: stri
           <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
         </div>
       </div>
-      <p className="text-xs text-muted">Gilt für Lebenslauf und Anschreiben. Beim Hochladen wird der Papierhintergrund automatisch entfernt.</p>
+      <p className="text-xs text-muted">Gilt für Lebenslauf und Anschreiben. Beim Hochladen wird der Papierhintergrund automatisch entfernt. Unter „Vorschläge“ gibt es deinen Namen in verschiedenen Handschriften zum Auswählen.</p>
       {error && <p className="text-sm text-danger" role="alert">{error}</p>}
+      {suggesting && (
+        <SuggestDialog
+          name={name}
+          onCancel={() => setSuggesting(false)}
+          onSave={async (blob) => {
+            setSuggesting(false);
+            await upload(blob);
+          }}
+        />
+      )}
       {drawing && (
         <SignatureDialog
           onCancel={() => setDrawing(false)}
@@ -183,6 +196,122 @@ function SignatureDialog({ onCancel, onSave }: { onCancel: () => void; onSave: (
             <button type="button" className="btn-ghost" onClick={onCancel}>Abbrechen</button>
             <button type="button" className="btn" onClick={save} disabled={empty}>Übernehmen</button>
           </div>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+/** Handschriften einmal pro Seite laden (lateinisch und erweitert, damit auch ä, ß, ş, ğ, İ passen) */
+let fontsReady: Promise<void> | null = null;
+function loadSignatureFonts() {
+  fontsReady ??= Promise.all(
+    SIGNATURE_FONTS.flatMap((f) =>
+      SIGNATURE_SUBSETS.map(async (subset) => {
+        const face = new FontFace(f.family, `url(${signatureFontUrl(f.key, subset)}) format("woff2")`, { weight: String(f.weight), unicodeRange: SUBSET_RANGE[subset] });
+        document.fonts.add(await face.load());
+      }),
+    ),
+  ).then(() => undefined);
+  fontsReady.catch(() => (fontsReady = null));
+  return fontsReady;
+}
+
+const SUGGEST_W = 900;
+const SUGGEST_H = 220;
+
+/** Name in die Fläche schreiben, so groß wie möglich, aber nie breiter als die Fläche */
+function drawName(c: HTMLCanvasElement, text: string, font: (typeof SIGNATURE_FONTS)[number]) {
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!text) return;
+  let px = Math.round(96 * font.size);
+  ctx.font = `${font.weight} ${px}px "${font.family}"`;
+  const max = c.width - 80;
+  const w = ctx.measureText(text).width;
+  if (w > max) {
+    px = Math.max(24, Math.floor((px * max) / w));
+    ctx.font = `${font.weight} ${px}px "${font.family}"`;
+  }
+  ctx.fillStyle = INK;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, c.width / 2, c.height / 2);
+}
+
+function SuggestDialog({ name, onCancel, onSave }: { name: string; onCancel: () => void; onSave: (png: Blob) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const canvases = useRef<(HTMLCanvasElement | null)[]>([]);
+  const [text, setText] = useState(name.trim());
+  const [picked, setPicked] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    dialog.current?.showModal();
+    loadSignatureFonts().then(() => setReady(true), () => setFailed(true));
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    SIGNATURE_FONTS.forEach((f, i) => {
+      const c = canvases.current[i];
+      if (c) drawName(c, text.trim(), f);
+    });
+  }, [ready, text]);
+
+  const parts = name.trim().split(/\s+/);
+  const short = parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : null;
+
+  async function save() {
+    const c = canvases.current[picked];
+    if (!c || !text.trim()) return;
+    const blob = await trimToPng(c);
+    if (blob) onSave(blob);
+  }
+
+  return (
+    <dialog ref={dialog} onCancel={onCancel} className="m-auto w-[min(94vw,640px)] rounded-2xl border border-line-soft bg-surface p-0 text-ink backdrop:bg-ink/40">
+      <div className="space-y-4 p-5">
+        <div>
+          <h2 className="h2">Unterschrift auswählen</h2>
+          <p className="text-sm text-muted">Dein Name in verschiedenen Handschriften. Tippe die an, die dir am besten gefällt.</p>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="sig-name" className="label !mb-0">So soll die Unterschrift lauten</label>
+          <input id="sig-name" className="input" value={text} maxLength={60} onChange={(e) => setText(e.target.value)} />
+          {short && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <button type="button" className="rounded-full bg-surface-2 px-3 py-1.5 hover:bg-line-soft" onClick={() => setText(name.trim())}>{name.trim()}</button>
+              <button type="button" className="rounded-full bg-surface-2 px-3 py-1.5 hover:bg-line-soft" onClick={() => setText(short)}>{short}</button>
+              <button type="button" className="rounded-full bg-surface-2 px-3 py-1.5 hover:bg-line-soft" onClick={() => setText(parts[parts.length - 1])}>{parts[parts.length - 1]}</button>
+            </div>
+          )}
+        </div>
+        {failed ? (
+          <p className="text-sm text-danger" role="alert">Die Schriften konnten nicht geladen werden. Bitte später noch einmal versuchen.</p>
+        ) : (
+          <div role="radiogroup" aria-label="Vorschläge für die Unterschrift" className="grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2">
+            {SIGNATURE_FONTS.map((f, i) => (
+              <button
+                key={f.key}
+                type="button"
+                role="radio"
+                aria-checked={picked === i}
+                aria-label={`Handschrift ${i + 1}`}
+                onClick={() => setPicked(i)}
+                className={`relative rounded-xl bg-white p-1 ring-1 transition ${picked === i ? "ring-2 ring-accent" : "ring-line hover:ring-ink/30"}`}
+              >
+                <canvas ref={(el) => { canvases.current[i] = el; }} width={SUGGEST_W} height={SUGGEST_H} className="block h-auto w-full" aria-hidden />
+                {!ready && <span className="absolute inset-0 grid place-items-center text-xs text-muted">Einen Moment …</span>}
+                {picked === i && <span className="absolute top-1.5 right-2 text-xs font-semibold text-accent">✓</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-ghost" onClick={onCancel}>Abbrechen</button>
+          <button type="button" className="btn" onClick={save} disabled={!ready || !text.trim()}>Übernehmen</button>
         </div>
       </div>
     </dialog>
