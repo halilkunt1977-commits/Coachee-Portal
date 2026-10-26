@@ -45,6 +45,7 @@ export default async function Freigaben() {
             const on = pool.filter((c) => hasFeature(c, f.key)).length;
             const month = running.reduce((a, c) => a + usage.get(c.id).features[f.key].month, 0);
             const seen = pool.filter((c) => hasFeature(c, f.key) && c.video_seen_at).length;
+            const read = pool.reduce((a, c) => a + (hasFeature(c, f.key) ? usage.get(c.id).prep.read : 0), 0);
             return (
               <div key={f.key} className="rise card space-y-2 !p-4" style={{ ["--i" as string]: i + 1 }}>
                 <p className="font-semibold">{f.label}</p>
@@ -53,6 +54,8 @@ export default async function Freigaben() {
                   <span><b className="tabular-nums">{on}</b> von {pool.length} freigegeben</span>
                   {f.ai ? (
                     <span className="text-muted"><b className="text-ink tabular-nums">{month}</b> Aufrufe diesen Monat</span>
+                  ) : f.key === "gespraechsvorbereitung" ? (
+                    <span className="text-muted"><b className="text-ink tabular-nums">{read}</b> {read === 1 ? "Vorbereitung" : "Vorbereitungen"} gelesen</span>
                   ) : (
                     <span className="text-muted"><b className="text-ink tabular-nums">{seen}</b> angesehen</span>
                   )}
@@ -120,7 +123,7 @@ function Matrix({ rows, usage }: { rows: Row[]; usage: { get: (id: string) => Co
                       {applies(f, c) || hasFeature(c, f.key) ? (
                         <div className="space-y-1">
                           <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${fullName(c)}`} />
-                          <FeatureUse f={f} u={u.features[f.key]} c={c} className="block text-xs text-muted" />
+                          <FeatureUse f={f} u={u} c={c} className="block text-xs text-muted" />
                         </div>
                       ) : (
                         <span className="text-xs text-muted" title={`Nur bei ${f.types.map((t) => typeLabel[t]).join(" und ")}`}>–</span>
@@ -150,7 +153,7 @@ function Matrix({ rows, usage }: { rows: Row[]; usage: { get: (id: string) => Co
                   <li key={f.key} className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold">{f.label}</p>
-                      <FeatureUse f={f} u={u.features[f.key]} c={c} />
+                      <FeatureUse f={f} u={u} c={c} />
                     </div>
                     <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${fullName(c)}`} showState={false} />
                   </li>

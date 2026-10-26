@@ -1,5 +1,5 @@
 // Zusatzfunktionen, die der Coach jedem Coachee einzeln freigibt (coachees.features). Die mit `ai: true` laufen über die KI
-// und zählen zur Monatsgrenze (lib/ai.ts assertAiAllowed); das Erklärvideo ist nur eine Freigabe ohne Verbrauch. Beschreibungen sind für den Coach; Coachees sehen nirgends das Wort „KI“.
+// und zählen zur Monatsgrenze (lib/ai.ts assertAiAllowed); Erklärvideo und Gesprächsvorbereitung sind nur Freigaben ohne Verbrauch. Beschreibungen sind für den Coach; Coachees sehen nirgends das Wort „KI“.
 // Was nur der Coach nutzen kann (Assistent, Businessplan-Entwürfe, Stellensuche, Lebenslauf-Formulierungen, Lebenslauf aus dem
 // Erfahrungsbogen, Gesprächsauswertung), steht hier nicht: das bleibt coachOnly.
 
@@ -38,6 +38,15 @@ export const FEATURES = [
     where: "So funktioniert’s",
     purposes: [],
     types: ["job", "gruendung"],
+    ai: false,
+  },
+  {
+    key: "gespraechsvorbereitung",
+    label: "Gesprächsvorbereitung",
+    description: "Die Vorbereitung aufs Vorstellungsgespräch lesen, die du je Stelle erstellt hast: Fragen mit Antwortvorschlag, Nachfragen, Auftreten und deine Empfehlungen. Nur zum Lesen, ohne Verbrauch.",
+    where: "Bewerbungen › Gesprächsvorbereitung",
+    purposes: [],
+    types: ["job"],
     ai: false,
   },
 ] as const satisfies readonly { key: string; label: string; description: string; where: string; purposes: readonly string[]; types: readonly ("job" | "gruendung")[]; ai: boolean }[];

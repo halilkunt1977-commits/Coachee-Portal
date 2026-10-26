@@ -43,5 +43,37 @@ export function mockJson(schemaName: string, input: string): unknown {
       ],
     };
   }
+  if (schemaName === "stellenanalyse") {
+    return {
+      fit: "mittel",
+      score: 60,
+      summary: `Testantwort ohne KI. Material: ${parts.join(", ") || "Stelle und Profil"}.`,
+      strengths: ["Erfahrung im Lager"],
+      gaps: ["Noch keine Führungserfahrung belegt"],
+      cv_tips: ["Lagerstationen nach vorn"],
+      letter_tips: ["Zuverlässigkeit belegen"],
+      interview: ["Warum diese Stelle?"],
+      salary: "",
+      next_steps: ["Stellentext einfügen"],
+      report: "Testbericht ohne KI.",
+    };
+  }
+  if (schemaName === "gespraechsvorbereitung") {
+    const stelle = input.match(/^Stelle: (.+)$/m)?.[1] ?? "die Stelle";
+    const station = input.match(/^- .+? bis .+?: (.+)$/m)?.[1] ?? "meiner letzten Stelle";
+    return {
+      focus: `Testtext für „${stelle}“. Im Gespräch kommt es darauf an, dass du deine Erfahrung aus ${station} ruhig und konkret erklärst.${input.includes("Stellentext: liegt nicht vor") ? " Der Stellentext fehlt, deshalb orientiert sich die Vorbereitung an typischen Anforderungen des Berufs." : ""}`,
+      questions: [
+        { question: "Erzählen Sie uns etwas über sich.", answer: `Ich bringe Erfahrung aus ${station} mit. Dort habe ich gelernt, sorgfältig und im Team zu arbeiten.`, tips: "Der Arbeitgeber will sehen, ob du dich kurz und klar vorstellen kannst. Höchstens zwei Minuten.", followups: ["Warum haben Sie dort aufgehört?"] },
+        { question: `Warum möchten Sie als ${stelle} bei uns arbeiten?`, answer: "Die Aufgaben passen zu dem, was ich bisher gemacht habe, und ich möchte mich in diesem Bereich weiterentwickeln.", tips: "Nenne einen konkreten Grund, der mit dem Betrieb zu tun hat.", followups: ["Was wissen Sie über unseren Betrieb?", "Wo sehen Sie sich in drei Jahren?"] },
+        { question: "Was ist Ihre größte Schwäche?", answer: "Ich bin manchmal ungeduldig, wenn Abläufe unklar sind. Ich frage deshalb früh nach und schreibe mir Absprachen auf.", tips: "Eine echte Schwäche nennen und zeigen, wie du damit umgehst.", followups: ["Können Sie ein Beispiel nennen?"] },
+        { question: "Welche Gehaltsvorstellung haben Sie?", answer: "Ich habe mich an üblichen Gehältern orientiert und stelle mir etwa [Spanne] brutto im Jahr vor.", tips: "Eine Spanne nennen, die du mit deinem Coach abgestimmt hast.", followups: [] },
+      ],
+      behavior: ["Sei etwa 10 Minuten vorher da.", "Begrüße alle freundlich mit Blickkontakt.", "Schalte dein Handy aus."],
+      bring: ["Bewerbungsmappe", "Ausweis", "Stift und Notizen mit deinen Fragen"],
+      avoid: ["Nicht schlecht über frühere Arbeitgeber reden.", "Fragen nach Gesundheit oder Familienplanung musst du nicht beantworten; lenke freundlich zur Stelle zurück."],
+      ask: ["Wie sieht die Einarbeitung aus?", "Wie ist das Team aufgestellt?", "Wie geht es nach dem Gespräch weiter?"],
+    };
+  }
   return {};
 }

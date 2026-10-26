@@ -92,6 +92,8 @@ export type Application = {
   reason: string;
   history: { at: string; status: Status; by: string }[];
   proposed_by_name: string | null;
+  /** Der Coach hat für diese Stelle eine Gesprächsvorbereitung erstellt (lib/jobs/interview-shared.ts) */
+  has_interview: boolean;
   created_at: string;
   updated_at: string;
 };

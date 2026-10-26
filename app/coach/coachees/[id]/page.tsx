@@ -15,6 +15,7 @@ import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { FinancePanel, PlanPanel } from "@/components/bp/Panels";
 import { BewerbungenPanel, StellenPanel } from "@/components/jobs/Panels";
 import { StellenAnalysen } from "@/components/jobs/Analysen";
+import { GespraechsVorbereitung } from "@/components/jobs/Vorbereitung";
 import { AnalyzeButton, FinanceItemForm, ProfileItemForm, SuggestionCard } from "@/components/akte/Wissen";
 import { aiEnabled } from "@/lib/ai";
 import { MAIL_PROBLEM_TEXT } from "@/lib/mail";
@@ -252,6 +253,7 @@ export default async function CoacheePage({ params, searchParams }: PageProps<"/
         <div className="space-y-8">
           <BewerbungenPanel user={coach} coachee={c} links={jobLinks} focus={typeof sp.stelle === "string" ? sp.stelle : null} />
           <StellenAnalysen coachee={c} coachId={coach.id} />
+          <GespraechsVorbereitung coachee={c} />
         </div>
       )}
       {tab === "zahlen" && <Zahlen coacheeId={c.id} />}
