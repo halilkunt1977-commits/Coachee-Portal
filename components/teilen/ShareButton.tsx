@@ -94,7 +94,7 @@ export function ShareButton(p: Props) {
           </label>
           <p className="text-xs text-muted">
             {coach
-              ? `${toName ?? "Der Coachee"} findet es im Posteingang und bekommt eine Meldung. Es steht auch in euren Nachrichten.${p.kind === "dokument" ? " Das Dokument wird damit freigegeben." : ""}`
+              ? `${toName ?? "Der Coachee"} findet es im Posteingang und bekommt eine Meldung. Es steht auch in euren Nachrichten.${p.kind === "dokument" ? " Das Dokument wird damit freigegeben." : ""}${p.kind === "vorbereitung" ? " Geschickt wird die gespeicherte Fassung. Was du danach änderst, kommt erst mit dem nächsten Schicken an." : ""}`
               : "Dein Coach bekommt Bescheid und findet es in seinem Posteingang. Es steht auch in euren Nachrichten."}
           </p>
           {error && <p role="alert" className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}

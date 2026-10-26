@@ -36,6 +36,12 @@ export const LIST_SECTIONS = [
   { key: "ask", title: "Deine Fragen an den Arbeitgeber", hint: "Zeigt Interesse am Ende des Gesprächs" },
 ] as const satisfies readonly { key: keyof Interview; title: string; hint: string }[];
 
+/** KI-Hilfe im Editor des Coachs (lib/jobs/interview.ts): ganze Fassung überarbeiten, weitere Fragen, eine Frage neu fassen */
+export type InterviewAiTask =
+  | { mode: "revise"; instruction: string }
+  | { mode: "more"; instruction: string }
+  | { mode: "question"; instruction: string; index: number };
+
 export type ListKey = (typeof LIST_SECTIONS)[number]["key"];
 
 export const emptyInterview = (): Interview => ({ focus: "", questions: [], behavior: [], bring: [], avoid: [], ask: [], coach: "" });

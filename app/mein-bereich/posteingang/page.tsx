@@ -53,6 +53,7 @@ const TONE: Record<InboxEntry["kind"] | "nachrichten", { icon: IconName; tone: s
   lebenslauf: { icon: "idcard", tone: "bg-tint text-accent" },
   businessplan: { icon: "doc", tone: "bg-tint text-accent" },
   finanzplan: { icon: "chart", tone: "bg-ok-soft text-ok" },
+  vorbereitung: { icon: "chat", tone: "bg-[#efe7f8] text-[#6b3fa0]" },
 };
 
 export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-bereich/posteingang">) {
@@ -236,6 +237,21 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
         <p className="text-xs text-muted">{from}</p>
         <Actions>
           <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">Anschreiben öffnen</Link>
+          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">In Bewerbungen</Link>
+        </Actions>
+      </InboxCard>
+    );
+  }
+
+  if (e.kind === "vorbereitung") {
+    const j = e.job;
+    return (
+      <InboxCard {...common} label="Gesprächsvorbereitung" title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}Deine Vorbereitung aufs Vorstellungsgespräch.`}>
+        {note}
+        <p className="text-[15px]">Für dein Gespräch{j.employer ? ` bei ${j.employer}` : ""} habe ich dir die wichtigsten Fragen mit Antwortideen, Tipps zum Auftreten und Fragen an den Arbeitgeber zusammengestellt. Lies alles in Ruhe durch und sprich die Antworten ein paarmal laut, in deinen eigenen Worten.</p>
+        <p className="text-xs text-muted">{from}</p>
+        <Actions>
+          <Link href={`/mein-bereich/bewerbungen/${j.id}/vorbereitung`} className="btn btn-sm">Vorbereitung öffnen</Link>
           <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">In Bewerbungen</Link>
         </Actions>
       </InboxCard>
