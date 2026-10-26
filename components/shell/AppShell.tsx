@@ -85,7 +85,7 @@ export function AppShell({ user, groups, extra, wide, children }: Props) {
   return (
     <div className="min-h-screen">
       {user.role === "coachee" && <Heartbeat />}
-      <aside className="night fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col overflow-y-auto px-5 py-6 scroll-soft lg:flex">
+      <aside className="night fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col overflow-y-auto px-5 py-6 scroll-soft lg:flex print:!hidden">
         <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative flex min-h-full flex-col">
           <div className="mb-8 px-1"><Brand light /></div>
@@ -93,19 +93,22 @@ export function AppShell({ user, groups, extra, wide, children }: Props) {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line-soft bg-bg/85 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line-soft bg-bg/85 px-4 py-3 backdrop-blur-xl lg:hidden print:hidden">
         <Brand />
         <Avatar name={user.name} size="size-8" />
       </header>
 
-      <div className="lg:pl-[272px]">
+      <div className="lg:pl-[272px] print:!pl-0">
         <main className={`mx-auto px-4 pt-6 pb-28 sm:px-6 lg:px-10 lg:pt-10 lg:pb-16 ${wide ? "max-w-[96rem]" : "max-w-7xl"}`}>{children}</main>
       </div>
 
-      <MobileNav tabs={mobileTabs(groups)}>
-        <div className="mb-6"><Brand light /></div>
-        {sidebar}
-      </MobileNav>
+      {/* Beim Drucken (z. B. Gesprächsvorbereitung) nur der Inhalt, ohne Menüs */}
+      <div className="print:hidden">
+        <MobileNav tabs={mobileTabs(groups)}>
+          <div className="mb-6"><Brand light /></div>
+          {sidebar}
+        </MobileNav>
+      </div>
     </div>
   );
 }

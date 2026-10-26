@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { setAiLimit } from "@/app/actions/freigaben";
 import type { Coachee } from "@/lib/access";
-import { limitOf, usageFor, type UsageCount } from "@/lib/feature-usage";
+import { limitOf, usageFor, type CoacheeUsage, type UsageCount } from "@/lib/feature-usage";
 import { FEATURES, defaultMonthlyLimit, hasFeature, type Feature } from "@/lib/features";
 import { ActionForm } from "../akte/ActionForm";
 import { Meter } from "../dashboard/Charts";
@@ -19,9 +19,13 @@ export function UsageLine({ u, className = "text-xs text-muted" }: { u: UsageCou
   );
 }
 
-/** Nutzung einer Freigabe: Aufrufe bei den KI-Hilfen, beim Erklärvideo ob es angesehen wurde */
-export function FeatureUse({ f, u, c, className = "text-xs text-muted" }: { f: Feature; u: UsageCount; c: Pick<Coachee, "video_seen_at">; className?: string }) {
-  if (f.ai) return <UsageLine u={u} className={className} />;
+/** Nutzung einer Freigabe: Aufrufe bei den KI-Hilfen, bei der Gesprächsvorbereitung wie viele vorbereitet und gelesen sind, beim Erklärvideo ob es angesehen wurde */
+export function FeatureUse({ f, u, c, className = "text-xs text-muted" }: { f: Feature; u: CoacheeUsage; c: Pick<Coachee, "video_seen_at">; className?: string }) {
+  if (f.ai) return <UsageLine u={u.features[f.key]} className={className} />;
+  if (f.key === "gespraechsvorbereitung") {
+    const { prepared, read } = u.prep;
+    return <span className={className}>{prepared ? `${prepared} vorbereitet · ${read} gelesen` : "Noch keine vorbereitet"}</span>;
+  }
   return <span className={className}>{c.video_seen_at ? `Angesehen am ${formatDate(c.video_seen_at)}` : "Noch nicht angesehen"}</span>;
 }
 
@@ -69,7 +73,7 @@ export async function FeatureBlock({ coachId, coachee: c }: { coachId: string; c
             <div className="min-w-0">
               <p className="text-sm font-semibold">{f.label}</p>
               <p className="text-xs text-muted">{f.where}</p>
-              <FeatureUse f={f} u={usage.features[f.key]} c={c} />
+              <FeatureUse f={f} u={usage} c={c} />
             </div>
             <FeatureToggle coacheeId={c.id} feature={f.key} on={hasFeature(c, f.key)} label={`${f.label} für ${c.first_name}`} showState={false} />
           </li>

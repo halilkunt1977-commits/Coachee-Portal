@@ -284,7 +284,13 @@ export default async function CoachDashboard() {
                   <span className="block font-semibold">{f.label}</span>
                   <span className="block text-xs text-muted">
                     <b className="text-ink tabular-nums">{on.length}</b> von {pool.length} freigegeben ·{" "}
-                    {f.ai ? <><b className="text-ink tabular-nums">{uses}</b> Aufrufe im Monat</> : <><b className="text-ink tabular-nums">{on.filter((c) => c.video_seen_at).length}</b> angesehen</>}
+                    {f.ai ? (
+                      <><b className="text-ink tabular-nums">{uses}</b> Aufrufe im Monat</>
+                    ) : f.key === "gespraechsvorbereitung" ? (
+                      <><b className="text-ink tabular-nums">{on.reduce((a, c) => a + usage.get(c.id).prep.read, 0)}</b> gelesen</>
+                    ) : (
+                      <><b className="text-ink tabular-nums">{on.filter((c) => c.video_seen_at).length}</b> angesehen</>
+                    )}
                   </span>
                 </Link>
               );
