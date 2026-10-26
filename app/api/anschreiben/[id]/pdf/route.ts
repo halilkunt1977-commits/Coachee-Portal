@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/anschre
   const html = renderLetterHtml(l.view, { color: l.color, signature: signatureDataUri(l.signature), fontCss: cvFontCss() });
   let pdf: Uint8Array;
   try {
-    pdf = await htmlToPdf(html);
+    pdf = await htmlToPdf(html, { fitOnePage: true });
   } catch (e) {
     console.error("PDF-Erzeugung fehlgeschlagen", e);
     return new NextResponse("Das PDF konnte gerade nicht erzeugt werden. Bitte später noch einmal versuchen.", { status: 500 });

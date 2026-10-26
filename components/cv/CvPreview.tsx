@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { paginateCv } from "@/lib/cv/paginate";
+import { fitLetter } from "@/lib/letter/fit";
 
 const PAGE_W = 794; // 210 mm in CSS-Pixeln
 const PAGE_H = 1123; // 297 mm
@@ -10,14 +11,16 @@ const PAGE_H = 1123; // 297 mm
  * der Inhalt wird direkt hineingeschrieben, damit beim Tippen nichts flackert. Die Seiten werden mit
  * derselben Funktion aufgeteilt wie im PDF, die Umbrüche in der Vorschau sind also die echten.
  */
-export function CvPreview({ html, width, showBreaks = true, className = "", title = "Vorschau des Lebenslaufs", onLayout }: { html: string; width?: number; showBreaks?: boolean; className?: string; title?: string; onLayout?: (info: { pages: number; fit: number }) => void }) {
+export function CvPreview({ html, width, showBreaks = true, className = "", title = "Vorschau des Lebenslaufs", onLayout, onePage = false, onFit }: { html: string; width?: number; showBreaks?: boolean; className?: string; title?: string; onLayout?: (info: { pages: number; fit: number }) => void; onePage?: boolean; onFit?: (info: { level: number; overflow: boolean }) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const [boxW, setBoxW] = useState(width ?? 0);
   const [height, setHeight] = useState(PAGE_H);
   const onLayoutRef = useRef(onLayout);
+  const onFitRef = useRef(onFit);
   useEffect(() => {
     onLayoutRef.current = onLayout;
+    onFitRef.current = onFit;
   });
 
   useEffect(() => {
@@ -36,6 +39,12 @@ export function CvPreview({ html, width, showBreaks = true, className = "", titl
     doc.write(html);
     doc.close();
     const measure = () => {
+      // Anschreiben: immer genau eine Seite, notfalls enger gesetzt (wie im PDF)
+      if (onePage) {
+        onFitRef.current?.(fitLetter(doc));
+        setHeight(PAGE_H);
+        return;
+      }
       if (showBreaks) {
         try {
           const info = paginateCv(doc);
@@ -57,7 +66,7 @@ export function CvPreview({ html, width, showBreaks = true, className = "", titl
       window.clearTimeout(t);
       imgs.forEach((i) => i.removeEventListener("load", measure));
     };
-  }, [html, showBreaks]);
+  }, [html, showBreaks, onePage]);
 
   const scale = boxW ? boxW / PAGE_W : 0.5;
   const pages = Math.max(1, Math.ceil(height / PAGE_H - 0.01) || 1);
