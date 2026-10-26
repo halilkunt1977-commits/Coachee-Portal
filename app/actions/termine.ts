@@ -10,8 +10,7 @@ import { appointmentFor } from "@/lib/calendar/store";
 import { one, query } from "@/lib/db";
 import { dateOrNull, text, type FormState } from "@/lib/forms";
 import { randomToken } from "@/lib/crypto";
-import { notify } from "@/lib/push";
-import { postToInbox } from "@/lib/coachee-inbox";
+import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
 const hm = (fd: FormData, key: string) => {
   const v = text(fd, key, 5);
@@ -93,8 +92,9 @@ export async function saveAppointment(id: string | null, ret: string, _prev: For
   const inboxUrl = c && (fresh || timeChanged) ? await postToInbox(c.id, "termin", saved.id, coach.id, fresh ? "neu" : "geaendert") : null;
   // Sofort-Meldung an den Coachee, wenn er eingeladen wird (gleicher Anlass wie die Einladungsmail)
   if (c?.user_id && invite && (!before || timeChanged || before.coachee_id !== c.id)) {
-    const when = new Date(`${day}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "numeric" });
-    await notify([c.user_id], { title: before ? "Termin geändert" : "Neuer Termin", body: `${when}, ${start} Uhr`, url: inboxUrl ?? "/mein-bereich/kalender", tag: `termin-${saved.id}` });
+    // Nur Ziffern, damit die Meldung in jeder Sprache passt
+    const when = new Date(`${day}T12:00:00`).toLocaleDateString("de-DE", { day: "numeric", month: "numeric" });
+    await notifyCoachee(c.user_id, { title: before ? "Termin geändert" : "Neuer Termin", body: "{datum}, {uhr} Uhr", vars: { datum: when, uhr: start }, url: inboxUrl ?? "/mein-bereich/kalender", tag: `termin-${saved.id}` });
   }
   await audit(coach.id, before ? "appointment_updated" : "appointment_created", c?.id ?? null, { appointmentId: saved.id, sync });
   refresh(c?.id ?? null);

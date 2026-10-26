@@ -7,9 +7,10 @@ import { ownCoachee } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
+import { getT } from "@/lib/i18n-server";
 import { normalizeInterview } from "@/lib/jobs/interview-shared";
 
-export const metadata = { title: "Gesprächsvorbereitung" };
+export const generateMetadata = async () => ({ title: (await getT())("Gesprächsvorbereitung") });
 
 /**
  * Gesprächsvorbereitung für eine Stelle, nur zum Lesen: die Fassung, die der Coach geschickt hat, sonst mit Freigabe
@@ -19,6 +20,7 @@ export default async function MyInterviewPrep({ params }: PageProps<"/mein-berei
   const user = await requireUser("coachee");
   const c = await ownCoachee(user);
   if (!c || c.coaching_type !== "job") notFound();
+  const t = await getT();
   const released = hasFeature(c, "gespraechsvorbereitung");
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
@@ -29,20 +31,20 @@ export default async function MyInterviewPrep({ params }: PageProps<"/mein-berei
       WHERE a.id = $1 AND a.coachee_id = $2`,
     [id, c.id, released],
   );
-  if (a && !a.interview) return <Empty>Die Gesprächsvorbereitung für diese Stelle bekommst du von deinem Coach.</Empty>;
+  if (a && !a.interview) return <Empty>{t("Die Gesprächsvorbereitung für diese Stelle bekommst du von deinem Coach.")}</Empty>;
   if (!a) notFound();
   // Für die Übersicht des Coachs: zuerst geöffnet am
   if (!a.seen) await query("UPDATE applications SET interview_seen_at = now() WHERE id = $1 AND interview_seen_at IS NULL", [a.id]);
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        back={{ href: `/mein-bereich/bewerbungen?stelle=${a.id}`, label: "Meine Bewerbungen" }}
-        eyebrow="Gesprächsvorbereitung"
+        back={{ href: `/mein-bereich/bewerbungen?stelle=${a.id}`, label: t("Meine Bewerbungen") }}
+        eyebrow={t("Gesprächsvorbereitung")}
         title={a.title}
-        description={`${[a.employer, a.location].filter(Boolean).join(" · ")}${a.employer || a.location ? ". " : ""}Lies dir alles in Ruhe durch und sprich die Antworten ein paarmal laut. Sag sie in deinen eigenen Worten, nicht auswendig gelernt.`}
+        description={`${[a.employer, a.location].filter(Boolean).join(" · ")}${a.employer || a.location ? ". " : ""}${t("Lies dir alles in Ruhe durch und sprich die Antworten ein paarmal laut. Sag sie in deinen eigenen Worten, nicht auswendig gelernt.")}`}
         actions={<PrintButton />}
       />
-      <InterviewView interview={normalizeInterview(a.interview)} coachName={a.coach_name?.split(" ")[0] || "deinem Coach"} />
+      <InterviewView interview={normalizeInterview(a.interview)} coachName={a.coach_name?.split(" ")[0] || t("deinem Coach")} />
     </div>
   );
 }

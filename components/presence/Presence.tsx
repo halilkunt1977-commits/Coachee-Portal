@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Avatar } from "@/components/shell/AppShell";
+import { Avatar } from "@/components/shell/Avatar";
 import { Icon } from "@/components/shell/icons";
 import { ago } from "@/lib/inbox/time";
 import { presenceState, presenceText, type Presence, type PresenceState } from "@/lib/presence";

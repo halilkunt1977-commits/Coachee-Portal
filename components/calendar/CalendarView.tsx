@@ -3,6 +3,7 @@ import { Icon } from "@/components/shell/icons";
 import {
   addDays,
   addMonths,
+  dateLong,
   dayLong,
   dayNum,
   isoWeek,
@@ -16,6 +17,10 @@ import {
   weekStart,
 } from "@/lib/calendar/dates";
 import type { CalItem } from "@/lib/calendar/store";
+import type { Lang, T } from "@/lib/i18n";
+import { getT, serverLang } from "@/lib/i18n-server";
+
+type L = { t: T; lang: Lang };
 
 export type View = "monat" | "woche" | "liste";
 export const isView = (v: unknown): v is View => v === "monat" || v === "woche" || v === "liste";
@@ -39,9 +44,11 @@ const OUTLOOK = { label: "Outlook", short: "Outlook", dot: "bg-[#0f6cbd]", chip:
 const TASK = { label: "Aufgabe", short: "Aufgabe", dot: "bg-danger", chip: "border-dashed border-line bg-surface text-muted" };
 export const styleOf = (k: CalItem["kind"]) => (k === "outlook" ? OUTLOOK : k === "task" ? TASK : KINDS[k]);
 
-export function CalendarView({ items, view, day, today, path, selected }: Props) {
+export async function CalendarView({ items, view, day, today, path, selected }: Props) {
+  const [t, lang] = await Promise.all([getT(), serverLang()]);
+  const l = { t, lang };
   const step = view === "monat" ? (n: number) => addMonths(day, n) : (n: number) => addDays(day, n * (view === "woche" ? 7 : 42));
-  const title = view === "monat" ? monthTitle(day) : view === "woche" ? `KW ${isoWeek(day)} · ${monthTitle(weekStart(day))}` : `Ab ${dayLong(day)}`;
+  const title = view === "monat" ? monthTitle(day, lang) : view === "woche" ? `${t("KW {n}", { n: isoWeek(day) })} · ${monthTitle(weekStart(day), lang)}` : t("Ab {datum}", { datum: dayLong(day, lang) });
   const byDay = new Map<string, CalItem[]>();
   for (const it of items) byDay.set(it.day, [...(byDay.get(it.day) ?? []), it]);
 
@@ -50,27 +57,27 @@ export function CalendarView({ items, view, day, today, path, selected }: Props)
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-3 sm:px-5">
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl border border-line bg-surface">
-            <Link href={link(path, { ansicht: view, datum: step(-1) })} aria-label="Zurück" className="grid size-9 place-items-center rounded-l-xl text-muted transition hover:bg-surface-2 hover:text-accent">
+            <Link href={link(path, { ansicht: view, datum: step(-1) })} aria-label={t("Zurück")} className="grid size-9 place-items-center rounded-l-xl text-muted transition hover:bg-surface-2 hover:text-accent">
               <span className="rotate-180"><Icon name="arrow" className="size-4" /></span>
             </Link>
-            <Link href={link(path, { ansicht: view, datum: step(1) })} aria-label="Weiter" className="grid size-9 place-items-center rounded-r-xl border-l border-line text-muted transition hover:bg-surface-2 hover:text-accent">
+            <Link href={link(path, { ansicht: view, datum: step(1) })} aria-label={t("Weiter")} className="grid size-9 place-items-center rounded-r-xl border-l border-line text-muted transition hover:bg-surface-2 hover:text-accent">
               <Icon name="arrow" className="size-4" />
             </Link>
           </div>
-          <Link href={link(path, { ansicht: view, datum: today })} className="btn-ghost btn-sm !py-2">Heute</Link>
-          <h2 className="h2 ml-1 capitalize">{title}</h2>
+          <Link href={link(path, { ansicht: view, datum: today })} className="btn-ghost btn-sm !py-2">{t("Heute")}</Link>
+          <h2 className={`h2 ml-1 ${lang === "de" ? "capitalize" : ""}`}>{title}</h2>
         </div>
-        <nav className="flex rounded-xl bg-surface-2 p-1 text-sm font-semibold" aria-label="Ansicht">
+        <nav className="flex rounded-xl bg-surface-2 p-1 text-sm font-semibold" aria-label={t("Ansicht")}>
           {(["monat", "woche", "liste"] as const).map((v) => (
             <Link key={v} href={link(path, { ansicht: v, datum: day })} className={`rounded-lg px-3 py-1.5 transition ${v === view ? "bg-surface text-accent shadow-sm" : "text-muted hover:text-ink"}`}>
-              {{ monat: "Monat", woche: "Woche", liste: "Liste" }[v]}
+              {t({ monat: "Monat", woche: "Woche", liste: "Liste" }[v])}
             </Link>
           ))}
         </nav>
       </header>
-      {view === "monat" && <Month byDay={byDay} day={day} today={today} path={path} selected={selected} />}
-      {view === "woche" && <Week byDay={byDay} day={day} today={today} path={path} selected={selected} />}
-      {view === "liste" && <Agenda items={items} today={today} selected={selected} />}
+      {view === "monat" && <Month byDay={byDay} day={day} today={today} path={path} selected={selected} l={l} />}
+      {view === "woche" && <Week byDay={byDay} day={day} today={today} path={path} selected={selected} l={l} />}
+      {view === "liste" && <Agenda items={items} today={today} selected={selected} l={l} />}
     </section>
   );
 }
@@ -89,14 +96,14 @@ function Chip({ it, selected, compact = false }: { it: CalItem; selected?: strin
   return it.external ? <a href={it.href} target="_blank" rel="noreferrer" className={cls} title={`${it.start ?? ""} ${it.title}`.trim()}>{inner}</a> : <Link href={it.href} scroll={false} className={cls} title={`${it.start ?? ""} ${it.title}`.trim()}>{inner}</Link>;
 }
 
-function Month({ byDay, day, today, path, selected }: { byDay: Map<string, CalItem[]>; day: string; today: string; path: string; selected?: string | null }) {
+function Month({ byDay, day, today, path, selected, l }: { byDay: Map<string, CalItem[]>; day: string; today: string; path: string; selected?: string | null; l: L }) {
   const weeks = monthWeeks(day);
   const month = day.slice(0, 7);
   const picked = byDay.get(day) ?? [];
   return (
     <>
       <div className="grid grid-cols-7 border-b border-line-soft bg-surface-2/60 text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
-        {weeks[0].map((d) => <div key={d} className="py-2">{weekdayShort(d)}</div>)}
+        {weeks[0].map((d) => <div key={d} className="py-2">{weekdayShort(d, l.lang)}</div>)}
       </div>
       <div className="grid grid-cols-[repeat(7,minmax(0,1fr))]">
         {weeks.flat().map((d, i) => {
@@ -116,7 +123,7 @@ function Month({ byDay, day, today, path, selected }: { byDay: Map<string, CalIt
               <div className="hidden space-y-0.5 sm:block">
                 {list.slice(0, 3).map((it) => <Chip key={it.key} it={it} selected={selected} />)}
                 {list.length > 3 && (
-                  <Link href={link(path, { ansicht: "woche", datum: d })} className="block px-1 text-[11px] font-semibold text-accent hover:underline">+{list.length - 3} weitere</Link>
+                  <Link href={link(path, { ansicht: "woche", datum: d })} className="block px-1 text-[11px] font-semibold text-accent hover:underline">{l.t("+{n} weitere", { n: list.length - 3 })}</Link>
                 )}
               </div>
             </div>
@@ -125,8 +132,8 @@ function Month({ byDay, day, today, path, selected }: { byDay: Map<string, CalIt
       </div>
       {/* Gewählter Tag als Liste, vor allem fürs Handy */}
       <div className="border-t border-line-soft px-4 py-4 sm:hidden">
-        <p className="eyebrow mb-2">{relativeDay(day, today)}</p>
-        {picked.length ? <div className="space-y-2">{picked.map((it) => <AgendaRow key={it.key} it={it} selected={selected} />)}</div> : <p className="text-sm text-muted">Keine Termine an diesem Tag.</p>}
+        <p className="eyebrow mb-2">{relativeDay(day, today, l.lang)}</p>
+        {picked.length ? <div className="space-y-2">{picked.map((it) => <AgendaRow key={it.key} it={it} selected={selected} l={l} />)}</div> : <p className="text-sm text-muted">{l.t("Keine Termine an diesem Tag.")}</p>}
       </div>
     </>
   );
@@ -134,7 +141,7 @@ function Month({ byDay, day, today, path, selected }: { byDay: Map<string, CalIt
 
 const HOURS = { from: 7, to: 20 };
 
-function Week({ byDay, day, today, path, selected }: { byDay: Map<string, CalItem[]>; day: string; today: string; path: string; selected?: string | null }) {
+function Week({ byDay, day, today, path, selected, l }: { byDay: Map<string, CalItem[]>; day: string; today: string; path: string; selected?: string | null; l: L }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart(day), i));
   const span = (HOURS.to - HOURS.from) * 60;
   const pos = (hm: string) => Math.min(Math.max(((minutes(hm) - HOURS.from * 60) / span) * 100, 0), 100);
@@ -145,14 +152,14 @@ function Week({ byDay, day, today, path, selected }: { byDay: Map<string, CalIte
           <div />
           {days.map((d) => (
             <Link key={d} href={link(path, { ansicht: "woche", datum: d })} scroll={false} className={`border-l border-line-soft px-2 py-2 text-center transition hover:bg-tint/60 ${d === day ? "bg-tint/50" : ""}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{weekdayShort(d)}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{weekdayShort(d, l.lang)}</p>
               <p className={`mx-auto mt-0.5 grid size-8 place-items-center rounded-full text-[15px] font-bold tabular-nums ${d === today ? "bg-gradient-to-br from-[#e2bd7d] to-gold text-night" : ""}`}>{dayNum(d)}</p>
             </Link>
           ))}
         </div>
         {/* Ganztägiges und Aufgaben */}
         <div className="grid grid-cols-[52px_repeat(7,minmax(0,1fr))] border-b border-line-soft">
-          <div className="px-1 py-1.5 text-right text-[10px] leading-tight text-muted">ganzer Tag</div>
+          <div className="px-1 py-1.5 text-right text-[10px] leading-tight text-muted">{l.t("ganzer Tag")}</div>
           {days.map((d) => (
             <div key={d} className="min-h-8 space-y-0.5 border-l border-line-soft p-1">
               {(byDay.get(d) ?? []).filter((it) => !it.start).map((it) => <Chip key={it.key} it={it} selected={selected} />)}
@@ -213,17 +220,17 @@ function NowLine({ pos }: { pos: (hm: string) => number }) {
   );
 }
 
-export function AgendaRow({ it, selected }: { it: CalItem; selected?: string | null }) {
+export function AgendaRow({ it, selected, l }: { it: CalItem; selected?: string | null; l: L }) {
   const s = styleOf(it.kind);
   const inner = (
     <>
       <div className="w-14 shrink-0 text-right tabular-nums">
-        {it.start ? <><p className="text-sm font-bold">{it.start}</p><p className="text-[11px] text-muted">{it.end}</p></> : <p className="text-[11px] font-semibold text-muted">{it.kind === "task" ? "fällig" : "ganztags"}</p>}
+        {it.start ? <><p className="text-sm font-bold">{it.start}</p><p className="text-[11px] text-muted">{it.end}</p></> : <p className="text-[11px] font-semibold text-muted">{l.t(it.kind === "task" ? "fällig" : "ganztags")}</p>}
       </div>
       <span className={`w-1 self-stretch rounded-full ${s.dot}`} />
       <div className="min-w-0 flex-1">
         <p className={`truncate font-semibold ${it.cancelled || it.done ? "text-muted line-through" : ""}`}>{it.title}</p>
-        <p className="truncate text-xs text-muted">{[it.cancelled ? "abgesagt" : s.short, it.sub].filter(Boolean).join(" · ")}</p>
+        <p className="truncate text-xs text-muted">{[l.t(it.cancelled ? "abgesagt" : s.short), it.sub].filter(Boolean).join(" · ")}</p>
       </div>
       {it.joinUrl && !it.cancelled && <span className="hidden rounded-full bg-[#5b5fc7] px-2 py-0.5 text-[10px] font-bold text-white sm:inline">Teams</span>}
     </>
@@ -233,18 +240,18 @@ export function AgendaRow({ it, selected }: { it: CalItem; selected?: string | n
   return it.external ? <a href={it.href} target="_blank" rel="noreferrer" className={cls}>{inner}</a> : <Link href={it.href} scroll={false} className={cls}>{inner}</Link>;
 }
 
-function Agenda({ items, today, selected }: { items: CalItem[]; today: string; selected?: string | null }) {
+function Agenda({ items, today, selected, l }: { items: CalItem[]; today: string; selected?: string | null; l: L }) {
   const days = [...new Set(items.map((i) => i.day))];
-  if (!days.length) return <p className="px-5 py-12 text-center text-sm text-muted">In den nächsten sechs Wochen steht nichts an.</p>;
+  if (!days.length) return <p className="px-5 py-12 text-center text-sm text-muted">{l.t("In den nächsten sechs Wochen steht nichts an.")}</p>;
   return (
     <div className="divide-y divide-line-soft">
       {days.map((d) => (
         <div key={d} className="grid gap-1 px-3 py-3 sm:grid-cols-[150px_1fr] sm:px-5">
           <div className="px-2 pt-2">
-            <p className={`text-sm font-bold ${d === today ? "text-gold" : ""}`}>{relativeDay(d, today)}</p>
-            <p className="text-xs text-muted">{dayLong(d).split(", ").slice(1).join(", ")}</p>
+            <p className={`text-sm font-bold ${d === today ? "text-gold" : ""}`}>{relativeDay(d, today, l.lang)}</p>
+            <p className="text-xs text-muted">{dateLong(d, l.lang)}</p>
           </div>
-          <div>{items.filter((i) => i.day === d).map((it) => <AgendaRow key={it.key} it={it} selected={selected} />)}</div>
+          <div>{items.filter((i) => i.day === d).map((it) => <AgendaRow key={it.key} it={it} selected={selected} l={l} />)}</div>
         </div>
       ))}
     </div>

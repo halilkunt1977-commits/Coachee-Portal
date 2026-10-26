@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
+import { useT } from "../i18n/LangProvider";
 
 /**
  * Zugeklappter Bereich „Mehr anzeigen“ auf der Startseite. Öffnet sich von selbst,
  * wenn ein Link auf etwas darin zeigt (z. B. #etappen), damit kein Sprungziel im Verborgenen liegt.
  */
 export function MoreSection({ id = "mehr", label, children }: { id?: string; label: ReactNode; children: ReactNode }) {
+  const t = useT();
   const ref = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export function MoreSection({ id = "mehr", label, children }: { id?: string; lab
     <details ref={ref} id={id} className="group scroll-mt-24">
       <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-semibold text-accent transition hover:border-accent/40 hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">{label}</span>
-        <span className="hidden group-open:inline">Weniger anzeigen</span>
+        <span className="hidden group-open:inline">{t("Weniger anzeigen")}</span>
         <svg viewBox="0 0 16 16" className="size-4 transition group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden><path d="M4 6l4 4 4-4" /></svg>
       </summary>
       <div className="space-y-6 pt-6">{children}</div>

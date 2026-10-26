@@ -1,11 +1,13 @@
 "use client";
 import { useFormStatus } from "react-dom";
+import { useT } from "./i18n/LangProvider";
 
-export function SubmitButton({ children, className = "btn", pendingText = "Einen Moment …" }: { children: React.ReactNode; className?: string; pendingText?: string }) {
+export function SubmitButton({ children, className = "btn", pendingText }: { children: React.ReactNode; className?: string; pendingText?: string }) {
+  const t = useT();
   const { pending } = useFormStatus();
   return (
     <button type="submit" className={className} disabled={pending}>
-      {pending ? pendingText : children}
+      {pending ? (pendingText ?? t("Einen Moment …")) : children}
     </button>
   );
 }

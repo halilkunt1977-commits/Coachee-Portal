@@ -1,4 +1,5 @@
 "use server";
+import { getT } from "@/lib/i18n-server";
 import { audit, requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { notify } from "@/lib/push";
@@ -27,6 +28,7 @@ export async function removePushSubscription(endpoint: string) {
 
 export async function sendTestPush() {
   const user = await requireUser();
-  const n = await notify([user.id], { title: "Gründarium Portal", body: "So sehen deine Meldungen aus. Alles eingerichtet!", url: user.role === "coach" ? "/coach" : "/mein-bereich", tag: "test" });
+  const t = await getT();
+  const n = await notify([user.id], { title: "Gründarium Portal", body: t("So sehen deine Meldungen aus. Alles eingerichtet!"), url: user.role === "coach" ? "/coach" : "/mein-bereich", tag: "test" });
   return n ? { ok: true } : { error: "Die Meldung kam nicht an. Bitte Meldungen erneut einschalten." };
 }

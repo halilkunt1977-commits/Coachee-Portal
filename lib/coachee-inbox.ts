@@ -1,4 +1,5 @@
 import { one, query } from "./db";
+import { translate, type Vars } from "./i18n";
 import { notify, type PushMessage } from "./push";
 import { isShareKind, SHARE_META } from "./teilen-shared";
 
@@ -33,9 +34,12 @@ export async function postToInbox(coacheeId: string, kind: InboxKind, refId: str
 }
 
 /** Sofort-Meldung an den Coachee, falls er die Handy-App eingerichtet hat. Nur Anlass, nie Inhalte. */
-export async function notifyCoachee(userId: string | null | undefined, msg: Omit<PushMessage, "url"> & { url?: string }) {
+export async function notifyCoachee(userId: string | null | undefined, msg: Omit<PushMessage, "url"> & { url?: string; /** Platzhalter in title/body, z. B. {datum} */ vars?: Vars }) {
   if (!userId) return 0;
-  return notify([userId], { url: INBOX_URL, ...msg });
+  // In der Sprache, die der Coach für den Coachee eingestellt hat
+  const lang = (await one<{ language: string }>("SELECT language FROM coachees WHERE user_id = $1", [userId]))?.language === "tr" ? "tr" : "de";
+  const { vars, ...rest } = msg;
+  return notify([userId], { url: INBOX_URL, ...rest, title: translate(lang, msg.title, vars), body: translate(lang, msg.body, vars) });
 }
 
 /** Ein Anschreiben erscheint, sobald es gespeichert ist oder der Coach es ausdrücklich geschickt hat (Platzhalter a = applications, i = coachee_inbox) */
@@ -122,7 +126,7 @@ export async function inboxEntries(coacheeId: string, limit = 100): Promise<Inbo
 }
 
 /** Das Gespräch mit dem Coach als ein Eintrag: letzte Nachricht, Anzahl ungelesen */
-export async function inboxThread(coacheeId: string, userId: string): Promise<InboxThread | null> {
+export async function inboxThread(coacheeId: string, userId: string, t: (de: string) => string = (de) => de): Promise<InboxThread | null> {
   const row = await one<{ at: string | null; unread: number; total: number; body: string | null; author_id: string | null; ref_kind: string | null; ref_title: string | null }>(
     `SELECT (SELECT max(created_at) FROM messages WHERE coachee_id = $1) AS at,
             (SELECT count(*) FROM messages WHERE coachee_id = $1 AND read_at IS NULL AND author_id IS DISTINCT FROM $2 AND ref_kind IS NULL)::int AS unread,
@@ -132,7 +136,7 @@ export async function inboxThread(coacheeId: string, userId: string): Promise<In
     [coacheeId, userId],
   );
   if (!row?.at) return null;
-  const shared = row.ref_kind && isShareKind(row.ref_kind) ? `${SHARE_META[row.ref_kind].label}: ${row.ref_title ?? ""}` : "";
+  const shared = row.ref_kind && isShareKind(row.ref_kind) ? `${t(SHARE_META[row.ref_kind].label)}: ${row.ref_title ?? ""}` : "";
   const flat = [shared, (row.body ?? "").replace(/\s+/g, " ").trim()].filter(Boolean).join(" · ");
   return { at: row.at, unread: row.unread, total: row.total, preview: flat.length > 160 ? `${flat.slice(0, 157)}…` : flat, mine: row.author_id === userId };
 }

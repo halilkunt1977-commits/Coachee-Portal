@@ -100,8 +100,9 @@ export const formatDateTime = (d: string | null | undefined) => (d ? new Date(d)
 export const formatUnits = (n: number | null | undefined) => (n == null ? "–" : `${n.toLocaleString("de-DE", { maximumFractionDigits: 2 })} UE`);
 /** Für Coachees: Unterrichtseinheiten (45 Minuten) als Zeitstunden, eine Nachkommastelle */
 export const ueToHours = (n: number) => Math.round(n * 0.75 * 10) / 10;
-export const formatHours = (n: number | null | undefined) => {
+export const formatHours = (n: number | null | undefined, lang: "de" | "tr" = "de") => {
   if (n == null) return "–";
   const h = ueToHours(n);
+  if (lang === "tr") return `${h.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} saat`;
   return `${h.toLocaleString("de-DE", { maximumFractionDigits: 1 })} ${h === 1 ? "Stunde" : "Stunden"}`;
 };

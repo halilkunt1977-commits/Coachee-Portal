@@ -19,13 +19,13 @@ export function VideoTeaser({ coacheeId, firstName, type, lang }: { coacheeId: s
           </span>
         </span>
         <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#f3d9a6]">{tr ? "Size özel video" : "Dein Erklärvideo"}</span>
-          <span className="block font-semibold leading-snug">{tr ? `${firstName}, portalınız nasıl çalışır?` : `${firstName}, so funktioniert dein Portal`}</span>
-          <span className="block text-xs text-white/60">{tr ? "Birkaç dakikada en önemli bilgiler · izleyin" : "In ein paar Minuten alles Wichtige · ansehen"}</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#f3d9a6]">{tr ? "Sana özel video" : "Dein Erklärvideo"}</span>
+          <span className="block font-semibold leading-snug">{tr ? `${firstName}, portalın nasıl çalışır?` : `${firstName}, so funktioniert dein Portal`}</span>
+          <span className="block text-xs text-white/60">{tr ? "Birkaç dakikada en önemli bilgiler · izle" : "In ein paar Minuten alles Wichtige · ansehen"}</span>
         </span>
       </Link>
       <form action={hideVideoCard.bind(null, coacheeId)} className="absolute top-1 right-1">
-        <button aria-label="Hinweis ausblenden" title="Ausblenden (das Video bleibt im Menü)" className="grid size-11 place-items-center rounded-lg text-white/55 transition hover:bg-white/10 hover:text-white">
+        <button aria-label={tr ? "Gizle" : "Hinweis ausblenden"} title={tr ? "Gizle (video menüde kalır)" : "Ausblenden (das Video bleibt im Menü)"} className="grid size-11 place-items-center rounded-lg text-white/55 transition hover:bg-white/10 hover:text-white">
           <Icon name="close" className="size-4" />
         </button>
       </form>

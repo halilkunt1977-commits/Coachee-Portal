@@ -133,7 +133,8 @@ export const SALUTATIONS = [
 ] as const;
 export type Salutation = (typeof SALUTATIONS)[number]["key"];
 
-export const describeQuery = (q: JobQuery) =>
-  [q.was, q.wo && `in ${q.wo}${q.umkreis ? ` +${q.umkreis} km` : ""}`, q.arbeitszeit && q.arbeitszeit.split(";").map((k) => ARBEITSZEIT.find((a) => a.key === k)?.label ?? k).join(", ")].filter(Boolean).join(" · ");
+/** Suche in Worten; t übersetzt für Coachees mit türkischer Oberfläche (lib/i18n.ts) */
+export const describeQuery = (q: JobQuery, t: (de: string, vars?: Record<string, string | number>) => string = (s) => s) =>
+  [q.was, q.wo && `${t("in {ort}", { ort: q.wo })}${q.umkreis ? ` +${q.umkreis} km` : ""}`, q.arbeitszeit && q.arbeitszeit.split(";").map((k) => t(ARBEITSZEIT.find((a) => a.key === k)?.label ?? k)).join(", ")].filter(Boolean).join(" · ");
 
 export const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });

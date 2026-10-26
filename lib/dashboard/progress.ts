@@ -5,6 +5,7 @@ import { SECTIONS, normalizeSections, sectionDone } from "../bp/sections";
 import { calculate, normalizeFinance } from "../bp/finance";
 import { normalizeCv, type CvData } from "../cv/types";
 import { one, query } from "../db";
+import { translate, type T } from "../i18n";
 import { categoriesFor } from "../profile";
 import { MILESTONES, type MilestoneState } from "./milestones";
 
@@ -91,7 +92,8 @@ export const weeklyUnitsSql = (filter: string) => `
   SELECT to_char(date_trunc('week', held_on), 'YYYY-MM-DD') AS week, sum(units)::float AS units
     FROM u WHERE held_on >= CURRENT_DATE - 7 * $WEEKS GROUP BY 1`;
 
-export async function progressFor(c: Coachee): Promise<Progress> {
+/** tr: Übersetzer für die Texte (Coachee mit türkischer Oberfläche); Coach und Zahlen bleiben gleich */
+export async function progressFor(c: Coachee, tr: T = (de, vars) => translate("de", de, vars)): Promise<Progress> {
   const job = c.coaching_type === "job";
   const [units, weekRows, cvRow, plan, profile, survey, jobs, ticked, lastContact] = await Promise.all([
     one<{ used: number; last: string | null }>(
@@ -121,7 +123,7 @@ export async function progressFor(c: Coachee): Promise<Progress> {
   const cv = cvRow ? normalizeCv(cvRow.data) : null;
   const cvPct = cvScore(cv);
   const sectionsRaw = normalizeSections(plan?.sections);
-  const sections = SECTIONS.map((s) => ({ key: s.key, title: s.title, done: sectionDone(sectionsRaw[s.key]), chars: sectionsRaw[s.key].text.trim().length }));
+  const sections = SECTIONS.map((s) => ({ key: s.key, title: tr(s.title), done: sectionDone(sectionsRaw[s.key]), chars: sectionsRaw[s.key].text.trim().length }));
   const bpDone = sections.filter((s) => s.done).length;
   const fin = financeScore(plan?.finance);
   const cats = categoriesFor(c.coaching_type).filter((x) => !x.internal);
@@ -132,16 +134,16 @@ export async function progressFor(c: Coachee): Promise<Progress> {
 
   const parts: Part[] = [];
   if (!job) {
-    parts.push({ key: "idee", label: "Geschäftsidee", pct: idea.done ? 100 : clampPct((idea.chars / 300) * 100), detail: idea.done ? "beschrieben" : idea.chars ? "angefangen" : "noch offen", href: "plan" });
-    parts.push({ key: "plan", label: "Businessplan", pct: clampPct((bpDone / SECTIONS.length) * 100), detail: `${bpDone} von ${SECTIONS.length} Kapiteln`, href: "plan" });
-    parts.push({ key: "finance", label: "Finanzplan", pct: fin.pct, detail: `${fin.done} von ${fin.total} Bereichen${fin.liquid ? " · Liquidität positiv" : ""}`, href: "finance" });
+    parts.push({ key: "idee", label: tr("Geschäftsidee"), pct: idea.done ? 100 : clampPct((idea.chars / 300) * 100), detail: tr(idea.done ? "beschrieben" : idea.chars ? "angefangen" : "noch offen"), href: "plan" });
+    parts.push({ key: "plan", label: tr("Businessplan"), pct: clampPct((bpDone / SECTIONS.length) * 100), detail: tr("{n} von {m} Kapiteln", { n: bpDone, m: SECTIONS.length }), href: "plan" });
+    parts.push({ key: "finance", label: tr("Finanzplan"), pct: fin.pct, detail: `${tr("{n} von {m} Bereichen", { n: fin.done, m: fin.total })}${fin.liquid ? ` · ${tr("Liquidität positiv")}` : ""}`, href: "finance" });
   }
-  parts.push({ key: "cv", label: "Lebenslauf", pct: cvPct, detail: cv ? (cvPct >= 80 ? "fast fertig" : "in Arbeit") : "noch keiner", href: "cv" });
-  parts.push({ key: "profile", label: job ? "Kompetenzprofil" : "Gründerprofil", pct: clampPct((filled / cats.length) * 100), detail: `${items} ${items === 1 ? "Eintrag" : "Einträge"} in ${filled} von ${cats.length} Bereichen`, href: "profile" });
+  parts.push({ key: "cv", label: tr("Lebenslauf"), pct: cvPct, detail: tr(cv ? (cvPct >= 80 ? "fast fertig" : "in Arbeit") : "noch keiner"), href: "cv" });
+  parts.push({ key: "profile", label: tr(job ? "Kompetenzprofil" : "Gründerprofil"), pct: clampPct((filled / cats.length) * 100), detail: tr(items === 1 ? "{n} Eintrag in {f} von {m} Bereichen" : "{n} Einträge in {f} von {m} Bereichen", { n: items, f: filled, m: cats.length }), href: "profile" });
   if (job) {
-    parts.push({ key: "survey", label: "Erfahrungsbogen", pct: surveyPct, detail: surveyPct === 100 ? "ausgefüllt" : survey ? "angefangen" : "noch offen", href: "survey" });
+    parts.push({ key: "survey", label: tr("Erfahrungsbogen"), pct: surveyPct, detail: tr(surveyPct === 100 ? "ausgefüllt" : survey ? "angefangen" : "noch offen"), href: "survey" });
     const j = jobs ?? { applied: 0, talks: 0, offers: 0 };
-    parts.push({ key: "jobs", label: "Bewerbungen", pct: j.offers ? 100 : j.talks ? 75 : clampPct(Math.min(j.applied, 10) * 5), detail: `${j.applied} verschickt · ${j.talks} Gespräch${j.talks === 1 ? "" : "e"}`, href: "jobs" });
+    parts.push({ key: "jobs", label: tr("Bewerbungen"), pct: j.offers ? 100 : j.talks ? 75 : clampPct(Math.min(j.applied, 10) * 5), detail: tr(j.talks === 1 ? "{a} verschickt · {n} Gespräch" : "{a} verschickt · {n} Gespräche", { a: j.applied, n: j.talks }), href: "jobs" });
   }
 
   const auto: Record<string, boolean> = {
@@ -157,7 +159,7 @@ export async function progressFor(c: Coachee): Promise<Progress> {
   };
   const milestones: MilestoneState[] = MILESTONES[c.coaching_type].map((m) => {
     const t = ticked.find((x) => x.key === m.key);
-    return { ...m, done: Boolean(t) || Boolean(m.auto && auto[m.key]), done_on: t?.done_on ?? null, byPortal: !t && Boolean(m.auto && auto[m.key]) };
+    return { ...m, label: tr(m.label), action: tr(m.action), hint: tr(m.hint), done: Boolean(t) || Boolean(m.auto && auto[m.key]), done_on: t?.done_on ?? null, byPortal: !t && Boolean(m.auto && auto[m.key]) };
   });
   const msPct = (milestones.filter((m) => m.done).length / milestones.length) * 100;
 
