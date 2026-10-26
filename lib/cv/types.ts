@@ -107,8 +107,6 @@ export const TIPS = {
 /** Angaben aus den Stammdaten, an die Lebensläufe und Anschreiben eines Coachees gebunden sind */
 export type PersonalLock = { firstName: string; lastName: string; email: string; phone: string; birthDate: string };
 
-/** Höchstzahl an Lebensläufen, die ein Coachee selbst anlegen kann (der Coach darf mehr) */
-export const MAX_COACHEE_CVS = 3;
 
 /**
  * Coachees: Name, E-Mail, Telefon und Geburtsdatum kommen immer aus den Stammdaten, damit das Portal nur für die
