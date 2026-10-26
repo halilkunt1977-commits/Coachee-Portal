@@ -1,6 +1,6 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { APPLIED, channelLabel, statusLabel, type Application } from "./shared";
+import { APPLIED, channelLabel, publicRefnr, statusLabel, type Application } from "./shared";
 
 /*
  * Nachweis der Eigenbemühungen: alle Bewerbungen mit Datum, Arbeitgeber, Stelle, Art der Bewerbung und Ergebnis,
@@ -30,7 +30,7 @@ export async function applicationsWorkbook(apps: Application[], meta: Meta) {
   ws.getRow(4).eachCell((c) => (c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } }));
   appliedOnly(apps).forEach((a, i) => {
     const row = ws.getRow(5 + i);
-    row.values = [i + 1, a.applied_on ? new Date(`${a.applied_on}T12:00:00Z`) : "", a.employer, a.title, a.location, channelLabel(a.channel), RESULT[a.status] ?? statusLabel(a.status), a.refnr ?? "", a.url ? { text: a.url, hyperlink: a.url } : ""];
+    row.values = [i + 1, a.applied_on ? new Date(`${a.applied_on}T12:00:00Z`) : "", a.employer, a.title, a.location, channelLabel(a.channel), RESULT[a.status] ?? statusLabel(a.status), publicRefnr(a.refnr) ?? "", a.url ? { text: a.url, hyperlink: a.url } : ""];
     row.getCell(2).numFmt = "dd.mm.yyyy";
     row.alignment = { vertical: "top", wrapText: true };
   });
@@ -40,7 +40,7 @@ export async function applicationsWorkbook(apps: Application[], meta: Meta) {
 export function applicationsHtml(apps: Application[], meta: Meta, fontCss: string) {
   const list = appliedOnly(apps);
   const rows = list
-    .map((a, i) => `<tr><td class="n">${i + 1}</td><td class="d">${esc(deDate(a.applied_on))}</td><td><b>${esc(a.employer || "–")}</b>${a.location ? `<br><span>${esc(a.location)}</span>` : ""}</td><td>${esc(a.title)}${a.refnr ? `<br><span>Ref.-Nr. ${esc(a.refnr)}</span>` : ""}</td><td>${esc(channelLabel(a.channel) || "–")}</td><td>${esc(RESULT[a.status] ?? statusLabel(a.status))}</td></tr>`)
+    .map((a, i) => `<tr><td class="n">${i + 1}</td><td class="d">${esc(deDate(a.applied_on))}</td><td><b>${esc(a.employer || "–")}</b>${a.location ? `<br><span>${esc(a.location)}</span>` : ""}</td><td>${esc(a.title)}${publicRefnr(a.refnr) ? `<br><span>Ref.-Nr. ${esc(a.refnr!)}</span>` : ""}</td><td>${esc(channelLabel(a.channel) || "–")}</td><td>${esc(RESULT[a.status] ?? statusLabel(a.status))}</td></tr>`)
     .join("");
   const counts = { all: list.length, talks: list.filter((a) => a.status === "gespraech" || a.status === "zusage").length };
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>

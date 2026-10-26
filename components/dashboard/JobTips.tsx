@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Coachee } from "@/lib/access";
 import { jobTips } from "@/lib/jobs/empfehlungen";
-import { describeQuery } from "@/lib/jobs/shared";
+import { SOURCE_LABEL, describeQuery } from "@/lib/jobs/shared";
 import { JobTipSave } from "./JobTipSave";
 
 /** Passende Stellen aus der Jobbörse für die Startseite. Läuft in Suspense, damit eine langsame Jobbörse die Seite nicht aufhält. */
@@ -24,7 +24,7 @@ export async function JobTips({ c }: { c: Coachee }) {
             <div className="min-w-0 flex-1 basis-52">
               <a href={j.externalUrl ?? j.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug hover:text-accent hover:underline">{j.title}</a>
               <p className="truncate text-sm text-muted">{[j.employer, j.location, j.distance != null ? `${j.distance.toLocaleString("de-DE")} km` : ""].filter(Boolean).join(" · ")}</p>
-              <p className="text-xs text-muted">passt zu „{j.term}“</p>
+              <p className="text-xs text-muted">passt zu „{j.term}“{j.source && j.source !== "ba" ? ` · über ${SOURCE_LABEL[j.source]}` : ""}</p>
             </div>
             <JobTipSave coacheeId={c.id} job={j} />
           </li>

@@ -2,14 +2,16 @@ import "server-only";
 import type { Coachee } from "../access";
 import { normalizeCv } from "../cv/types";
 import { one, query } from "../db";
-import { cleanWas, JobSearchError, searchJobs } from "./ba";
+import { cleanWas, JobSearchError } from "./ba";
+import { searchAll } from "./sources";
 import { normalizeQuery } from "./store";
 import { today, type Job, type JobQuery } from "./shared";
 
 /*
  * Stellenempfehlungen für die Startseite im Jobcoaching. Ohne KI: Suchbegriffe kommen der Reihe nach aus den
  * Wunschberufen im Kompetenzprofil, den gespeicherten Suchen, der Berufsbezeichnung und der letzten Station im
- * Lebenslauf. Ort aus gespeicherter Suche, Ziel („im Raum Nürnberg“), Lebenslauf oder Wohnort. An die Jobbörse
+ * Lebenslauf. Ort aus gespeicherter Suche, Ziel („im Raum Nürnberg“), Lebenslauf oder Wohnort. Gesucht wird in allen
+ * eingerichteten Börsen (lib/jobs/sources.ts). An die Börsen
  * gehen nur Suchbegriff und Ort. Ergebnis wird pro Coachee und Tag in job_tips gespeichert.
  */
 
@@ -85,7 +87,7 @@ export async function jobTips(c: Coachee, limit = 5): Promise<TipsResult> {
   ]);
   let all = cached?.jobs;
   if (!all) {
-    const results = await Promise.allSettled(queries.map((q) => searchJobs(q)));
+    const results = await Promise.allSettled(queries.map((q) => searchAll(q)));
     const ok = results.flatMap((r, i) => (r.status === "fulfilled" ? [{ term: queries[i].was, jobs: r.value.jobs }] : []));
     if (!ok.length) {
       const e = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;

@@ -3,6 +3,10 @@
 export type JobQuery = { was: string; wo: string; umkreis: number; arbeitszeit: string; angebotsart: number; ohne_zeitarbeit: boolean };
 export type SavedSearch = JobQuery & { id: string };
 
+/** Woher ein Treffer stammt: Bundesagentur oder eine der weiteren Jobbörsen (lib/jobs/sources.ts) */
+export type JobSource = "ba" | "adzuna" | "jooble";
+export const SOURCE_LABEL: Record<JobSource, string> = { ba: "Arbeitsagentur", adzuna: "Adzuna", jooble: "Jooble" };
+
 /** Ein Treffer aus der Jobbörse */
 export type Job = {
   refnr: string;
@@ -16,7 +20,28 @@ export type Job = {
   url: string;
   externalUrl: string | null;
   homeoffice?: boolean;
+  /** Fehlt bei älteren gespeicherten Treffern, dann Arbeitsagentur */
+  source?: JobSource;
 };
+
+/** Referenznummer zum Vorzeigen: nur die der Arbeitsagentur, die anderen Börsen haben interne Kennungen („adzuna:…“) */
+export const publicRefnr = (refnr: string | null) => (refnr && !/^(adzuna|jooble):/.test(refnr) ? refnr : null);
+
+/** Dieselbe Suche bei Börsen ohne offene Schnittstelle öffnen (Link, es wird nichts automatisch abgerufen) */
+export function boardLinks(q: Pick<JobQuery, "was" | "wo" | "umkreis">) {
+  const was = q.was.trim();
+  const wo = q.wo.trim();
+  const e = encodeURIComponent;
+  const slug = (v: string) => v.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const r = q.umkreis || 0;
+  return [
+    { label: "StepStone", url: `https://www.stepstone.de/jobs/${slug(was) || "stellenangebote"}${wo ? `/in-${slug(wo)}` : ""}${wo && r ? `?radius=${r}` : ""}` },
+    { label: "Indeed", url: `https://de.indeed.com/jobs?q=${e(was)}&l=${e(wo)}${wo && r ? `&radius=${r}` : ""}` },
+    { label: "XING", url: `https://www.xing.com/jobs/search?keywords=${e(was)}&location=${e(wo)}${wo && r ? `&radius=${r}` : ""}` },
+    { label: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?keywords=${e(was)}&location=${e(wo || "Deutschland")}` },
+    { label: "Google Jobs", url: `https://www.google.com/search?ibp=htl;jobs&q=${e([was, "Jobs", wo && `in ${wo}`].filter(Boolean).join(" "))}` },
+  ];
+}
 
 export type Fit = { level: "hoch" | "mittel" | "gering"; reason: string };
 

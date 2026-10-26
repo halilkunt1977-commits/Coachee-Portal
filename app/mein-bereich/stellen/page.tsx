@@ -14,7 +14,7 @@ export default async function MyJobs() {
   if (c.coaching_type !== "job") notFound();
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Meine Jobsuche" title="Stellen finden" description="Aktuelle Stellen aus der Jobbörse der Arbeitsagentur. Merk dir, was dich interessiert, dann landet es in deinen Bewerbungen." />
+      <PageHeader eyebrow="Meine Jobsuche" title="Stellen finden" description="Aktuelle Stellen aus der Jobbörse der Arbeitsagentur und weiteren Jobbörsen. Merk dir, was dich interessiert, dann landet es in deinen Bewerbungen." />
       <StellenPanel user={user} coachee={c} links={{ search: "/mein-bereich/stellen", tracker: "/mein-bereich/bewerbungen" }} />
     </div>
   );

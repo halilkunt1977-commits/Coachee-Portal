@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { addApplication, deleteApplication, updateApplication } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
-import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
+import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 /** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung; null, wenn der Coachee sie nicht sehen darf */
 type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null };
@@ -131,7 +131,7 @@ export function Tracker(p: Props) {
                   </div>
                   <p className="text-sm">{[a.employer, a.location].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">
-                    {[a.refnr && `Ref. ${a.refnr}`, a.applied_on && `beworben am ${fmt(a.applied_on)}${a.channel ? ` per ${channelLabel(a.channel)}` : ""}`, a.status === "vorschlag" && a.proposed_by_name && `vorgeschlagen von ${a.proposed_by_name}`].filter(Boolean).join(" · ")}
+                    {[publicRefnr(a.refnr) && `Ref. ${a.refnr}`, a.applied_on && `beworben am ${fmt(a.applied_on)}${a.channel ? ` per ${channelLabel(a.channel)}` : ""}`, a.status === "vorschlag" && a.proposed_by_name && `vorgeschlagen von ${a.proposed_by_name}`].filter(Boolean).join(" · ")}
                   </p>
                   {a.reason && <p className="mt-1.5 rounded-lg bg-tint/50 px-3 py-1.5 text-sm"><span className="font-semibold text-accent">Warum es passt: </span>{a.reason}</p>}
                   {a.next_on && ACTIVE.includes(a.status) && (
@@ -202,7 +202,7 @@ function Details({ a, coach, onPatch, onDelete }: { a: Application; coach: boole
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-bg px-3.5 py-3 text-sm sm:col-span-2">
           <div className="min-w-0 space-y-0.5">
             {address.length ? address.map((l, i) => <p key={i} className={i === 0 ? "font-semibold" : ""}>{l}</p>) : <p className="text-muted">Noch keine Anschrift eingetragen.</p>}
-            <p className="text-xs text-muted">{[a.refnr && `Referenznummer ${a.refnr}`, a.published_on && `ausgeschrieben am ${fmt(a.published_on)}`].filter(Boolean).join(" · ")}</p>
+            <p className="text-xs text-muted">{[publicRefnr(a.refnr) && `Referenznummer ${a.refnr}`, a.published_on && `ausgeschrieben am ${fmt(a.published_on)}`].filter(Boolean).join(" · ")}</p>
           </div>
           <button type="button" className="btn-ghost btn-sm tap" onClick={() => setEditing(true)}>Angaben bearbeiten</button>
         </div>
@@ -298,7 +298,7 @@ function JobFields({ a }: { a?: Application }) {
       </div>
       <In name="url" label="Link zur Anzeige" defaultValue={a?.url} placeholder="https://" />
       <div className="grid grid-cols-2 gap-3">
-        <In name="refnr" label="Referenznummer" defaultValue={a?.refnr ?? ""} placeholder="Kennziffer" maxLength={80} />
+        <In name="refnr" label="Referenznummer" defaultValue={publicRefnr(a?.refnr ?? null) ?? ""} placeholder="Kennziffer" maxLength={80} />
         <In name="published_on" label="Ausgeschrieben am" type="date" defaultValue={a?.published_on ?? ""} />
       </div>
     </>
