@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
 import type { Status } from "@/lib/jobs/shared";
 import { defaultQuery, listApplications, listSearches } from "@/lib/jobs/store";
+import { activeSources } from "@/lib/jobs/sources";
 import { JobSearch } from "./JobSearch";
 import { Tracker } from "./Tracker";
 
@@ -26,6 +27,7 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
       initialQuery={initialQuery}
       known={Object.fromEntries(known.map((k) => [k.refnr, k.status]))}
       trackerHref={links.tracker}
+      sources={activeSources()}
     />
   );
 }

@@ -3,8 +3,9 @@ import { coacheeFor } from "@/lib/access";
 import { AiError, assertAiAllowed, jsonResponse } from "@/lib/ai";
 import { audit, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
-import { JobSearchError, searchJobs } from "@/lib/jobs/ba";
-import { CHANNELS, SALUTATIONS, STATUSES, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { JobSearchError } from "@/lib/jobs/ba";
+import { searchAll, type SourceInfo } from "@/lib/jobs/sources";
+import { CHANNELS, SALUTATIONS, STATUSES, publicRefnr, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import { getApplication, hiddenRefs, normalizeQuery, profileForAi, storeJob } from "@/lib/jobs/store";
 import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 
@@ -55,19 +56,19 @@ export async function deleteSearch(coacheeId: string, searchId: string) {
   return { ok: true };
 }
 
-export type SearchResult = { jobs: Job[]; total: number; hidden: number; error?: string };
+export type SearchResult = { jobs: Job[]; total: number; hidden: number; sources?: SourceInfo[]; error?: string };
 
-/** Suche in der Jobbörse. Ausgeblendete Treffer werden herausgefiltert. */
+/** Suche in allen eingerichteten Jobbörsen. Ausgeblendete Treffer werden herausgefiltert. */
 export async function runSearch(coacheeId: string, raw: Partial<JobQuery>, page = 1): Promise<SearchResult> {
   const user = await requireUser();
   const c = await jobCoachee(user, coacheeId);
   const q = normalizeQuery(raw);
   if (!q.was && !q.wo) return { jobs: [], total: 0, hidden: 0, error: "Bitte mindestens einen Beruf oder einen Ort eingeben." };
   try {
-    const [res, hidden] = await Promise.all([searchJobs(q, Math.max(1, Math.min(40, Math.floor(page) || 1))), hiddenRefs(c.id)]);
+    const [res, hidden] = await Promise.all([searchAll(q, Math.max(1, Math.min(40, Math.floor(page) || 1))), hiddenRefs(c.id)]);
     const skip = new Set(hidden);
     const jobs = res.jobs.filter((j) => !skip.has(j.refnr));
-    return { jobs, total: res.total, hidden: res.jobs.length - jobs.length };
+    return { jobs, total: res.total, hidden: res.jobs.length - jobs.length, sources: res.sources };
   } catch (e) {
     if (!(e instanceof JobSearchError)) console.error("Stellensuche", e);
     return { jobs: [], total: 0, hidden: 0, error: e instanceof JobSearchError ? e.message : "Die Suche hat nicht geklappt. Bitte noch einmal versuchen." };
@@ -161,7 +162,8 @@ export async function updateApplication(coacheeId: string, id: string, patch: Pa
   if (patch.published_on !== undefined) set("published_on", isDate(patch.published_on) ? patch.published_on : null);
   for (const [k, n] of [["next_note", 200], ["contact", 300], ["note", 4000], ["reason", 600], ["location", 120], ["street", 160], ["zip", 10]] as const) if (patch[k] !== undefined) set(k, clip(patch[k], n));
   if (patch.salutation !== undefined) set("salutation", salutation(patch.salutation));
-  if (patch.refnr !== undefined) set("refnr", clip(patch.refnr, 80) || null);
+  // Kennung einer anderen Börse („adzuna:…“) zeigt das Formular nicht an; leer gelassen bleibt sie erhalten
+  if (patch.refnr !== undefined && (clip(patch.refnr, 80) || publicRefnr(cur.refnr) === cur.refnr)) set("refnr", clip(patch.refnr, 80) || null);
   if (patch.title !== undefined) set("title", clip(patch.title, 200) || cur.title);
   if (patch.employer !== undefined) set("employer", clip(patch.employer, 200));
   if (patch.url !== undefined) set("url", safeUrl(patch.url));

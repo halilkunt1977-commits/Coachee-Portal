@@ -1,9 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSearch, deleteSearch, hideJob, rateJobs, runSearch, saveJob, suggestSearches, type SearchIdea } from "@/app/actions/stellen";
+import { addSearch, deleteSearch, hideJob, rateJobs, runSearch, saveJob, suggestSearches, type SearchIdea, type SearchResult } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
-import { ANGEBOTSART, ARBEITSZEIT, STATUS_TONE, UMKREIS, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { SetupHint } from "../coach/SetupHint";
+import { ANGEBOTSART, ARBEITSZEIT, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import type { SourceInfo } from "@/lib/jobs/sources";
 
 type Props = {
   coacheeId: string;
@@ -14,6 +16,8 @@ type Props = {
   initialQuery: JobQuery;
   known: Record<string, Status>;
   trackerHref: string;
+  /** Abgefragte Börsen: immer die Arbeitsagentur, dazu die eingerichteten weiteren */
+  sources: JobSource[];
 };
 
 const ago = (iso: string | null) => {
@@ -24,6 +28,9 @@ const ago = (iso: string | null) => {
   if (days < 31) return `vor ${days} Tagen`;
   return new Date(iso).toLocaleDateString("de-DE");
 };
+
+const sourceText = (s: JobSource[]) =>
+  s.length === 1 ? "der Jobbörse der Bundesagentur für Arbeit" : `der Jobbörse der Bundesagentur für Arbeit, ${s.filter((k) => k !== "ba").map((k) => SOURCE_LABEL[k]).join(" und ")}`;
 
 const FIT_TONE = { hoch: "bg-[#e3f1e7] text-ok", mittel: "bg-[#fbf1e3] text-gold", gering: "bg-bg text-muted" } as const;
 const FIT_LABEL = { hoch: "Passt gut", mittel: "Passt teilweise", gering: "Passt kaum" } as const;
@@ -41,6 +48,7 @@ export function JobSearch(p: Props) {
   // Suche fehlgeschlagen (Arbeitsagentur nicht erreichbar o. Ä.): eigene Meldung mit „Noch einmal versuchen“ statt „0 Stellen“
   const [failed, setFailed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sourceInfo, setSourceInfo] = useState<SourceInfo[]>([]);
   const [known, setKnown] = useState(p.known);
   const [fits, setFits] = useState<Record<string, Fit>>({});
   const [rating, setRating] = useState(false);
@@ -55,7 +63,7 @@ export function JobSearch(p: Props) {
     setLoading(true);
     setError(null);
     setFailed(null);
-    const res = await runSearch(p.coacheeId, q, nextPage).catch(() => ({ jobs: [], total: 0, hidden: 0, error: "Die Suche hat nicht geklappt." }));
+    const res: SearchResult = await runSearch(p.coacheeId, q, nextPage).catch(() => ({ jobs: [], total: 0, hidden: 0, error: "Die Suche hat nicht geklappt." }));
     if (id !== req.current) return;
     setLoading(false);
     if (res.error) {
@@ -69,6 +77,7 @@ export function JobSearch(p: Props) {
     setRan(q);
     setPage(nextPage);
     setTotal(res.total);
+    if (nextPage === 1) setSourceInfo(res.sources ?? []);
     setJobs((prev) => {
       if (nextPage === 1) return res.jobs;
       const seen = new Set(prev.map((j) => j.refnr));
@@ -166,7 +175,7 @@ export function JobSearch(p: Props) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 basis-64">
             <h2 className="h2">Suchen</h2>
-            <p className="text-sm text-muted">Live aus der Jobbörse der Bundesagentur für Arbeit. Gespeicherte Suchen sehen {p.coach ? `du und ${p.firstName}` : "du und dein Coach"}.</p>
+            <p className="text-sm text-muted">Live aus {sourceText(p.sources)}. Gespeicherte Suchen sehen {p.coach ? `du und ${p.firstName}` : "du und dein Coach"}.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {p.ai && (
@@ -281,6 +290,11 @@ export function JobSearch(p: Props) {
               </button>
             )}
           </div>
+          {!failed && sourceInfo.some((s) => s.error) && (
+            <p className="rounded-xl bg-bg px-3.5 py-2 text-xs text-muted">
+              {sourceInfo.filter((s) => s.error).map((s) => s.error).join(" ")} Die Treffer der anderen Börsen siehst du trotzdem.
+            </p>
+          )}
           {failed && !loading && (
             <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f8e6e3] px-4 py-3 text-sm">
               <p className="min-w-0 flex-1 basis-60 text-danger">Die Stellensuche hat gerade nicht geklappt. Das liegt meist an der Verbindung zur Jobbörse und geht gleich wieder.</p>
@@ -300,7 +314,7 @@ export function JobSearch(p: Props) {
                     <div className="min-w-0 flex-1 basis-72">
                       <a href={j.url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{j.title}</a>
                       <p className="text-sm">{[j.employer, j.location && `${j.location}${j.distance != null ? ` (${Math.round(j.distance)} km)` : ""}`].filter(Boolean).join(" · ")}</p>
-                      <p className="text-xs text-muted">{[j.beruf && j.beruf !== j.title ? j.beruf : "", j.published && `veröffentlicht ${ago(j.published)}`, j.start && `ab ${new Date(j.start).toLocaleDateString("de-DE")}`].filter(Boolean).join(" · ")}</p>
+                      <p className="text-xs text-muted">{[j.source && j.source !== "ba" ? `über ${SOURCE_LABEL[j.source]}` : "", j.beruf && j.beruf !== j.title ? j.beruf : "", j.published && `veröffentlicht ${ago(j.published)}`, j.start && `ab ${new Date(j.start).toLocaleDateString("de-DE")}`].filter(Boolean).join(" · ")}</p>
                       {fit && (
                         <p className="mt-1.5 text-sm">
                           <span className={`badge mr-2 ${FIT_TONE[fit.level]}`}>{FIT_LABEL[fit.level]}</span>
@@ -338,7 +352,23 @@ export function JobSearch(p: Props) {
               <button type="button" className="btn-ghost" disabled={loading} onClick={() => ran && search(ran, page + 1)}>{loading ? "Lädt …" : "Weitere Stellen laden"}</button>
             </div>
           )}
-          <p className="text-center text-xs text-muted">Quelle: Jobbörse der Bundesagentur für Arbeit. Es werden nur die Suchbegriffe übertragen, keine Daten über {p.coach ? "Coachees" : "dich"}.</p>
+          <div className="space-y-2 rounded-xl border border-line-soft px-4 py-3">
+            <p className="text-sm font-medium">Dieselbe Suche in weiteren Jobbörsen</p>
+            <div className="flex flex-wrap gap-2">
+              {boardLinks(ran).map((b) => (
+                <a key={b.label} href={b.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm tap">{b.label} ↗</a>
+              ))}
+            </div>
+            <p className="text-xs text-muted">Öffnet die Börse mit Beruf und Ort. Eine passende Stelle dort trägst du unter Bewerbungen mit „+ Bewerbung eintragen“ ein.</p>
+          </div>
+          <p className="text-center text-xs text-muted">
+            Quellen: {p.sources.map((s) => SOURCE_LABEL[s]).join(", ")}. Es werden nur die Suchbegriffe übertragen, keine Daten über {p.coach ? "Coachees" : "dich"}.
+          </p>
+          {p.coach && p.sources.length < 3 && (
+            <SetupHint>
+              Weitere Börsen direkt in die Trefferliste holen: kostenlose Schlüssel bei developer.adzuna.com (App-ID und Key als ADZUNA_APP_ID und ADZUNA_APP_KEY) und jooble.org/api/about (als JOOBLE_API_KEY) in den Einstellungen der App eintragen, dann neu starten. Adzuna und Jooble sammeln Stellen aus StepStone, Indeed, Firmen-Karriereseiten und vielen weiteren Börsen.
+            </SetupHint>
+          )}
         </section>
       )}
     </div>
