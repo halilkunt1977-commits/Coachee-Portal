@@ -3,6 +3,7 @@ import { Ring } from "@/components/dashboard/Charts";
 import { Icon } from "@/components/shell/icons";
 import type { Block, Chapter, Handbook } from "@/lib/handbuch/content";
 import { Checklist } from "./Checklist";
+import { getT } from "@/lib/i18n-server";
 import { Rich } from "./Rich";
 
 type Props = { book: Handbook; name: string; done: string[]; total: number; coacheeId: string; editable: boolean; pdfHref: string; embedded?: boolean };
@@ -135,7 +136,8 @@ function BlockView({ b, coacheeId, done, editable }: { b: Block; coacheeId: stri
 }
 
 /** Das Handbuch als Webseite: Einband, Inhaltsverzeichnis, Kapitel mit Checklisten. Für Coachee (abhaken) und Coach (lesen). */
-export function HandbookView({ book, name, done, total, coacheeId, editable, pdfHref, embedded = false }: Props) {
+export async function HandbookView({ book, name, done, total, coacheeId, editable, pdfHref, embedded = false }: Props) {
+  const t = await getT();
   const pct = total ? Math.round((done.length / total) * 100) : 0;
   return (
     <div className="space-y-6">
@@ -145,13 +147,13 @@ export function HandbookView({ book, name, done, total, coacheeId, editable, pdf
           <div className="min-w-0 space-y-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#e2bd7d]">{book.title} · {book.badge}</p>
             <h1 className="font-[family-name:var(--font-display)] text-[32px] leading-[1.05] font-bold tracking-tight text-balance sm:text-5xl">{book.subtitle}</h1>
-            <p className="text-white/70">für <span className="font-semibold text-white">{name}</span> · Stand {book.stand}</p>
+            <p className="text-white/70">{t("für")} <span className="font-semibold text-white">{name}</span> · {t("Stand {stand}", { stand: book.stand })}</p>
             <div className="flex flex-wrap items-center gap-3">
-              <a href={pdfHref} className="btn-gold"><Icon name="book" className="size-4" /> Als Büchlein (PDF) laden</a>
+              <a href={pdfHref} className="btn-gold"><Icon name="book" className="size-4" /> {t("Als Büchlein (PDF) laden")}</a>
               {total > 0 && (
                 <div className="glass flex items-center gap-3 py-2 pr-4 pl-2">
                   <Ring pct={pct} size={44} stroke={5} tone="white" track="rgba(255,255,255,.15)"><span className="text-[11px] font-bold">{pct}%</span></Ring>
-                  <span className="text-sm"><span className="font-semibold">{done.length} von {total}</span> <span className="text-white/60">Schritten erledigt</span></span>
+                  <span className="text-sm"><span className="font-semibold">{t("{n} von {total}", { n: done.length, total })}</span> <span className="text-white/60">{t("Schritten erledigt")}</span></span>
                 </div>
               )}
             </div>
@@ -161,8 +163,8 @@ export function HandbookView({ book, name, done, total, coacheeId, editable, pdf
       </section>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start">
-        <nav aria-label="Inhalt" className="lg:sticky lg:top-6">
-          <p className="eyebrow mb-2 hidden lg:block">Inhalt</p>
+        <nav aria-label={t("Inhalt")} className="lg:sticky lg:top-6">
+          <p className="eyebrow mb-2 hidden lg:block">{t("Inhalt")}</p>
           <ol className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0">
             {book.chapters.map((c, i) => {
               const keys = chapterChecks(c);
@@ -184,14 +186,14 @@ export function HandbookView({ book, name, done, total, coacheeId, editable, pdf
           {book.chapters.map((c, i) => (
             <article key={c.key} id={c.key} className="card scroll-mt-24 space-y-5 sm:p-8">
               <header className="space-y-1 border-b border-line-soft pb-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">Kapitel {i + 1}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("Kapitel {n}", { n: i + 1 })}</p>
                 <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-balance sm:text-[28px]">{c.title}</h2>
                 <p className="text-muted">{c.lead}</p>
               </header>
               {c.blocks.map((b, j) => <BlockView key={j} b={b} coacheeId={coacheeId} done={done} editable={editable} />)}
             </article>
           ))}
-          <p className="px-1 text-xs text-muted">Allgemeine Informationen, Stand {book.stand}, keine Rechts- oder Steuerberatung. Verbindlich ist immer dein Bescheid.</p>
+          <p className="px-1 text-xs text-muted">{t("Allgemeine Informationen, Stand {stand}, keine Rechts- oder Steuerberatung. Verbindlich ist immer dein Bescheid.", { stand: book.stand })}</p>
         </div>
       </div>
     </div>

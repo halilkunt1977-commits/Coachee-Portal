@@ -98,7 +98,7 @@ export async function addTask(coacheeId: string, _prev: FormState, fd: FormData)
   if (user.role === "coach") {
     // Landet im Posteingang des Coachees; Sofort-Meldung immer, Mail nur auf Wunsch
     const url = await postToInbox(coacheeId, "aufgabe", task!.id, user.id);
-    if (c.user_id && fd.get("notify") === "on") await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.") }).catch(() => false);
+    if (c.user_id && fd.get("notify") === "on") await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Aufgabe im Portal.", c.language) }).catch(() => false);
     await notifyCoachee(c.user_id, { title: "Neue Aufgabe", body: "Dein Coach hat dir eine Aufgabe gegeben.", url, tag: "aufgabe" });
   }
   refresh(coacheeId);
@@ -132,7 +132,7 @@ export async function sendMessage(coacheeId: string, _prev: FormState, fd: FormD
   await audit(user.id, "message_sent", coacheeId);
   // Benachrichtigung ohne Inhalt
   if (user.role === "coach" && c.user_id) {
-    await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Nachricht von deinem Coach.") }).catch(() => false);
+    await sendMail({ to: c.email, ...noticeMail(c.first_name, "Du hast eine neue Nachricht von deinem Coach.", c.language) }).catch(() => false);
     await notifyCoachee(c.user_id, { title: "Neue Nachricht", body: "Von deinem Coach. Öffnen zum Lesen.", url: "/mein-bereich/posteingang?offen=nachrichten", tag: "nachricht" });
   } else if (user.role === "coachee") {
     await notify([c.coach_id], { title: `${c.first_name} ${c.last_name} hat geschrieben`, body: "Neue Nachricht im Portal.", url: `/coach/coachees/${c.id}?tab=nachrichten`, tag: `nachricht-${c.id}` });

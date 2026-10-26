@@ -5,6 +5,8 @@ import { appointmentsBetween } from "@/lib/calendar/store";
 import { addDays, todayBerlin } from "@/lib/calendar/dates";
 import type { User } from "@/lib/auth";
 import { one } from "@/lib/db";
+import { langOfUser } from "@/lib/i18n-server";
+import { translator } from "@/lib/i18n";
 
 /**
  * Kalender-Abo: Outlook, Google oder das Handy holen sich hier regelmäßig alle Termine.
@@ -17,9 +19,10 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/kalende
   if (!user) return new NextResponse("Nicht gefunden", { status: 404 });
   const today = todayBerlin();
   const appts = await appointmentsBetween(user, addDays(today, -60), addDays(today, 400));
+  const lang = await langOfUser(user.role === "coachee" ? user.id : null);
   const body = ics(
-    appts.map((a) => ({ ...icsEvent(a, a.status === "abgesagt"), organizer: null, attendees: [] })),
-    { method: "PUBLISH", name: user.role === "coach" ? "Gründarium Coaching" : "Mein Coaching" },
+    appts.map((a) => ({ ...icsEvent(a, a.status === "abgesagt", lang), organizer: null, attendees: [] })),
+    { method: "PUBLISH", name: user.role === "coach" ? "Gründarium Coaching" : translator(lang)("Mein Coaching") },
   );
   return new NextResponse(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Cache-Control": "private, max-age=300" } });
 }

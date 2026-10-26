@@ -4,8 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { shareTarget, targetHref } from "@/lib/teilen";
 import { isShareKind, SHARE_META } from "@/lib/teilen-shared";
+import { getT } from "@/lib/i18n-server";
 
-export const metadata = { title: "Geteilt" };
+export const generateMetadata = async () => ({ title: (await getT())("Geteilt") });
 
 /*
  * Link einer geteilten Sache. Öffnen darf nur, wer zur Akte gehört (der Coach der Akte oder der Coachee selbst);
@@ -30,14 +31,15 @@ export default async function SharedLink({ params }: PageProps<"/geteilt/[id]">)
   const target = await shareTarget(m.ref_kind, m.ref_id, m.coachee_id, user.role);
   if (target) redirect(targetHref(m.ref_kind, m.ref_id, m.coachee_id, user.role, target));
 
+  const t = await getT();
   const back = user.role === "coach" ? `/coach/coachees/${m.coachee_id}?tab=nachrichten` : "/mein-bereich/posteingang";
   return (
     <main className="grid min-h-dvh place-items-center bg-bg px-4">
       <div className="card w-full max-w-md space-y-3 text-center">
-        <p className="eyebrow">{SHARE_META[m.ref_kind].label}</p>
-        <h1 className="h2 break-words">{m.ref_title || SHARE_META[m.ref_kind].label}</h1>
-        <p className="text-muted">Das ist nicht mehr da. Vielleicht wurde es inzwischen gelöscht.</p>
-        <Link href={back} className="btn">Zurück</Link>
+        <p className="eyebrow">{t(SHARE_META[m.ref_kind].label)}</p>
+        <h1 className="h2 break-words">{m.ref_title || t(SHARE_META[m.ref_kind].label)}</h1>
+        <p className="text-muted">{t("Das ist nicht mehr da. Vielleicht wurde es inzwischen gelöscht.")}</p>
+        <Link href={back} className="btn">{t("Zurück")}</Link>
       </div>
     </main>
   );

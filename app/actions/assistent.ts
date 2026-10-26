@@ -29,7 +29,7 @@ export async function shareAnswer(chatId: string, messageId: number): Promise<{ 
   await query("INSERT INTO messages (coachee_id, author_id, body) VALUES ($1,$2,$3)", [coachee.id, user.id, msg.content.slice(0, 10000)]);
   await audit(user.id, "message_sent", coachee.id, { from: "assistant" });
   if (user.role === "coach") {
-    await sendMail({ to: coachee.email, ...noticeMail(coachee.first_name, "Du hast eine neue Nachricht von deinem Coach.") }).catch(() => false);
+    await sendMail({ to: coachee.email, ...noticeMail(coachee.first_name, "Du hast eine neue Nachricht von deinem Coach.", coachee.language) }).catch(() => false);
     await notifyCoachee(coachee.user_id, { title: "Neue Nachricht", body: "Von deinem Coach. Öffnen zum Lesen.", url: "/mein-bereich/posteingang?offen=nachrichten", tag: "nachricht" });
   } else {
     const coach = await one<{ email: string; name: string }>("SELECT email, name FROM users WHERE id = $1", [coachee.coach_id]);

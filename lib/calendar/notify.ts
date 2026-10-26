@@ -1,4 +1,6 @@
 import "server-only";
+import { one } from "../db";
+import { translator, type Lang } from "../i18n";
 import { esc, layout, mailEnabled, portalUrl, sendMail } from "../mail";
 import { dayLong, KINDS } from "./dates";
 import { cancelGraphEvent, createGraphEvent, graphEnabled, updateGraphEvent } from "./graph";
@@ -23,7 +25,8 @@ const host = () => {
 export const placeOf = (a: Pick<Appointment, "kind" | "location" | "join_url">) =>
   a.location || (a.kind === "teams" ? "Microsoft Teams-Besprechung" : a.kind === "telefon" ? "Telefon" : null);
 
-export function icsEvent(a: Appointment, cancelled = false): IcsEvent {
+export function icsEvent(a: Appointment, cancelled = false, lang: Lang = "de"): IcsEvent {
+  const t = translator(lang);
   const link = portalUrl(a.coachee_id ? "/mein-bereich/kalender" : "/coach/kalender");
   return {
     uid: `${a.id}@${host()}`,
@@ -31,8 +34,8 @@ export function icsEvent(a: Appointment, cancelled = false): IcsEvent {
     start: new Date(a.starts_at),
     end: new Date(a.ends_at),
     summary: a.title,
-    description: [a.join_url ? `Teams-Besprechung beitreten: ${a.join_url}` : "", `Im Portal: ${link}`].filter(Boolean).join("\n\n"),
-    location: placeOf(a),
+    description: [a.join_url ? t("Teams-Besprechung beitreten: {link}", { link: a.join_url }) : "", t("Im Portal: {link}", { link })].filter(Boolean).join("\n\n"),
+    location: a.location || (placeOf(a) && t(placeOf(a)!)),
     url: a.join_url,
     cancelled,
     organizer: { name: a.coach_name, email: a.coach_email },
@@ -41,26 +44,35 @@ export function icsEvent(a: Appointment, cancelled = false): IcsEvent {
   };
 }
 
-function inviteMail(a: Appointment, firstName: string, kind: "neu" | "geaendert" | "abgesagt") {
-  const when = `${dayLong(a.day)}, ${a.start} bis ${a.end} Uhr`;
-  const place = placeOf(a);
-  const subject = { neu: "Einladung", geaendert: "Geändert", abgesagt: "Abgesagt" }[kind] + `: ${a.title} am ${dayLong(a.day)} um ${a.start} Uhr`;
+/** Sprache des Coachees, an den der Termin geht */
+async function langOf(a: Appointment): Promise<Lang> {
+  if (!a.coachee_id) return "de";
+  const row = await one<{ language: string }>("SELECT language FROM coachees WHERE id = $1", [a.coachee_id]);
+  return row?.language === "tr" ? "tr" : "de";
+}
+
+function inviteMail(a: Appointment, firstName: string, kind: "neu" | "geaendert" | "abgesagt", lang: Lang = "de") {
+  const t = translator(lang);
+  const day = dayLong(a.day, lang);
+  const when = t("{tag}, {von} bis {bis} Uhr", { tag: day, von: a.start, bis: a.end });
+  const place = a.location || (placeOf(a) && t(placeOf(a)!));
+  const subject = t({ neu: "Einladung: {titel} am {tag} um {zeit} Uhr", geaendert: "Geändert: {titel} am {tag} um {zeit} Uhr", abgesagt: "Abgesagt: {titel} am {tag} um {zeit} Uhr" }[kind], { titel: a.title, tag: day, zeit: a.start });
   const lines = [
-    `Hallo ${firstName},`,
+    t("Hallo {name},", { name: firstName }),
     kind === "abgesagt"
-      ? `${a.coach_name} hat den Termin „${a.title}“ abgesagt.`
+      ? t("{coach} hat den Termin „{titel}“ abgesagt.", { coach: a.coach_name, titel: a.title })
       : kind === "geaendert"
-        ? `${a.coach_name} hat den Termin „${a.title}“ geändert. Hier die neuen Angaben:`
-        : `${a.coach_name} lädt dich zu einem Termin ein.`,
-    `Wann: ${when}`,
-    ...(place ? [`Wo: ${place}`] : []),
-    ...(kind === "abgesagt" ? [] : ["Mit „Zusagen“ in deinem Mailprogramm landet der Termin direkt in deinem Kalender. Alle Termine siehst du auch im Portal."]),
+        ? t("{coach} hat den Termin „{titel}“ geändert. Hier die neuen Angaben:", { coach: a.coach_name, titel: a.title })
+        : t("{coach} lädt dich zu einem Termin ein.", { coach: a.coach_name }),
+    t("Wann: {wann}", { wann: when }),
+    ...(place ? [t("Wo: {ort}", { ort: place })] : []),
+    ...(kind === "abgesagt" ? [] : [t("Mit „Zusagen“ in deinem Mailprogramm landet der Termin direkt in deinem Kalender. Alle Termine siehst du auch im Portal.")]),
   ];
-  const button = kind !== "abgesagt" && a.join_url ? { label: "Teams-Besprechung beitreten", href: a.join_url } : { label: "Im Portal ansehen", href: portalUrl("/mein-bereich/kalender") };
+  const button = kind !== "abgesagt" && a.join_url ? { label: t("Teams-Besprechung beitreten"), href: a.join_url } : { label: t("Im Portal ansehen"), href: portalUrl("/mein-bereich/kalender") };
   return {
     subject,
     text: `${lines.join("\n\n")}\n\n${button.label}: ${button.href}`,
-    html: layout(kind === "abgesagt" ? "Termin abgesagt" : kind === "geaendert" ? "Termin geändert" : "Einladung zum Termin", lines, button),
+    html: layout(t(kind === "abgesagt" ? "Termin abgesagt" : kind === "geaendert" ? "Termin geändert" : "Einladung zum Termin"), lines, button, lang),
   };
 }
 
@@ -96,8 +108,9 @@ export async function syncAppointment(a: Appointment, opts: { invite: boolean; t
   if (!attendee) return { result: "keine" };
   if (!mailEnabled()) return { result: "aus" };
   try {
-    const mail = inviteMail(a, opts.firstName ?? a.coachee_name ?? "", a.invited_at && opts.changed ? "geaendert" : "neu");
-    await sendMail({ to: attendee.email, replyTo: a.coach_email, ...mail, calendar: { method: "REQUEST", content: ics([icsEvent(a)], { method: "REQUEST" }) } });
+    const lang = await langOf(a);
+    const mail = inviteMail(a, opts.firstName ?? a.coachee_name ?? "", a.invited_at && opts.changed ? "geaendert" : "neu", lang);
+    await sendMail({ to: attendee.email, replyTo: a.coach_email, ...mail, calendar: { method: "REQUEST", content: ics([icsEvent(a, false, lang)], { method: "REQUEST" }) } });
     return { result: "mail" };
   } catch (e) {
     console.warn("[mail] Einladung nicht verschickt:", e instanceof Error ? e.message : e);
@@ -118,7 +131,8 @@ export async function cancelAppointmentRemote(a: Appointment, firstName: string 
   if (!a.invited_at || !a.coachee_email || a.ms_event_id) return "keine";
   if (!mailEnabled()) return "aus";
   try {
-    await sendMail({ to: a.coachee_email, replyTo: a.coach_email, ...inviteMail(a, firstName ?? a.coachee_name ?? "", "abgesagt"), calendar: { method: "CANCEL", content: ics([icsEvent(a, true)], { method: "CANCEL" }) } });
+    const lang = await langOf(a);
+    await sendMail({ to: a.coachee_email, replyTo: a.coach_email, ...inviteMail(a, firstName ?? a.coachee_name ?? "", "abgesagt", lang), calendar: { method: "CANCEL", content: ics([icsEvent(a, true, lang)], { method: "CANCEL" }) } });
     return "mail";
   } catch (e) {
     console.warn("[mail] Absage nicht verschickt:", e instanceof Error ? e.message : e);

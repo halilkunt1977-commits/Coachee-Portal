@@ -126,7 +126,7 @@ export function LetterEditor(p: Props) {
       }
       return res.error;
     },
-    [p.applicationId],
+    [p.applicationId, t],
   );
 
   useEffect(() => {

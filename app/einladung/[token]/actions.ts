@@ -4,16 +4,18 @@ import { audit, createSession } from "@/lib/auth";
 import { hashPassword, sha256 } from "@/lib/crypto";
 import { transaction } from "@/lib/db";
 import { text, type FormState } from "@/lib/forms";
+import { translator } from "@/lib/i18n";
 import { findInvite } from "@/lib/invites";
 
 export async function acceptInvite(token: string, _prev: FormState, fd: FormData): Promise<FormState> {
   const invite = await findInvite(token);
   if (!invite) return { error: "Dieser Link ist abgelaufen oder wurde schon benutzt. Bitte frag nach einem neuen Link." };
+  const t = translator(invite.language);
   const password = text(fd, "password", 500);
-  if (password.length < 10) return { error: "Das Passwort muss mindestens 10 Zeichen lang sein." };
-  if (password !== text(fd, "password2", 500)) return { error: "Die beiden Passwörter stimmen nicht überein." };
+  if (password.length < 10) return { error: t("Das Passwort muss mindestens 10 Zeichen lang sein.") };
+  if (password !== text(fd, "password2", 500)) return { error: t("Die beiden Passwörter stimmen nicht überein.") };
   const needsConsent = invite.purpose === "invite" && invite.role === "coachee";
-  if (needsConsent && fd.get("consent") !== "on") return { error: "Bitte stimme der Datenschutzerklärung zu, damit wir deine Daten im Portal speichern dürfen." };
+  if (needsConsent && fd.get("consent") !== "on") return { error: t("Bitte stimme der Datenschutzerklärung zu, damit wir deine Daten im Portal speichern dürfen.") };
 
   const hash = await hashPassword(password);
   await transaction(async (db) => {

@@ -5,6 +5,7 @@ import { cvFontCss } from "@/lib/cv/fonts";
 import { htmlToPdf } from "@/lib/cv/pdf";
 import { renderHandbookHtml } from "@/lib/handbuch/render";
 import { handbookFor } from "@/lib/handbuch/store";
+import { translator } from "@/lib/i18n";
 
 /** Das Handbuch als Büchlein (A5) zum Herunterladen, für den Coachee selbst und für seinen Coach */
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/handbuch/[id]/pdf">) {
@@ -12,14 +13,14 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/handbuc
   const session = await getSession();
   if (!session || (session.user.totp_enabled && !session.mfaPassed)) return new NextResponse("Nicht angemeldet", { status: 401 });
   const c = await coacheeFor(session.user, id);
-  const { book, ctx: hb, done } = await handbookFor(c);
+  const { book, ctx: hb, done } = await handbookFor(c, c.language);
   const html = renderHandbookHtml(book, {
     name: fullName(c),
     coach: hb.coachName,
     portal: hb.portal,
     done,
-    date: new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric", timeZone: "Europe/Berlin" }),
-  }, cvFontCss());
+    date: new Date().toLocaleDateString(c.language === "tr" ? "tr-TR" : "de-DE", { day: "2-digit", month: "long", year: "numeric", timeZone: "Europe/Berlin" }),
+  }, cvFontCss(), c.language);
   let pdf: Uint8Array;
   try {
     pdf = await htmlToPdf(html);
@@ -31,7 +32,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/handbuc
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`Mein Handbuch ${fullName(c)}.pdf`)}`,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`${translator(c.language)("Mein Handbuch")} ${fullName(c)}.pdf`)}`,
       "Cache-Control": "private, no-store",
     },
   });

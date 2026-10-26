@@ -1,3 +1,4 @@
+import { translator, type Lang } from "../i18n";
 import { inline, type Block, type Handbook } from "./content";
 
 /*
@@ -36,7 +37,8 @@ function block(b: Block, done: Set<string>, portal: string): string {
   }
 }
 
-export function renderHandbookHtml(book: Handbook, meta: { name: string; coach: string; date: string; portal: string; done: string[] }, fontCss: string) {
+export function renderHandbookHtml(book: Handbook, meta: { name: string; coach: string; date: string; portal: string; done: string[] }, fontCss: string, lang: Lang = "de") {
+  const t = translator(lang);
   const done = new Set(meta.done);
   const toc = book.chapters.map((c, i) => `<li><span class="n">${two(i + 1)}</span><span class="tt">${esc(c.title)}</span></li>`).join("");
   const chapters = book.chapters
@@ -48,11 +50,11 @@ export function renderHandbookHtml(book: Handbook, meta: { name: string; coach: 
     )
     .join("\n");
 
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${esc(book.title)}</title><style>
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>${esc(book.title)}</title><style>
 ${fontCss}
 @page { size: 148mm 210mm; margin: 17mm 15mm 19mm 15mm;
   @bottom-center { content: counter(page); font: 8pt "Source Sans 3", Arial, sans-serif; color: #8a7a5c; }
-  @bottom-left { content: "Mein Handbuch"; font: 7pt "Source Sans 3", Arial, sans-serif; color: #b0a58f; letter-spacing: .08em; } }
+  @bottom-left { content: ${JSON.stringify(t("Mein Handbuch"))}; font: 7pt "Source Sans 3", Arial, sans-serif; color: #b0a58f; letter-spacing: .08em; } }
 @page :first { margin: 0; @bottom-center { content: none; } @bottom-left { content: none; } }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -134,26 +136,26 @@ h3 { font-size: 8pt; text-transform: uppercase; letter-spacing: .1em; color: #1d
 <div class="cover">
   <div class="grid"></div>
   <div class="frame"></div>
-  <div class="brand"><div class="mark">G</div><div class="word">gründarium<small>Coaching mit Plan</small></div></div>
+  <div class="brand"><div class="mark">G</div><div class="word">gründarium<small>${esc(t("Coaching mit Plan"))}</small></div></div>
   <div class="title">
     <div class="eyebrow">${esc(book.title)}</div>
     <h1>${esc(book.subtitle)}</h1>
     <div class="rule"></div>
-    <div class="who"><span>Persönliches Exemplar für</span>${esc(meta.name)}</div>
+    <div class="who"><span>${esc(t("Persönliches Exemplar für"))}</span>${esc(meta.name)}</div>
   </div>
-  <div class="foot"><span class="badge">${esc(book.badge)}</span><span>Stand ${esc(book.stand)}</span></div>
+  <div class="foot"><span class="badge">${esc(book.badge)}</span><span>${esc(t("Stand {stand}", { stand: book.stand }))}</span></div>
 </div>
 <div class="front">
-  <p class="dear">Für ${esc(meta.name)}</p>
-  <p class="intro">Dieses Büchlein ist für die Zeit während und nach dem Coaching gedacht: zum Nachschlagen, Abhaken und Mitnehmen. Die aktuelle Fassung findest du immer in deinem Portal unter „Mein Handbuch“.<br><em>${esc(meta.coach)}</em></p>
-  <h2>Inhalt</h2>
+  <p class="dear">${esc(t("Für {name}", { name: meta.name }))}</p>
+  <p class="intro">${esc(t("Dieses Büchlein ist für die Zeit während und nach dem Coaching gedacht: zum Nachschlagen, Abhaken und Mitnehmen. Die aktuelle Fassung findest du immer in deinem Portal unter „Mein Handbuch“."))}<br><em>${esc(meta.coach)}</em></p>
+  <h2>${esc(t("Inhalt"))}</h2>
   <ol class="toc">${toc}</ol>
 </div>
 ${chapters}
 <section class="notes">
-  <h2>Notizen</h2>
+  <h2>${esc(t("Notizen"))}</h2>
   ${Array.from({ length: 16 }, () => `<div class="line"></div>`).join("")}
-  <p class="colophon">Erstellt am ${esc(meta.date)} im gründarium Portal (${esc(meta.portal)}). Allgemeine Informationen, Stand ${esc(book.stand)}, keine Rechts- oder Steuerberatung. Verbindlich ist immer dein Bescheid.</p>
+  <p class="colophon">${esc(t("Erstellt am {date} im gründarium Portal ({portal}). Allgemeine Informationen, Stand {stand}, keine Rechts- oder Steuerberatung. Verbindlich ist immer dein Bescheid.", { date: meta.date, portal: meta.portal, stand: book.stand }))}</p>
 </section>
 </body></html>`;
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { translator, type Lang } from "@/lib/i18n";
 
 export function Logo({ href = "/" }: { href?: string }) {
   return (
@@ -14,7 +15,8 @@ export function Logo({ href = "/" }: { href?: string }) {
 }
 
 /** Anmelde- und Einladungsseiten: links die Marke auf dunklem Grund, rechts das Formular */
-export function AuthCard({ title, intro, children }: { title: string; intro?: ReactNode; children: ReactNode }) {
+export function AuthCard({ title, intro, children, lang = "de" }: { title: string; intro?: ReactNode; children: ReactNode; lang?: Lang }) {
+  const t = translator(lang);
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
       <section className="night relative hidden overflow-hidden p-12 lg:flex lg:flex-col">
@@ -24,21 +26,21 @@ export function AuthCard({ title, intro, children }: { title: string; intro?: Re
           <span className="font-[family-name:var(--font-display)] text-xl font-bold">gründarium <span className="font-medium text-white/50">Portal</span></span>
         </div>
         <div className="relative mt-auto max-w-lg space-y-6">
-          <p className="eyebrow !text-white/50">Coaching mit Plan</p>
+          <p className="eyebrow !text-white/50">{t("Coaching mit Plan")}</p>
           <h2 className="font-[family-name:var(--font-display)] text-5xl leading-[1.05] font-bold tracking-tight text-balance">
-            Dein Weg. <span className="text-gradient-gold">Klar sichtbar.</span>
+            {t("Dein Weg.")} <span className="text-gradient-gold">{t("Klar sichtbar.")}</span>
           </h2>
-          <p className="text-lg text-white/70">Lebenslauf, Businessplan, Bewerbungen und jeder Termin mit deinem Coach an einem Ort, sicher und jederzeit abrufbar.</p>
+          <p className="text-lg text-white/70">{t("Lebenslauf, Businessplan, Bewerbungen und jeder Termin mit deinem Coach an einem Ort, sicher und jederzeit abrufbar.")}</p>
           <div className="grid grid-cols-3 gap-3 pt-4">
             {[["Lebenslauf", "in Minuten"], ["Businessplan", "Kapitel für Kapitel"], ["Fortschritt", "immer im Blick"]].map(([a, b]) => (
               <div key={a} className="glass px-4 py-3">
-                <p className="font-semibold">{a}</p>
-                <p className="text-xs text-white/55">{b}</p>
+                <p className="font-semibold">{t(a)}</p>
+                <p className="text-xs text-white/55">{t(b)}</p>
               </div>
             ))}
           </div>
         </div>
-        <p className="relative mt-12 text-xs text-white/35">Daten verschlüsselt gespeichert, Server in Deutschland.</p>
+        <p className="relative mt-12 text-xs text-white/35">{t("Daten verschlüsselt gespeichert, Server in Deutschland.")}</p>
       </section>
       <section className="flex items-center justify-center px-5 py-10 sm:px-10">
         <div className="rise w-full max-w-[400px]">
@@ -48,8 +50,8 @@ export function AuthCard({ title, intro, children }: { title: string; intro?: Re
           {!intro && <div className="mb-7" />}
           {children}
           <p className="mt-10 flex gap-4 text-xs text-muted">
-            <Link href="/datenschutz" className="hover:text-ink">Datenschutz</Link>
-            <Link href="/impressum" className="hover:text-ink">Impressum</Link>
+            <Link href="/datenschutz" className="hover:text-ink">{t("Datenschutz")}</Link>
+            <Link href="/impressum" className="hover:text-ink">{t("Impressum")}</Link>
           </p>
         </div>
       </section>

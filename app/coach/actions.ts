@@ -39,10 +39,10 @@ function readCoachee(fd: FormData) {
   };
 }
 
-async function sendInvite(coach: { name: string }, c: { user_id: string; first_name: string; email: string }) {
+async function sendInvite(coach: { name: string }, c: { user_id: string; first_name: string; email: string; language: "de" | "tr" }) {
   const link = await createInvite(c.user_id, "invite");
   let problem: string | null = null;
-  const sent = await sendMail({ to: c.email, ...inviteMail(c.first_name, coach.name, link) }).catch((e) => {
+  const sent = await sendMail({ to: c.email, ...inviteMail(c.first_name, coach.name, link, c.language) }).catch((e) => {
     console.error("[mail] invite", e);
     problem = mailProblem(e);
     return false;
@@ -80,7 +80,7 @@ export async function createCoachee(_prev: FormState, fd: FormData): Promise<For
   const invite = fd.get("invite") === "on";
   let q = "";
   if (invite) {
-    const { sent, problem } = await sendInvite(coach, { user_id: created.user_id, first_name: c.first_name, email: c.email });
+    const { sent, problem } = await sendInvite(coach, { user_id: created.user_id, first_name: c.first_name, email: c.email, language: c.language === "tr" ? "tr" : "de" });
     await audit(coach.id, "invite_sent", created.id, { mail: sent });
     q = sent ? "?eingeladen=1" : `?eingeladen=${problem}`;
   }
@@ -126,7 +126,7 @@ export async function resendInvite(coacheeId: string) {
   const coach = await requireCoach();
   const c = await coacheeFor(coach, coacheeId);
   if (!c.user_id) return;
-  const { sent, problem } = await sendInvite(coach, { user_id: c.user_id, first_name: c.first_name, email: c.email });
+  const { sent, problem } = await sendInvite(coach, { user_id: c.user_id, first_name: c.first_name, email: c.email, language: c.language });
   await audit(coach.id, "invite_sent", coacheeId, { mail: sent });
   redirect(`/coach/coachees/${coacheeId}?tab=stammdaten&eingeladen=${sent ? "1" : problem}`);
 }
