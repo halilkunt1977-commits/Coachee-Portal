@@ -52,6 +52,7 @@ export function LetterEditor(p: Props) {
   const [adText, setAdText] = useState(p.stored?.adText ?? "");
   const [useSignature, setUseSignature] = useState(initial.signature);
   const [signatureId, setSignatureId] = useState(p.signatureId);
+  const [fit, setFit] = useState({ level: 0, overflow: false });
   const [save, setSave] = useState<SaveState>("saved");
   const [view, setView] = useState<"form" | "preview">("form");
   const [mode, setModeState] = useState<"brief" | "email">(p.initialMode ?? "brief");
@@ -308,8 +309,18 @@ export function LetterEditor(p: Props) {
         </div>
 
         <div className={`lg:sticky lg:top-20 ${view === "preview" ? "" : "hidden lg:block"}`}>
-          <CvPreview html={html} showBreaks={false} title="Vorschau des Anschreibens" />
-          <p className="mt-2 text-center text-xs text-muted">So sieht das Anschreiben im PDF aus. Die Word-Datei hat denselben Aufbau.</p>
+          <CvPreview html={html} showBreaks={false} onePage onFit={setFit} title="Vorschau des Anschreibens" />
+          {fit.overflow ? (
+            <p className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-center text-sm font-medium text-danger" role="alert">
+              Der Text ist zu lang für eine Seite. Bitte kürzen, sonst fehlt am Ende etwas.
+            </p>
+          ) : fit.level >= 7 ? (
+            <p className="mt-2 rounded-lg bg-gold/10 px-3 py-2 text-center text-sm text-ink">Passt gerade noch auf eine Seite, aber sehr eng. Besser etwas kürzen, auch für die Word-Datei.</p>
+          ) : fit.level > 0 ? (
+            <p className="mt-2 text-center text-xs text-muted">Etwas enger gesetzt, damit alles auf eine Seite passt. Kürzer wirkt meist besser.</p>
+          ) : (
+            <p className="mt-2 text-center text-xs text-muted">So sieht das Anschreiben im PDF aus, immer auf einer Seite. Die Word-Datei hat denselben Aufbau.</p>
+          )}
         </div>
       </div>
       </>
