@@ -9,7 +9,7 @@ import { germanDate } from "@/lib/cv/types";
 
 export const metadata = { title: "Mein Lebenslauf" };
 
-export default async function MyCvs({ searchParams }: PageProps<"/mein-bereich/lebenslauf">) {
+export default async function MyCvs() {
   const user = await requireUser("coachee");
   const c = await ownCoachee(user);
   if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
@@ -20,7 +20,6 @@ export default async function MyCvs({ searchParams }: PageProps<"/mein-bereich/l
         coacheeId={c.id}
         coach={false}
         importAllowed={hasFeature(c, "lebenslauf_import")}
-        limitHit={(await searchParams).grenze === "1"}
         aside={
           <div className="card space-y-3">
             <h2 className="h2">Meine Daten</h2>

@@ -10,7 +10,7 @@ import { text, type FormState } from "@/lib/forms";
 import { extractCvText, parseCvText } from "@/lib/cv/import";
 import { cvFor, cvFromAkte, dropFileIfUnused, personalLockOf, profileSkills } from "@/lib/cv/store";
 import { todayBerlin } from "@/lib/calendar/dates";
-import { MAX_COACHEE_CVS, emptyCv, germanDate, isTemplate, lockPersonal, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
+import { emptyCv, germanDate, isTemplate, lockPersonal, normalizeCv, type CvData, type CvSkill } from "@/lib/cv/types";
 
 const listPath = (user: User, coacheeId: string) => (user.role === "coach" ? `/coach/coachees/${coacheeId}?tab=lebenslauf` : "/mein-bereich/lebenslauf");
 const refresh = (coacheeId: string) => {
@@ -21,20 +21,12 @@ const aiMessage = (e: unknown) => (e instanceof AiError ? e.message : "Das hat g
 
 // ---------- Anlegen, kopieren, löschen ----------
 
-/** Coachees legen höchstens MAX_COACHEE_CVS Lebensläufe an; das Portal ist für die eigene Bewerbung gedacht */
-async function overLimit(user: User, coacheeId: string) {
-  if (user.role === "coach") return false;
-  const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM cvs WHERE coachee_id = $1", [coacheeId]);
-  return (row?.n ?? 0) >= MAX_COACHEE_CVS;
-}
-const LIMIT_TEXT = `Du kannst höchstens ${MAX_COACHEE_CVS} Lebensläufe haben. Neue kannst du anlegen, wenn du einen löschst, oder du passt einen bestehenden an.`;
 /** Vorgabe für neue Lebensläufe, damit sich mehrere auseinanderhalten lassen: „Lebenslauf 22.10.2026“ */
 const datedName = () => `Lebenslauf ${germanDate(todayBerlin())}`;
 
 export async function createCv(coacheeId: string, _prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requireUser();
   const c = await coacheeFor(user, coacheeId);
-  if (await overLimit(user, c.id)) return { error: LIMIT_TEXT };
   const start = text(fd, "start", 20);
   const name = text(fd, "name", 120) || datedName();
   let data: CvData = start === "leer" ? emptyCv({ firstName: c.first_name, lastName: c.last_name }) : await cvFromAkte(c);
@@ -71,7 +63,6 @@ export async function createCv(coacheeId: string, _prev: FormState, fd: FormData
 export async function duplicateCv(cvId: string) {
   const user = await requireUser();
   const { cv } = await cvFor(user, cvId);
-  if (await overLimit(user, cv.coachee_id)) redirect(`${listPath(user, cv.coachee_id)}?grenze=1`);
   const row = await one<{ id: string }>(
     "INSERT INTO cvs (coachee_id, name, template, color, data, photo_file_id, updated_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
     [cv.coachee_id, `${cv.name} (Kopie vom ${germanDate(todayBerlin())})`.slice(0, 120), cv.template, cv.color, JSON.stringify(cv.data), cv.photo_file_id, user.id],
