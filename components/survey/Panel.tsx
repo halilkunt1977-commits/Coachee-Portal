@@ -1,6 +1,7 @@
 import { cvFromSurveyAction, deleteSurvey, reopenSurvey } from "@/app/actions/erfahrung";
 import type { Coachee } from "@/lib/access";
 import { query } from "@/lib/db";
+import { getT } from "@/lib/i18n-server";
 import { hasFeature } from "@/lib/features";
 import { normalizeSurvey, period, progress } from "@/lib/survey/types";
 import { ActionForm } from "../akte/ActionForm";
@@ -19,18 +20,19 @@ export async function SurveyPanel({ coachee: c, coach }: { coachee: Coachee; coa
     query<{ id: string; name: string }>("SELECT id, name FROM cvs WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 5", [c.id]),
   ]);
   const s = rows[0];
+  const t = await getT();
   // Hilfen beim Erstellen und Ausfüllen nur mit Freigabe (Zusatzfunktion „Erfahrungsbogen-Hilfen“); der Coach darf immer
   const help = coach || hasFeature(c, "erfahrungsbogen");
   if (!s) {
     return (
       <div className="card max-w-2xl space-y-3">
-        <h2 className="h2">{coach ? "Erfahrungsbogen anlegen" : "Los geht's"}</h2>
+        <h2 className="h2">{coach ? "Erfahrungsbogen anlegen" : t("Los geht's")}</h2>
         <p className="text-sm text-muted">
           {coach
             ? `Aus dem Lebenslauf entsteht pro Station eine Liste typischer Tätigkeiten zum Ankreuzen. ${c.first_name} kann den Bogen auch selbst unter „Erfahrungsbogen“ starten.`
             : help
-              ? "Lade deinen Lebenslauf hoch. Danach bekommst du für jede deiner Stellen eine Liste mit Aufgaben, die du nur noch ankreuzen musst. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf."
-              : "Trag deine bisherigen Stellen, Ausbildungen und Kurse ein und schreib zu jeder auf, was du dort gemacht hast. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf."}
+              ? t("Lade deinen Lebenslauf hoch. Danach bekommst du für jede deiner Stellen eine Liste mit Aufgaben, die du nur noch ankreuzen musst. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf.")
+              : t("Trag deine bisherigen Stellen, Ausbildungen und Kurse ein und schreib zu jeder auf, was du dort gemacht hast. So sehen wir gemeinsam, was du alles kannst, und machen daraus einen starken neuen Lebenslauf.")}
         </p>
         <StartSurvey coacheeId={c.id} cvs={cvs} coach={coach} upload={help} />
       </div>

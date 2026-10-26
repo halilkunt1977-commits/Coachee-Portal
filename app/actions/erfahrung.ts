@@ -65,7 +65,7 @@ export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormD
       sourceId = await storeFile({ coacheeId: c.id, kind: "cv_vorlage", name: file.name, mime: file.type || "application/octet-stream", data: buffer, userId: user.id });
     }
     if (!cv.experience.length && !cv.education.length) return { error: "Im Lebenslauf haben wir keine Stationen gefunden. Du kannst sie im Bogen auch selbst eintragen." };
-    const data = await surveyFromCv(cv, { coacheeId: c.id, userId: user.id });
+    const data = await surveyFromCv(cv, { coacheeId: c.id, userId: user.id, lang: c.language });
     await query("INSERT INTO experience_surveys (coachee_id, data, cv, source_file_id, created_by) VALUES ($1,$2,$3,$4,$5)", [c.id, JSON.stringify(data), JSON.stringify(cv), sourceId, user.id]);
   } catch (e) {
     return { error: failure(user, e) };
@@ -101,7 +101,7 @@ export async function suggestStationTasks(id: string, station: Pick<Station, "ti
   if (!aiEnabled()) return { ok: false, error: "Das geht gerade nicht. Trag deine Aufgaben bitte unten selbst ein." };
   try {
     await assertAiAllowed(user, { feature: "erfahrungsbogen", coachee: s.c });
-    const r = await tasksForStation({ title: station.title.slice(0, 200), company: station.company.slice(0, 200) }, { coacheeId: s.c.id, userId: user.id });
+    const r = await tasksForStation({ title: station.title.slice(0, 200), company: station.company.slice(0, 200) }, { coacheeId: s.c.id, userId: user.id, lang: s.c.language });
     return { ok: true, ...r };
   } catch (e) {
     return { ok: false, error: failure(user, e) };
