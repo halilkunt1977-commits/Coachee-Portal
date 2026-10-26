@@ -19,6 +19,7 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
       key={`${cv.id}-${cv.version}`}
       cvId={cv.id}
       coacheeId={coachee.id}
+      signName={`${coachee.first_name} ${coachee.last_name}`}
       signatureId={await signatureId(coachee.id)}
       initial={{ name: cv.name, template: cv.template, color: cv.color, data: cv.data, version: cv.version, photoId: cv.photo_file_id }}
       ai={aiEnabled() && coach}

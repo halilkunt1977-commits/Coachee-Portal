@@ -14,6 +14,8 @@ type Auto = Record<LetterField, string> & { body: string };
 type Props = {
   applicationId: string;
   coacheeId: string;
+  /** Vor- und Nachname für die Unterschrift-Vorschläge */
+  signName: string;
   job: { title: string; employer: string; refnr: string | null; contact: string; salutation: string };
   /** Alle Bewerbungen des Coachees für die Auswahl oben */
   applications: { id: string; label: string }[];
@@ -285,7 +287,7 @@ export function LetterEditor(p: Props) {
 
           <Card title="Gruß, Unterschrift und Anlagen">
             <Field label="Grußformel" {...field("closing")} />
-            <SignatureField coacheeId={p.coacheeId} value={signatureId} onChange={setSignatureId} />
+            <SignatureField coacheeId={p.coacheeId} name={p.signName} value={signatureId} onChange={setSignatureId} />
             {signatureId && (
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={useSignature} onChange={(e) => setUseSignature(e.target.checked)} className="size-4 accent-[var(--accent)]" /> Unterschrift in diesem Anschreiben zeigen</label>
             )}

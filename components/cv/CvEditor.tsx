@@ -11,6 +11,8 @@ import { SignatureField } from "./SignatureField";
 type Props = {
   cvId: string;
   coacheeId: string;
+  /** Vor- und Nachname für die Unterschrift-Vorschläge */
+  signName: string;
   /** Datei der digitalen Unterschrift (gehört zur Akte, gilt für alle Lebensläufe) */
   signatureId: string | null;
   initial: { name: string; template: TemplateKey; color: string; data: CvData; version: number; photoId: string | null };
@@ -30,7 +32,7 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const LEVELS = ["ohne Stufe", "Grundkenntnisse", "Erweitert", "Gut", "Sehr gut", "Experte"];
 const LANGUAGE_LEVELS = ["Muttersprache", "Verhandlungssicher", "Fließend", "Gute Kenntnisse", "Grundkenntnisse", "C2", "C1", "B2", "B1", "A2", "A1"];
 
-export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null, share }: Props) {
+export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null, share }: Props) {
   const [name, setName] = useState(initial.name);
   const [template, setTemplate] = useState<TemplateKey>(initial.template);
   const [color, setColor] = useState(initial.color);
@@ -394,7 +396,7 @@ export function CvEditor({ cvId, coacheeId, signatureId: initialSignature, initi
             {data.signature && (
               <>
                 <In label="Ort für die Unterschrift" value={data.place} onChange={(v) => set("place", v)} placeholder={data.personal.city || "z. B. Nürnberg"} hint="Das Datum wird beim Herunterladen automatisch eingesetzt." />
-                <SignatureField coacheeId={coacheeId} value={signatureId} onChange={setSignatureId} />
+                <SignatureField coacheeId={coacheeId} name={signName} value={signatureId} onChange={setSignatureId} />
                 {signatureId && (
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={data.signatureImage} onChange={(e) => set("signatureImage", e.target.checked)} className="size-4 accent-[var(--accent)]" /> Unterschrift in diesem Lebenslauf zeigen</label>
                 )}
