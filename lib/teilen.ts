@@ -31,6 +31,17 @@ export async function shareTarget(kind: ShareKind, refId: string, coacheeId: str
       if (!d || (role === "coachee" && !d.shared)) return null;
       return { title: d.title, fileId: d.file_id, shared: d.shared };
     }
+    case "vorbereitung": {
+      // Der Coach schickt die gespeicherte Fassung; der Coachee öffnet die geschickte (oder mit Freigabe die gespeicherte)
+      const a = await one<{ title: string; employer: string; status: string; ok: boolean }>(
+        `SELECT a.title, a.employer, a.status,
+                CASE WHEN $3 = 'coach' THEN a.interview IS NOT NULL
+                     ELSE a.interview_sent IS NOT NULL OR (a.interview IS NOT NULL AND 'gespraechsvorbereitung' = ANY(c.features)) END AS ok
+           FROM applications a JOIN coachees c ON c.id = a.coachee_id WHERE a.id = $1 AND a.coachee_id = $2`,
+        [refId, coacheeId, role],
+      );
+      return a?.ok ? { title: [a.title, a.employer].filter(Boolean).join(" · "), status: a.status } : null;
+    }
     case "businessplan":
     case "finanzplan": {
       // Ein Plan je Gründung; Kennung ist die Akte selbst
@@ -57,6 +68,7 @@ export function targetHref(kind: ShareKind, refId: string, coacheeId: string, ro
       case "dokument": return `${akte}?tab=dokumente#dokument-${refId}`;
       case "businessplan": return `${akte}?tab=businessplan`;
       case "finanzplan": return `${akte}?tab=finanzplan`;
+      case "vorbereitung": return `${akte}/vorbereitung/${refId}`;
     }
   }
   switch (kind) {
@@ -67,5 +79,6 @@ export function targetHref(kind: ShareKind, refId: string, coacheeId: string, ro
     case "dokument": return `/api/dateien/${t.fileId}`;
     case "businessplan": return "/mein-bereich/businessplan";
     case "finanzplan": return "/mein-bereich/finanzplan";
+    case "vorbereitung": return `/mein-bereich/bewerbungen/${refId}/vorbereitung`;
   }
 }

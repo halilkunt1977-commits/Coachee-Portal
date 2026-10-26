@@ -8,7 +8,7 @@ import { isShareKind, SHARE_META } from "./teilen-shared";
  * Anlass, Zeitpunkt und Lesestand. Ohne "server-only", weil auch Abläufe im Hintergrund hier eintragen dürfen.
  */
 
-export type InboxKind = "aufgabe" | "stelle" | "anschreiben" | "dokument" | "termin" | "lebenslauf" | "businessplan" | "finanzplan";
+export type InboxKind = "aufgabe" | "stelle" | "anschreiben" | "dokument" | "termin" | "lebenslauf" | "businessplan" | "finanzplan" | "vorbereitung";
 
 export const INBOX_URL = "/mein-bereich/posteingang";
 
@@ -67,6 +67,7 @@ export type InboxEntry =
   | (Base & { kind: "aufgabe"; task: InboxTask })
   | (Base & { kind: "stelle"; job: InboxJob })
   | (Base & { kind: "anschreiben"; job: InboxJob })
+  | (Base & { kind: "vorbereitung"; job: InboxJob })
   | (Base & { kind: "dokument"; doc: InboxDoc })
   | (Base & { kind: "termin"; appt: InboxAppt })
   | (Base & { kind: "lebenslauf"; cv: InboxCv })
@@ -85,6 +86,7 @@ export async function inboxEntries(coacheeId: string, limit = 100): Promise<Inbo
               WHEN 'aufgabe' THEN (SELECT to_jsonb(x) FROM (SELECT id, title, details, due_on, done_at FROM tasks WHERE id = i.ref_id AND coachee_id = i.coachee_id) x)
               WHEN 'stelle' THEN (SELECT to_jsonb(x) FROM (SELECT id, title, employer, location, url, status, reason FROM applications WHERE id = i.ref_id AND coachee_id = i.coachee_id) x)
               WHEN 'anschreiben' THEN (SELECT to_jsonb(x) FROM (SELECT a.id, a.title, a.employer, a.location, a.url, a.status, a.reason FROM applications a WHERE a.id = i.ref_id AND a.coachee_id = i.coachee_id AND ${LETTER_VISIBLE}) x)
+              WHEN 'vorbereitung' THEN (SELECT to_jsonb(x) FROM (SELECT a.id, a.title, a.employer, a.location, a.url, a.status, a.reason FROM applications a WHERE a.id = i.ref_id AND a.coachee_id = i.coachee_id AND a.interview_sent IS NOT NULL) x)
               WHEN 'lebenslauf' THEN (SELECT to_jsonb(x) FROM (SELECT id, name FROM cvs WHERE id = i.ref_id AND coachee_id = i.coachee_id) x)
               WHEN 'businessplan' THEN (SELECT jsonb_build_object('title', COALESCE(NULLIF(p.title, ''), 'Businessplan')) FROM coachees c LEFT JOIN business_plans p ON p.coachee_id = c.id WHERE c.id = i.ref_id AND c.id = i.coachee_id)
               WHEN 'finanzplan' THEN (SELECT jsonb_build_object('title', 'Finanzplan') FROM coachees c WHERE c.id = i.ref_id AND c.id = i.coachee_id)
@@ -109,6 +111,7 @@ export async function inboxEntries(coacheeId: string, limit = 100): Promise<Inbo
     if (r.kind === "aufgabe") out.push({ ...base, kind: "aufgabe", task: r.data as InboxTask });
     else if (r.kind === "stelle") out.push({ ...base, kind: "stelle", job: r.data as InboxJob });
     else if (r.kind === "anschreiben") out.push({ ...base, kind: "anschreiben", job: r.data as InboxJob });
+    else if (r.kind === "vorbereitung") out.push({ ...base, kind: "vorbereitung", job: r.data as InboxJob });
     else if (r.kind === "dokument") out.push({ ...base, kind: "dokument", doc: r.data as InboxDoc });
     else if (r.kind === "lebenslauf") out.push({ ...base, kind: "lebenslauf", cv: r.data as InboxCv });
     else if (r.kind === "businessplan") out.push({ ...base, kind: "businessplan", plan: r.data as InboxPlan });

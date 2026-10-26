@@ -11,20 +11,25 @@ import { normalizeInterview } from "@/lib/jobs/interview-shared";
 
 export const metadata = { title: "Gesprächsvorbereitung" };
 
-/** Gesprächsvorbereitung für eine Stelle, nur zum Lesen. Nur mit Freigabe des Coachs und nur, wenn er sie erstellt hat. */
+/**
+ * Gesprächsvorbereitung für eine Stelle, nur zum Lesen: die Fassung, die der Coach geschickt hat, sonst mit Freigabe
+ * „gespraechsvorbereitung“ die zuletzt gespeicherte.
+ */
 export default async function MyInterviewPrep({ params }: PageProps<"/mein-bereich/bewerbungen/[id]/vorbereitung">) {
   const user = await requireUser("coachee");
   const c = await ownCoachee(user);
   if (!c || c.coaching_type !== "job") notFound();
-  if (!hasFeature(c, "gespraechsvorbereitung")) return <Empty>Die Gesprächsvorbereitung schaltet dein Coach für dich frei.</Empty>;
+  const released = hasFeature(c, "gespraechsvorbereitung");
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const a = await one<{ id: string; title: string; employer: string; location: string; interview: unknown; seen: boolean; coach_name: string | null }>(
-    `SELECT a.id, a.title, a.employer, a.location, a.interview, a.interview_seen_at IS NOT NULL AS seen, u.name AS coach_name
+    `SELECT a.id, a.title, a.employer, a.location, COALESCE(a.interview_sent, CASE WHEN $3 THEN a.interview END) AS interview,
+            a.interview_seen_at IS NOT NULL AS seen, u.name AS coach_name
        FROM applications a JOIN coachees c ON c.id = a.coachee_id LEFT JOIN users u ON u.id = c.coach_id
-      WHERE a.id = $1 AND a.coachee_id = $2 AND a.interview IS NOT NULL`,
-    [id, c.id],
+      WHERE a.id = $1 AND a.coachee_id = $2`,
+    [id, c.id, released],
   );
+  if (a && !a.interview) return <Empty>Die Gesprächsvorbereitung für diese Stelle bekommst du von deinem Coach.</Empty>;
   if (!a) notFound();
   // Für die Übersicht des Coachs: zuerst geöffnet am
   if (!a.seen) await query("UPDATE applications SET interview_seen_at = now() WHERE id = $1 AND interview_seen_at IS NULL", [a.id]);

@@ -72,6 +72,8 @@ export async function shareItem(input: ShareInput): Promise<ShareResult> {
     if (!coach && !note) note = JOB_QUESTION;
   } else {
     kind = input.kind;
+    // Gesprächsvorbereitungen schickt nur der Coach
+    if (kind === "vorbereitung" && !coach) return { error: "Das lässt sich nicht teilen." };
     // Eigene Aufgabe des Coachs (ohne Akte) geht als Kopie an den Coachee
     if (coach && kind === "aufgabe" && isId(refId)) {
       const own = await one<{ title: string; details: string; due_on: string | null }>("SELECT title, details, due_on FROM tasks WHERE id = $1 AND owner_id = $2 AND coachee_id IS NULL", [refId, user.id]);
@@ -86,6 +88,9 @@ export async function shareItem(input: ShareInput): Promise<ShareResult> {
   const target = await shareTarget(kind, refId, c.id, user.role);
   if (!target) return { error: NOT_FOUND };
   status ??= target.status as Status | undefined;
+  // Gesprächsvorbereitung: genau die gespeicherte Fassung geht als Kopie raus; spätere Änderungen erst beim nächsten Schicken
+  if (coach && kind === "vorbereitung")
+    await query("UPDATE applications SET interview_sent = interview, interview_sent_at = now(), interview_seen_at = NULL WHERE id = $1 AND coachee_id = $2", [refId, c.id]);
   // Ein Dokument zu schicken heißt auch: Der Coachee darf es öffnen
   if (coach && kind === "dokument" && !target.shared) await query("UPDATE documents SET shared = true WHERE id = $1 AND coachee_id = $2", [refId, c.id]);
 

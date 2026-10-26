@@ -10,7 +10,7 @@ import { cleanWas } from "./ba";
 
 export const APP_COLUMNS = `a.id, a.refnr, a.title, a.employer, a.location, a.url, a.published_on::text, a.status, a.channel, a.applied_on::text, a.next_on::text,
   a.next_note, a.contact, a.salutation, a.street, a.zip, a.note, a.reason, a.history, a.created_at, a.updated_at, p.name AS proposed_by_name,
-  (a.interview IS NOT NULL) AS has_interview`;
+  (a.interview IS NOT NULL) AS has_interview, (a.interview_sent IS NOT NULL) AS interview_sent`;
 
 export const listApplications = (coacheeId: string) =>
   query<Application>(

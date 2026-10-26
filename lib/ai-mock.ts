@@ -58,11 +58,16 @@ export function mockJson(schemaName: string, input: string): unknown {
       report: "Testbericht ohne KI.",
     };
   }
+  if (schemaName === "gespraechsfragen" || schemaName === "gespraechsfrage") {
+    const wunsch = input.match(/^(?:Wunsch|Anweisung) des Coachs: (.+)$/m)?.[1] ?? "";
+    const q = (n: number) => ({ question: `Testfrage ${n}: Wie gehen Sie mit ${wunsch.slice(0, 40) || "Zeitdruck"} um?`, answer: "Ich bleibe ruhig, kläre zuerst, was am dringendsten ist, und spreche mich mit dem Team ab.", tips: "Ein konkretes Beispiel aus deiner letzten Stelle macht die Antwort glaubwürdig.", followups: ["Können Sie ein Beispiel nennen?"] });
+    return schemaName === "gespraechsfrage" ? { question: q(0) } : { questions: [q(1), q(2), q(3), q(4)] };
+  }
   if (schemaName === "gespraechsvorbereitung") {
     const stelle = input.match(/^Stelle: (.+)$/m)?.[1] ?? "die Stelle";
     const station = input.match(/^- .+? bis .+?: (.+)$/m)?.[1] ?? "meiner letzten Stelle";
     return {
-      focus: `Testtext für „${stelle}“. Im Gespräch kommt es darauf an, dass du deine Erfahrung aus ${station} ruhig und konkret erklärst.${input.includes("Stellentext: liegt nicht vor") ? " Der Stellentext fehlt, deshalb orientiert sich die Vorbereitung an typischen Anforderungen des Berufs." : ""}`,
+      focus: `${/^Anweisung des Coachs: (.+)$/m.test(input) ? `Überarbeitet nach „${input.match(/^Anweisung des Coachs: (.+)$/m)![1]}“. ` : ""}${/^Was der Coach über Stelle/m.test(input) ? "Mit der Beschreibung des Coachs. " : ""}Testtext für „${stelle}“. Im Gespräch kommt es darauf an, dass du deine Erfahrung aus ${station} ruhig und konkret erklärst.${input.includes("Stellentext: liegt nicht vor") ? " Der Stellentext fehlt, deshalb orientiert sich die Vorbereitung an typischen Anforderungen des Berufs." : ""}`,
       questions: [
         { question: "Erzählen Sie uns etwas über sich.", answer: `Ich bringe Erfahrung aus ${station} mit. Dort habe ich gelernt, sorgfältig und im Team zu arbeiten.`, tips: "Der Arbeitgeber will sehen, ob du dich kurz und klar vorstellen kannst. Höchstens zwei Minuten.", followups: ["Warum haben Sie dort aufgehört?"] },
         { question: `Warum möchten Sie als ${stelle} bei uns arbeiten?`, answer: "Die Aufgaben passen zu dem, was ich bisher gemacht habe, und ich möchte mich in diesem Bereich weiterentwickeln.", tips: "Nenne einen konkreten Grund, der mit dem Betrieb zu tun hat.", followups: ["Was wissen Sie über unseren Betrieb?", "Wo sehen Sie sich in drei Jahren?"] },

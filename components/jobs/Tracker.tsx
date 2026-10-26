@@ -5,8 +5,8 @@ import { addApplication, deleteApplication, updateApplication } from "@/app/acti
 import { ShareButton } from "../teilen/ShareButton";
 import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
-/** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung; null, wenn der Coachee sie nicht sehen darf */
-type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null };
+/** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung. prepAll: jede gespeicherte zeigen (Coach oder Freigabe), sonst nur geschickte */
+type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean };
 
 const ACTIVE: Status[] = ["vorschlag", "gemerkt", "beworben", "gespraech"];
 const fmt = (d: string | null) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "");
@@ -157,7 +157,7 @@ export function Tracker(p: Props) {
                     </select>
                   )}
                   {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm tap">Anschreiben</Link>}
-                  {p.prepHref && a.has_interview && (
+                  {p.prepHref && (a.interview_sent || (p.prepAll && a.has_interview)) && (
                     <Link href={p.prepHref.replace("{id}", a.id)} prefetch={false} className="btn-ghost btn-sm tap">Gesprächsvorbereitung</Link>
                   )}
                   <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />

@@ -119,6 +119,8 @@ export type Application = {
   proposed_by_name: string | null;
   /** Der Coach hat für diese Stelle eine Gesprächsvorbereitung erstellt (lib/jobs/interview-shared.ts) */
   has_interview: boolean;
+  /** Der Coach hat dem Coachee eine Fassung geschickt */
+  interview_sent: boolean;
   created_at: string;
   updated_at: string;
 };

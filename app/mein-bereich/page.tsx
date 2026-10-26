@@ -27,10 +27,10 @@ import { inboxEntries, inboxThread, inboxUnread, type InboxEntry } from "@/lib/c
 import { VideoTeaser } from "@/components/erklaervideo/VideoTeaser";
 import { hasFeature } from "@/lib/features";
 
-const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stelle", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin", lebenslauf: "Lebenslauf", businessplan: "Businessplan", finanzplan: "Finanzplan" };
+const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stelle", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin", lebenslauf: "Lebenslauf", businessplan: "Businessplan", finanzplan: "Finanzplan", vorbereitung: "Gesprächsvorbereitung" };
 const entryTitle = (e: InboxEntry) =>
   e.kind === "aufgabe" ? e.task.title
-  : e.kind === "stelle" || e.kind === "anschreiben" ? e.job.title
+  : e.kind === "stelle" || e.kind === "anschreiben" || e.kind === "vorbereitung" ? e.job.title
   : e.kind === "dokument" ? e.doc.title
   : e.kind === "lebenslauf" ? e.cv.name
   : e.kind === "businessplan" || e.kind === "finanzplan" ? e.plan.title
