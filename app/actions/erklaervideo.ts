@@ -5,9 +5,13 @@ import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { isVideoLanguage } from "@/lib/erklaervideo";
 
-/** Sprache des Erklärvideos merken: der Coachee für sich selbst, der Coach für seinen Coachee */
+/**
+ * Sprache des Erklärvideos merken, nur durch den Coach: Sie ist zugleich die Sprache des ganzen Coachee-Bereichs.
+ * Schaltet der Coachee im Video um, gilt das nur für dieses Ansehen.
+ */
 export async function setVideoLanguage(coacheeId: string, lang: string) {
   const user = await requireUser();
+  if (user.role !== "coach") return;
   const c = await coacheeFor(user, coacheeId);
   if (!isVideoLanguage(lang) || c.language === lang) return;
   await query("UPDATE coachees SET language = $2 WHERE id = $1", [c.id, lang]);

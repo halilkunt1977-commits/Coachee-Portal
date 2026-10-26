@@ -15,30 +15,32 @@ import { inboxEntries, inboxThread, type InboxEntry, type InboxThread } from "@/
 import { one, query } from "@/lib/db";
 import { categoryLabel } from "@/lib/documents";
 import { statusLabel, STATUS_TONE, type Status } from "@/lib/jobs/shared";
+import { localeOf, type Lang, type T } from "@/lib/i18n";
+import { getT, serverLang } from "@/lib/i18n-server";
 
-export const metadata = { title: "Posteingang" };
+export const generateMetadata = async () => ({ title: (await getT())("Posteingang") });
 
 const TZ = "Europe/Berlin";
 const berlinDay = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: TZ });
-const time = (iso: string) => new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+const time = (iso: string, lang: Lang) => new Date(iso).toLocaleTimeString(localeOf(lang), { hour: "2-digit", minute: "2-digit", timeZone: TZ });
 
 /** „14:05“ heute, „Gestern“, „Mo“ in dieser Woche, sonst „12.10.“ */
-function when(iso: string, now: Date) {
+function when(iso: string, now: Date, t: T, lang: Lang) {
   const d = new Date(iso);
   const day = berlinDay(d);
-  if (day === berlinDay(now)) return time(iso);
-  if (day === berlinDay(new Date(now.getTime() - 86_400_000))) return "Gestern";
-  if (now.getTime() - d.getTime() < 6 * 86_400_000) return d.toLocaleDateString("de-DE", { weekday: "short", timeZone: TZ }).replace(".", "");
+  if (day === berlinDay(now)) return time(iso, lang);
+  if (day === berlinDay(new Date(now.getTime() - 86_400_000))) return t("Gestern");
+  if (now.getTime() - d.getTime() < 6 * 86_400_000) return d.toLocaleDateString(localeOf(lang), { weekday: "short", timeZone: TZ }).replace(".", "");
   const sameYear = day.slice(0, 4) === berlinDay(now).slice(0, 4);
   return d.toLocaleDateString("de-DE", { day: "numeric", month: "numeric", ...(sameYear ? {} : { year: "2-digit" }), timeZone: TZ });
 }
 
-function group(iso: string, now: Date) {
+function group(iso: string, now: Date, t: T) {
   const day = berlinDay(new Date(iso));
-  if (day === berlinDay(now)) return "Heute";
-  if (day === berlinDay(new Date(now.getTime() - 86_400_000))) return "Gestern";
-  if (now.getTime() - new Date(iso).getTime() < 7 * 86_400_000) return "Diese Woche";
-  return "Früher";
+  if (day === berlinDay(now)) return t("Heute");
+  if (day === berlinDay(new Date(now.getTime() - 86_400_000))) return t("Gestern");
+  if (now.getTime() - new Date(iso).getTime() < 7 * 86_400_000) return t("Diese Woche");
+  return t("Früher");
 }
 
 type Item = { at: string; key: string } & ({ thread: InboxThread } | { entry: InboxEntry });
@@ -58,14 +60,15 @@ const TONE: Record<InboxEntry["kind"] | "nachrichten", { icon: IconName; tone: s
 
 export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-bereich/posteingang">) {
   const user = await requireUser("coachee");
+  const [t, lang] = await Promise.all([getT(), serverLang()]);
   const c = await ownCoachee(user);
-  if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
+  if (!c) return <Empty>{t("Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.")}</Empty>;
   const sp = await searchParams;
   const focus = typeof sp.offen === "string" ? sp.offen : null;
 
   const [entries, thread, coach, messages] = await Promise.all([
     inboxEntries(c.id),
-    inboxThread(c.id, user.id),
+    inboxThread(c.id, user.id, t),
     one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]),
     query<Message>(
       `SELECT * FROM (SELECT ${MESSAGE_COLUMNS}
@@ -74,7 +77,7 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
       [c.id],
     ),
   ]);
-  const coachName = coach?.name ?? "Dein Coach";
+  const coachName = coach?.name ?? t("Dein Coach");
   const coachFirst = coachName.split(" ")[0];
   const now = new Date();
 
@@ -82,7 +85,7 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
   const unread = (thread?.unread ?? 0) + entries.filter((e) => e.unread).length;
   const groups: { label: string; items: Item[] }[] = [];
   for (const it of items) {
-    const label = group(it.at, now);
+    const label = group(it.at, now, t);
     const last = groups.at(-1);
     if (last?.label === label) last.items.push(it);
     else groups.push({ label, items: [it] });
@@ -91,21 +94,21 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
   const threadBody = (
     <>
       {messages.length > 0 && <MessageList messages={messages} selfId={user.id} />}
-      <MessageForm coacheeId={c.id} placeholder={`Antwort an ${coachFirst} …`} />
+      <MessageForm coacheeId={c.id} placeholder={t("Antwort an {name} …", { name: coachFirst })} />
     </>
   );
 
   return (
     <>
       <PageHeader
-        eyebrow="Von deinem Coach"
-        title="Posteingang"
-        description={`Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von ${coachName}, das Neueste oben. Antworte direkt hier. Eigene Sachen zeigst du deinem Coach überall mit „Dem Coach zeigen“.`}
+        eyebrow={t("Von deinem Coach")}
+        title={t("Posteingang")}
+        description={t("Nachrichten, Aufgaben, Stellen, Anschreiben, Dokumente und Termine von {name}, das Neueste oben. Antworte direkt hier. Eigene Sachen zeigst du deinem Coach überall mit „Dem Coach zeigen“.", { name: coachName })}
         actions={
           <>
             {unread > 0 && (
               <form action={markAllInboxRead}>
-                <SubmitButton className="btn-ghost btn-sm" pendingText="Einen Moment …">Alle gelesen</SubmitButton>
+                <SubmitButton className="btn-ghost btn-sm" pendingText={t("Einen Moment …")}>{t("Alle gelesen")}</SubmitButton>
               </form>
             )}
             <ComposeButton recipient={coachFirst} />
@@ -115,18 +118,18 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
       <div className="max-w-3xl space-y-6">
         <p className="flex items-center gap-2 text-sm text-muted">
           <span className={`grid h-6 min-w-6 place-items-center rounded-full px-2 text-xs font-bold tabular-nums ${unread ? "bg-danger text-white" : "bg-surface-2"}`}>{unread}</span>
-          {unread === 0 ? "Alles gelesen." : unread === 1 ? "neuer Eintrag" : "neue Einträge"}
+          {unread === 0 ? t("Alles gelesen.") : unread === 1 ? t("neuer Eintrag") : t("neue Einträge")}
         </p>
 
         {!thread && (
           <ul>
-            <InboxCard id="nachrichten" icon="chat" tone={TONE.nachrichten.tone} label="Nachricht" when="" title={`${coachFirst} schreiben`} preview="Fragen, Rückmeldungen oder ein kurzes Update. Dein Coach bekommt Bescheid." unread={false} initiallyOpen={focus === "nachrichten"}>
+            <InboxCard id="nachrichten" icon="chat" tone={TONE.nachrichten.tone} label={t("Nachricht")} when="" title={t("{name} schreiben", { name: coachFirst })} preview={t("Fragen, Rückmeldungen oder ein kurzes Update. Dein Coach bekommt Bescheid.")} unread={false} initiallyOpen={focus === "nachrichten"}>
               {threadBody}
             </InboxCard>
           </ul>
         )}
 
-        {items.length === 0 && <Empty>Hier landet alles, was dein Coach dir schickt: Nachrichten, Aufgaben, Stellenvorschläge, Anschreiben, Lebensläufe, Dokumente und Termine.</Empty>}
+        {items.length === 0 && <Empty>{t("Hier landet alles, was dein Coach dir schickt: Nachrichten, Aufgaben, Stellenvorschläge, Anschreiben, Lebensläufe, Dokumente und Termine.")}</Empty>}
 
         {groups.map((g) => (
           <section key={g.label} className="space-y-2">
@@ -139,17 +142,17 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
                     id="nachrichten"
                     icon={TONE.nachrichten.icon}
                     tone={TONE.nachrichten.tone}
-                    label={`Nachrichten · ${coachName}`}
-                    when={when(it.at, now)}
-                    title={it.thread.unread ? (it.thread.unread === 1 ? "Neue Nachricht" : `${it.thread.unread} neue Nachrichten`) : `Gespräch mit ${coachFirst}`}
-                    preview={`${it.thread.mine ? "Du: " : ""}${it.thread.preview}`}
+                    label={`${t("Nachrichten")} · ${coachName}`}
+                    when={when(it.at, now, t, lang)}
+                    title={it.thread.unread ? (it.thread.unread === 1 ? t("Neue Nachricht") : t("{n} neue Nachrichten", { n: it.thread.unread })) : t("Gespräch mit {name}", { name: coachFirst })}
+                    preview={`${it.thread.mine ? `${t("Du:")} ` : ""}${it.thread.preview}`}
                     unread={it.thread.unread}
                     initiallyOpen={focus === "nachrichten"}
                   >
                     {threadBody}
                   </InboxCard>
                 ) : (
-                  <Entry key={it.key} e={it.entry} when={when(it.at, now)} open={focus === it.entry.id} />
+                  <Entry key={it.key} e={it.entry} when={when(it.at, now, t, lang)} open={focus === it.entry.id} t={t} lang={lang} />
                 ),
               )}
             </ul>
@@ -160,36 +163,36 @@ export default async function CoacheeInbox({ searchParams }: PageProps<"/mein-be
   );
 }
 
-function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }) {
-  const from = e.actor ? `Von ${e.actor}` : "Von deinem Coach";
+function Entry({ e, when, open, t, lang }: { e: InboxEntry; when: string; open: boolean; t: T; lang: Lang }) {
+  const from = e.actor ? t("Von {name}", { name: e.actor }) : t("Von deinem Coach");
   const common = { id: e.id, icon: TONE[e.kind].icon, tone: TONE[e.kind].tone, when, unread: e.unread, initiallyOpen: open };
   // Notiz, die der Coach beim Schicken dazugeschrieben hat
   const note = e.kind !== "termin" && e.note ? (
-    <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]"><span className="font-semibold text-accent">{e.actor?.split(" ")[0] ?? "Dein Coach"}: </span>{e.note}</p>
+    <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm whitespace-pre-wrap break-words [overflow-wrap:anywhere]"><span className="font-semibold text-accent">{e.actor?.split(" ")[0] ?? t("Dein Coach")}: </span>{e.note}</p>
   ) : null;
   const notePreview = e.kind !== "termin" && e.note ? `„${e.note}“` : null;
 
   if (e.kind === "aufgabe") {
-    const t = e.task;
+    const task = e.task;
     const today = berlinDay(new Date());
     return (
-      <InboxCard {...common} label="Aufgabe" title={t.title} done={Boolean(t.done_at)} preview={notePreview ?? (t.done_at ? "Erledigt" : t.due_on ? `bis ${formatDate(t.due_on)}${t.details ? ` · ${t.details}` : ""}` : t.details)}>
+      <InboxCard {...common} label={t("Aufgabe")} title={task.title} done={Boolean(task.done_at)} preview={notePreview ?? (task.done_at ? t("Erledigt") : task.due_on ? `${t("bis {datum}", { datum: formatDate(task.due_on) })}${task.details ? ` · ${task.details}` : ""}` : task.details)}>
         {note}
-        {t.details && <p className="whitespace-pre-wrap break-words text-[15px] [overflow-wrap:anywhere]">{t.details}</p>}
+        {task.details && <p className="whitespace-pre-wrap break-words text-[15px] [overflow-wrap:anywhere]">{task.details}</p>}
         <p className="text-xs text-muted">
           {from}
-          {t.due_on && !t.done_at && <span className={t.due_on < today ? "font-semibold text-danger" : ""}> · zu erledigen bis {formatDate(t.due_on)}</span>}
-          {t.done_at && <> · erledigt am {formatDate(t.done_at)}</>}
+          {task.due_on && !task.done_at && <span className={task.due_on < today ? "font-semibold text-danger" : ""}> · {t("zu erledigen bis {datum}", { datum: formatDate(task.due_on) })}</span>}
+          {task.done_at && <> · {t("erledigt am {datum}", { datum: formatDate(task.done_at) })}</>}
         </p>
         <Actions>
-          <form action={inboxToggleTask.bind(null, e.id, t.id)}>
-            {t.done_at ? (
-              <SubmitButton className="btn-ghost btn-sm" pendingText="Einen Moment …">Wieder öffnen</SubmitButton>
+          <form action={inboxToggleTask.bind(null, e.id, task.id)}>
+            {task.done_at ? (
+              <SubmitButton className="btn-ghost btn-sm" pendingText={t("Einen Moment …")}>{t("Wieder öffnen")}</SubmitButton>
             ) : (
-              <SubmitButton className="btn btn-sm" pendingText="Wird abgehakt …">✓ Erledigt</SubmitButton>
+              <SubmitButton className="btn btn-sm" pendingText={t("Wird abgehakt …")}>✓ {t("Erledigt")}</SubmitButton>
             )}
           </form>
-          <Link href="/mein-bereich/aufgaben" className="btn-ghost btn-sm">Alle Aufgaben</Link>
+          <Link href="/mein-bereich/aufgaben" className="btn-ghost btn-sm">{t("Alle Aufgaben")}</Link>
         </Actions>
       </InboxCard>
     );
@@ -199,29 +202,29 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
     const j = e.job;
     const proposal = j.status === "vorschlag";
     return (
-      <InboxCard {...common} label={proposal ? "Stellenvorschlag" : "Stelle"} title={j.title} preview={notePreview ?? ([j.employer, j.location].filter(Boolean).join(" · ") || undefined)}>
+      <InboxCard {...common} label={proposal ? t("Stellenvorschlag") : t("Stelle")} title={j.title} preview={notePreview ?? ([j.employer, j.location].filter(Boolean).join(" · ") || undefined)}>
         {note}
         <div className="space-y-1">
-          <p className="text-[15px] break-words">{[j.employer, j.location].filter(Boolean).join(" · ") || "Ohne Arbeitgeberangabe"}</p>
+          <p className="text-[15px] break-words">{[j.employer, j.location].filter(Boolean).join(" · ") || t("Ohne Arbeitgeberangabe")}</p>
           <p className="text-xs text-muted">
             {from}
-            {!proposal && <> · <span className={`badge !px-2 !py-0 ${STATUS_TONE[j.status as Status] ?? ""}`}>{statusLabel(j.status as Status)}</span></>}
+            {!proposal && <> · <span className={`badge !px-2 !py-0 ${STATUS_TONE[j.status as Status] ?? ""}`}>{t(statusLabel(j.status as Status))}</span></>}
           </p>
         </div>
-        {j.reason && j.reason !== e.note && <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm break-words"><span className="font-semibold text-accent">Warum es passt: </span>{j.reason}</p>}
+        {j.reason && j.reason !== e.note && <p className="rounded-lg bg-tint/50 px-3 py-2 text-sm break-words"><span className="font-semibold text-accent">{t("Warum es passt:")} </span>{j.reason}</p>}
         <Actions>
           {proposal ? (
             <>
-              <form action={inboxApply.bind(null, e.id, j.id)}><SubmitButton className="btn btn-sm" pendingText="Einen Moment …">Bewerben</SubmitButton></form>
-              <form action={inboxJobStatus.bind(null, e.id, j.id, "gemerkt")}><SubmitButton className="btn-ghost btn-sm" pendingText="Wird gemerkt …">Merken</SubmitButton></form>
+              <form action={inboxApply.bind(null, e.id, j.id)}><SubmitButton className="btn btn-sm" pendingText={t("Einen Moment …")}>{t("Bewerben")}</SubmitButton></form>
+              <form action={inboxJobStatus.bind(null, e.id, j.id, "gemerkt")}><SubmitButton className="btn-ghost btn-sm" pendingText={t("Wird gemerkt …")}>{t("Merken")}</SubmitButton></form>
             </>
           ) : (
-            j.status === "gemerkt" && <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">Bewerben</Link>
+            j.status === "gemerkt" && <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">{t("Bewerben")}</Link>
           )}
-          {j.url && <a href={j.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">Anzeige ansehen ↗</a>}
-          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">In Bewerbungen</Link>
+          {j.url && <a href={j.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">{t("Anzeige ansehen")} ↗</a>}
+          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">{t("In Bewerbungen")}</Link>
           {proposal && (
-            <form action={inboxJobStatus.bind(null, e.id, j.id, "verworfen")}><SubmitButton className="btn-ghost btn-sm text-muted" pendingText="Einen Moment …">Passt nicht</SubmitButton></form>
+            <form action={inboxJobStatus.bind(null, e.id, j.id, "verworfen")}><SubmitButton className="btn-ghost btn-sm text-muted" pendingText={t("Einen Moment …")}>{t("Passt nicht")}</SubmitButton></form>
           )}
         </Actions>
       </InboxCard>
@@ -231,13 +234,13 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "anschreiben") {
     const j = e.job;
     return (
-      <InboxCard {...common} label="Anschreiben vorbereitet" title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}Dein Anschreiben liegt bereit.`}>
+      <InboxCard {...common} label={t("Anschreiben vorbereitet")} title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}${t("Dein Anschreiben liegt bereit.")}`}>
         {note}
-        <p className="text-[15px]">Für deine Bewerbung{j.employer ? ` bei ${j.employer}` : ""} liegt ein Anschreiben bereit. Lies es durch, pass es an, wo du magst, und lade es als PDF oder Word herunter.</p>
+        <p className="text-[15px]">{j.employer ? t("Für deine Bewerbung bei {firma} liegt ein Anschreiben bereit. Lies es durch, pass es an, wo du magst, und lade es als PDF oder Word herunter.", { firma: j.employer }) : t("Für deine Bewerbung liegt ein Anschreiben bereit. Lies es durch, pass es an, wo du magst, und lade es als PDF oder Word herunter.")}</p>
         <p className="text-xs text-muted">{from}</p>
         <Actions>
-          <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">Anschreiben öffnen</Link>
-          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">In Bewerbungen</Link>
+          <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">{t("Anschreiben öffnen")}</Link>
+          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">{t("In Bewerbungen")}</Link>
         </Actions>
       </InboxCard>
     );
@@ -246,13 +249,13 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "vorbereitung") {
     const j = e.job;
     return (
-      <InboxCard {...common} label="Gesprächsvorbereitung" title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}Deine Vorbereitung aufs Vorstellungsgespräch.`}>
+      <InboxCard {...common} label={t("Gesprächsvorbereitung")} title={j.title} preview={notePreview ?? `${j.employer ? `${j.employer} · ` : ""}${t("Deine Vorbereitung aufs Vorstellungsgespräch.")}`}>
         {note}
-        <p className="text-[15px]">Für dein Gespräch{j.employer ? ` bei ${j.employer}` : ""} habe ich dir die wichtigsten Fragen mit Antwortideen, Tipps zum Auftreten und Fragen an den Arbeitgeber zusammengestellt. Lies alles in Ruhe durch und sprich die Antworten ein paarmal laut, in deinen eigenen Worten.</p>
+        <p className="text-[15px]">{j.employer ? t("Für dein Gespräch bei {firma} habe ich dir die wichtigsten Fragen mit Antwortideen, Tipps zum Auftreten und Fragen an den Arbeitgeber zusammengestellt. Lies alles in Ruhe durch und sprich die Antworten ein paarmal laut, in deinen eigenen Worten.", { firma: j.employer }) : t("Für dein Gespräch habe ich dir die wichtigsten Fragen mit Antwortideen, Tipps zum Auftreten und Fragen an den Arbeitgeber zusammengestellt. Lies alles in Ruhe durch und sprich die Antworten ein paarmal laut, in deinen eigenen Worten.")}</p>
         <p className="text-xs text-muted">{from}</p>
         <Actions>
-          <Link href={`/mein-bereich/bewerbungen/${j.id}/vorbereitung`} className="btn btn-sm">Vorbereitung öffnen</Link>
-          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">In Bewerbungen</Link>
+          <Link href={`/mein-bereich/bewerbungen/${j.id}/vorbereitung`} className="btn btn-sm">{t("Vorbereitung öffnen")}</Link>
+          <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">{t("In Bewerbungen")}</Link>
         </Actions>
       </InboxCard>
     );
@@ -261,11 +264,11 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "dokument") {
     const d = e.doc;
     return (
-      <InboxCard {...common} label="Dokument" title={d.title} preview={notePreview ?? categoryLabel(d.category)}>
+      <InboxCard {...common} label={t("Dokument")} title={d.title} preview={notePreview ?? t(categoryLabel(d.category))}>
         {note}
-        <p className="text-xs text-muted">{from} · {categoryLabel(d.category)}</p>
+        <p className="text-xs text-muted">{from} · {t(categoryLabel(d.category))}</p>
         <Actions>
-          <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="btn btn-sm">Öffnen</a>
+          <a href={`/api/dateien/${d.file_id}`} target="_blank" rel="noreferrer" className="btn btn-sm">{t("Öffnen")}</a>
         </Actions>
       </InboxCard>
     );
@@ -273,11 +276,11 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
 
   if (e.kind === "lebenslauf") {
     return (
-      <InboxCard {...common} label="Lebenslauf" title={e.cv.name} preview={notePreview ?? "Dein Coach hat dir deinen Lebenslauf geschickt."}>
+      <InboxCard {...common} label={t("Lebenslauf")} title={e.cv.name} preview={notePreview ?? t("Dein Coach hat dir deinen Lebenslauf geschickt.")}>
         {note}
         <p className="text-xs text-muted">{from}</p>
         <Actions>
-          <Link href={`/lebenslauf/${e.cv.id}`} className="btn btn-sm">Lebenslauf öffnen</Link>
+          <Link href={`/lebenslauf/${e.cv.id}`} className="btn btn-sm">{t("Lebenslauf öffnen")}</Link>
           <a href={`/api/lebenslauf/${e.cv.id}/pdf`} className="btn-ghost btn-sm">PDF</a>
         </Actions>
       </InboxCard>
@@ -287,11 +290,11 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
   if (e.kind === "businessplan" || e.kind === "finanzplan") {
     const bp = e.kind === "businessplan";
     return (
-      <InboxCard {...common} label={bp ? "Businessplan" : "Finanzplan"} title={e.plan.title} preview={notePreview ?? (bp ? "Schau dir deinen Businessplan an." : "Schau dir deinen Finanzplan an.")}>
+      <InboxCard {...common} label={bp ? t("Businessplan") : t("Finanzplan")} title={e.plan.title} preview={notePreview ?? (bp ? t("Schau dir deinen Businessplan an.") : t("Schau dir deinen Finanzplan an."))}>
         {note}
         <p className="text-xs text-muted">{from}</p>
         <Actions>
-          <Link href={bp ? "/mein-bereich/businessplan" : "/mein-bereich/finanzplan"} className="btn btn-sm">{bp ? "Businessplan öffnen" : "Finanzplan öffnen"}</Link>
+          <Link href={bp ? "/mein-bereich/businessplan" : "/mein-bereich/finanzplan"} className="btn btn-sm">{bp ? t("Businessplan öffnen") : t("Finanzplan öffnen")}</Link>
         </Actions>
       </InboxCard>
     );
@@ -299,15 +302,16 @@ function Entry({ e, when, open }: { e: InboxEntry; when: string; open: boolean }
 
   const a = e.appt;
   const cancelled = a.status === "abgesagt" || e.note === "abgesagt";
-  const label = cancelled ? "Termin abgesagt" : e.note === "geaendert" ? "Termin geändert" : "Neuer Termin";
-  const kind = isKind(a.kind) ? KINDS[a.kind].label : "Termin";
+  const label = cancelled ? t("Termin abgesagt") : e.note === "geaendert" ? t("Termin geändert") : t("Neuer Termin");
+  const kind = t(isKind(a.kind) ? KINDS[a.kind].label : "Termin");
+  const span = t("{von}–{bis} Uhr", { von: a.start, bis: a.end });
   return (
-    <InboxCard {...common} label={label} title={a.title} done={cancelled} preview={`${dayMedium(a.day)}, ${a.start}–${a.end} Uhr · ${kind}`}>
-      <p className="text-[15px]"><span className="font-semibold">{dayMedium(a.day)}</span>, {a.start}–{a.end} Uhr · {kind}</p>
-      <p className="text-xs text-muted">{from}{cancelled ? " · Dieser Termin findet nicht statt." : ""}</p>
+    <InboxCard {...common} label={label} title={a.title} done={cancelled} preview={`${dayMedium(a.day, lang)}, ${span} · ${kind}`}>
+      <p className="text-[15px]"><span className="font-semibold">{dayMedium(a.day, lang)}</span>, {span} · {kind}</p>
+      <p className="text-xs text-muted">{from}{cancelled ? ` · ${t("Dieser Termin findet nicht statt.")}` : ""}</p>
       <Actions>
-        <Link href={`/mein-bereich/kalender?datum=${a.day}&termin=${a.id}`} className="btn btn-sm"><Icon name="calendar" className="size-4" /> Im Kalender</Link>
-        {a.join_url && !cancelled && <a href={a.join_url} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">Teams-Link ↗</a>}
+        <Link href={`/mein-bereich/kalender?datum=${a.day}&termin=${a.id}`} className="btn btn-sm"><Icon name="calendar" className="size-4" /> {t("Im Kalender")}</Link>
+        {a.join_url && !cancelled && <a href={a.join_url} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">{t("Teams-Link")} ↗</a>}
       </Actions>
     </InboxCard>
   );

@@ -3,34 +3,12 @@ import type { ReactNode } from "react";
 import { logout } from "@/app/login/actions";
 import { mobileTabs, type NavGroup } from "@/lib/nav";
 import { Heartbeat } from "@/components/presence/Heartbeat";
+import { getT } from "@/lib/i18n-server";
 import { Icon } from "./icons";
 import { MobileNav, SideNav } from "./Nav";
+import { Avatar } from "./Avatar";
 
-export const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-/** Farbe für Namenskreise, aus dem Namen abgeleitet, damit jede Person immer gleich aussieht */
-export function avatarStyle(name: string) {
-  const hues = [215, 200, 230, 190, 30, 160, 250, 15];
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const hue = hues[h % hues.length];
-  return { background: `linear-gradient(135deg, hsl(${hue} 55% 46%), hsl(${hue + 25} 60% 32%))` };
-}
-
-export function Avatar({ name, size = "size-9", className = "" }: { name: string; size?: string; className?: string }) {
-  return (
-    <span className={`grid shrink-0 place-items-center rounded-full text-[12px] font-bold tracking-wide text-white shadow-[inset_0_1px_0_rgba(255,255,255,.25)] ${size} ${className}`} style={avatarStyle(name)}>
-      {initials(name)}
-    </span>
-  );
-}
+export { Avatar, avatarStyle, initials } from "./Avatar";
 
 export function Brand({ light = false }: { light?: boolean }) {
   return (
@@ -58,7 +36,8 @@ type Props = {
 /**
  * Rahmen jeder angemeldeten Seite: dunkle Seitenleiste am Rechner, oben Logo und unten eine Tab-Leiste am Handy.
  */
-export function AppShell({ user, groups, extra, wide, children }: Props) {
+export async function AppShell({ user, groups, extra, wide, children }: Props) {
+  const t = await getT();
   const sidebar = (
     <>
       <SideNav groups={groups} />
@@ -71,12 +50,12 @@ export function AppShell({ user, groups, extra, wide, children }: Props) {
             <p className="text-[11px] text-white/50">{user.role === "coach" ? "Coach" : "Coachee"}</p>
           </div>
           <form action={logout}>
-            <button title="Abmelden" aria-label="Abmelden" className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"><Icon name="logout" className="size-[18px]" /></button>
+            <button title={t("Abmelden")} aria-label={t("Abmelden")} className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"><Icon name="logout" className="size-[18px]" /></button>
           </form>
         </div>
         <p className="flex gap-3 px-1 text-[11px] text-white/35">
-          <Link href="/datenschutz" className="hover:text-white/70">Datenschutz</Link>
-          <Link href="/impressum" className="hover:text-white/70">Impressum</Link>
+          <Link href="/datenschutz" className="hover:text-white/70">{t("Datenschutz")}</Link>
+          <Link href="/impressum" className="hover:text-white/70">{t("Impressum")}</Link>
         </p>
       </div>
     </>

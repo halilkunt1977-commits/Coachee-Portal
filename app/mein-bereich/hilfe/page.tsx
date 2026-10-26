@@ -2,17 +2,19 @@ import { HelpView } from "@/components/erklaervideo/HelpView";
 import { Empty } from "@/components/ui";
 import { ownCoachee } from "@/lib/access";
 import { requireUser } from "@/lib/auth";
+import { getT } from "@/lib/i18n-server";
 import { hasFeature } from "@/lib/features";
 import { greetingVoiceEnabled } from "@/lib/greeting-audio";
 
-export const metadata = { title: "So funktioniert dein Portal" };
+export const generateMetadata = async () => ({ title: (await getT())("So funktioniert dein Portal") });
 
 /** Erklärvideo für den Coachee: begrüßt ihn mit Vornamen, auf Deutsch oder Türkisch, passend zur Coaching-Art */
 export default async function Hilfe() {
   const user = await requireUser("coachee");
+  const t = await getT();
   const c = await ownCoachee(user);
-  if (!c) return <Empty>Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.</Empty>;
-  if (!hasFeature(c, "erklaervideo")) return <Empty>Dieses Video schaltet dein Coach für dich frei.</Empty>;
+  if (!c) return <Empty>{t("Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.")}</Empty>;
+  if (!hasFeature(c, "erklaervideo")) return <Empty>{t("Dieses Video schaltet dein Coach für dich frei.")}</Empty>;
   return (
     <div className="mx-auto max-w-5xl">
       <HelpView coacheeId={c.id} firstName={c.first_name} type={c.coaching_type} language={c.language} voice={greetingVoiceEnabled()} />

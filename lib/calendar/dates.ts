@@ -47,11 +47,14 @@ export function monthWeeks(day: string) {
 export const todayBerlin = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
 export const nowBerlinHm = () => new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
 
-const fmt = (day: string, o: Intl.DateTimeFormatOptions) => toDate(day).toLocaleDateString("de-DE", { timeZone: "UTC", ...o });
-export const dayLong = (day: string) => fmt(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-export const dayMedium = (day: string) => fmt(day, { weekday: "short", day: "numeric", month: "short" });
-export const monthTitle = (day: string) => fmt(day, { month: "long", year: "numeric" });
-export const weekdayShort = (day: string) => fmt(day, { weekday: "short" }).replace(".", "");
+// lang: „tr“ für Coachees mit türkischer Oberfläche (lib/i18n.ts), sonst Deutsch
+type L = "de" | "tr";
+const fmt = (day: string, o: Intl.DateTimeFormatOptions, lang: L = "de") => toDate(day).toLocaleDateString(lang === "tr" ? "tr-TR" : "de-DE", { timeZone: "UTC", ...o });
+export const dayLong = (day: string, lang?: L) => fmt(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" }, lang);
+export const dateLong = (day: string, lang?: L) => fmt(day, { day: "numeric", month: "long", year: "numeric" }, lang);
+export const dayMedium = (day: string, lang?: L) => fmt(day, { weekday: "short", day: "numeric", month: "short" }, lang);
+export const monthTitle = (day: string, lang?: L) => fmt(day, { month: "long", year: "numeric" }, lang);
+export const weekdayShort = (day: string, lang?: L) => fmt(day, { weekday: "short" }, lang).replace(".", "");
 export const dayNum = (day: string) => Number(day.slice(8, 10));
 
 /** Kalenderwoche nach ISO 8601 */
@@ -62,10 +65,10 @@ export function isoWeek(day: string) {
 }
 
 /** „heute“, „morgen“ oder der Wochentag mit Datum */
-export function relativeDay(day: string, today = todayBerlin()) {
-  if (day === today) return "Heute";
-  if (day === addDays(today, 1)) return "Morgen";
-  return dayMedium(day);
+export function relativeDay(day: string, today = todayBerlin(), lang: L = "de") {
+  if (day === today) return lang === "tr" ? "Bugün" : "Heute";
+  if (day === addDays(today, 1)) return lang === "tr" ? "Yarın" : "Morgen";
+  return dayMedium(day, lang);
 }
 
 export const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));

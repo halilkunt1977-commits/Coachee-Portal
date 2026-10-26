@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { RegisterSW } from "@/components/app/RegisterSW";
+import { LangProvider } from "@/components/i18n/LangProvider";
+import { serverLang } from "@/lib/i18n-server";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
 import "./globals.css";
 
@@ -17,11 +19,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#0a1628", viewportFit: "cover" };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Türkisch nur für Coachees, die der Coach darauf gestellt hat
+  const lang = await serverLang();
   return (
-    <html lang="de" className={`${geist.variable} ${bricolage.variable} h-full antialiased`}>
+    <html lang={lang} className={`${geist.variable} ${bricolage.variable} h-full antialiased`}>
       <body className="min-h-full">
-        {children}
+        <LangProvider lang={lang}>{children}</LangProvider>
         <RegisterSW />
       </body>
     </html>
