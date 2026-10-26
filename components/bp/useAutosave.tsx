@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "@/components/i18n/LangProvider";
 
 export type SaveState = { kind: "saved" | "dirty" | "saving" | "error" | "conflict"; message?: string; by?: string | null };
 export type SaveResult = { ok: true } | { ok: false; error?: string; conflict?: { by: string | null } };
@@ -72,7 +73,8 @@ export function useAutosave(run: () => Promise<SaveResult>, delay = 900) {
 }
 
 export function SaveBadge({ state }: { state: SaveState }) {
-  const text = { saved: "Gespeichert", dirty: "Ungespeichert …", saving: "Speichert …", error: state.message ?? "Nicht gespeichert", conflict: "Angehalten" }[state.kind];
+  const t = useT();
+  const text = t({ saved: "Gespeichert", dirty: "Ungespeichert …", saving: "Speichert …", error: state.message ?? "Nicht gespeichert", conflict: "Angehalten" }[state.kind]);
   const tone = state.kind === "error" || state.kind === "conflict" ? "text-danger" : state.kind === "saved" ? "text-ok" : "text-muted";
   return <span className={`text-xs font-semibold ${tone}`} role="status">{state.kind === "saved" ? "✓ " : ""}{text}</span>;
 }

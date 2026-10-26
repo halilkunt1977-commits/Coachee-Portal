@@ -406,12 +406,13 @@ export function keyFigures(f: FinanceInput, r = calculate(f)): string[][] {
 }
 
 /** Hinweise, die Fachstelle oder Bank sofort sehen würden */
-export function financeHints(f: FinanceInput, r: FinanceResult): { tone: "warn" | "ok"; text: string }[] {
-  const out: { tone: "warn" | "ok"; text: string }[] = [];
+/** text ist die deutsche Vorlage mit {Platzhaltern} aus vars, damit die Oberfläche sie übersetzen kann */
+export function financeHints(f: FinanceInput, r: FinanceResult): { tone: "warn" | "ok"; text: string; vars?: Record<string, string> }[] {
+  const out: { tone: "warn" | "ok"; text: string; vars?: Record<string, string> }[] = [];
   if (!f.revenues.length) out.push({ tone: "warn", text: "Es sind noch keine Umsätze geplant (Umsatzherleitung)." });
   if (f.revenues.length && !f.materialPct.some((x) => x > 0) && !f.costs.length) out.push({ tone: "warn", text: "Es sind noch keine Kosten eingetragen (Kostenherleitung, Materialquote)." });
-  if (r.minBalance.value < 0) out.push({ tone: "warn", text: `Der Kontostand wird im Monat ${monthLabel(f.start, r.minBalance.month)} negativ (${eur(r.minBalance.value)}). Anfangsliquidität, Finanzierung oder Anlauf anpassen.` });
-  else if (r.gap < 0 && r.capitalNeed.total > 0) out.push({ tone: "ok", text: `Anfangsliquidität und Finanzierung decken ${eur(r.financingTotal)} des Kapitalbedarfs von ${eur(r.capitalNeed.total)}, der Rest kommt aus den ersten Umsätzen.` });
+  if (r.minBalance.value < 0) out.push({ tone: "warn", text: "Der Kontostand wird im Monat {monat} negativ ({betrag}). Anfangsliquidität, Finanzierung oder Anlauf anpassen.", vars: { monat: monthLabel(f.start, r.minBalance.month), betrag: eur(r.minBalance.value) } });
+  else if (r.gap < 0 && r.capitalNeed.total > 0) out.push({ tone: "ok", text: "Anfangsliquidität und Finanzierung decken {gedeckt} des Kapitalbedarfs von {bedarf}, der Rest kommt aus den ersten Umsätzen.", vars: { gedeckt: eur(r.financingTotal), bedarf: eur(r.capitalNeed.total) } });
   const surplus = (y: YearRow) => y.profit - y.tax - y.privateDraw + y.grants;
   if (f.revenues.length && hasLiving(f) && surplus(r.years[0]) < 0 && surplus(r.years[1]) < 0) out.push({ tone: "warn", text: "Auch im zweiten Jahr deckt das Ergebnis Steuern und private Entnahmen nicht." });
   if (f.revenues.length && r.minBalance.value >= 0) out.push({ tone: "ok", text: "Die Liquidität bleibt über alle 36 Monate positiv." });

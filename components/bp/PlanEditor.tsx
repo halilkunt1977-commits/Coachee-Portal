@@ -8,6 +8,7 @@ import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
 import { Schreibhilfe } from "./Schreibhilfe";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
+import { useT } from "@/components/i18n/LangProvider";
 
 type Baustein = { category: string; title: string; detail: string };
 type Props = {
@@ -40,6 +41,7 @@ const snapshot = (s: { text: string; sources: string }) => `${s.text}\u0000${s.s
 const BLICK = "blick";
 
 export function PlanEditor(p: Props) {
+  const t = useT();
   const [secs, setSecs] = useState<Record<string, Sec>>(() =>
     Object.fromEntries(SECTIONS.map((s) => {
       const v = p.sections[s.key];
@@ -181,22 +183,22 @@ export function PlanEditor(p: Props) {
       <div className="card space-y-3 !p-4">
         <div className="flex flex-wrap items-end gap-4">
           <label className="min-w-0 flex-1 basis-64">
-            <span className="label">Untertitel: das Vorhaben</span>
+            <span className="label">{t("Untertitel: das Vorhaben")}</span>
             <input
               className="input font-semibold"
               value={title}
               maxLength={120}
-              placeholder="z. B. Gründung eines Malerbetriebs"
+              placeholder={t("z. B. Gründung eines Malerbetriebs")}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => void saveTitle(p.coacheeId, title)}
             />
-            <span className="mt-1 block text-xs text-muted">Auf dem Deckblatt steht „BUSINESSPLAN – {p.name}“ und darunter dieser Untertitel.</span>
+            <span className="mt-1 block text-xs text-muted">{t("Auf dem Deckblatt steht „BUSINESSPLAN – {name}“ und darunter dieser Untertitel.", { name: p.name })}</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={p.financeHref} className="btn-ghost">Finanzplan</Link>
+            <Link href={p.financeHref} className="btn-ghost">{t("Finanzplan")}</Link>
             {p.share}
-            <button type="button" className="btn-ghost" onClick={() => void download(p.wordHref)}>Word</button>
-            <button type="button" className="btn" onClick={() => void download(p.pdfHref)}>PDF</button>
+            <button type="button" className="btn-ghost" onClick={() => void download(p.wordHref)}>{t("Word")}</button>
+            <button type="button" className="btn" onClick={() => void download(p.pdfHref)}>{t("PDF")}</button>
           </div>
         </div>
         {p.coach && (
@@ -213,23 +215,23 @@ export function PlanEditor(p: Props) {
         <aside className="card space-y-3 !p-4 lg:sticky lg:top-20">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <span className="whitespace-nowrap font-semibold">{done} von {SECTIONS.length} Kapiteln</span>
+              <span className="whitespace-nowrap font-semibold">{t("{a} von {b} Kapiteln", { a: done, b: SECTIONS.length })}</span>
               <SaveBadge state={state} />
             </div>
             <div className="mt-1.5 h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok transition-all" style={{ width: `${(done / SECTIONS.length) * 100}%` }} /></div>
           </div>
           <label className="block lg:hidden">
-            <span className="sr-only">Kapitel</span>
+            <span className="sr-only">{t("Kapitel")}</span>
             <select className="input" value={active} onChange={(e) => go(e.target.value)}>
-              <option value={BLICK}>Auf einen Blick</option>
-              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {s.title}{secs[s.key].conflict ? " (Konflikt)" : openProposal(chats[s.key] ?? []) ? " (Vorschlag)" : ""}</option>)}
+              <option value={BLICK}>{t("Auf einen Blick")}</option>
+              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {t(s.title)}{secs[s.key].conflict ? ` (${t("Konflikt")})` : openProposal(chats[s.key] ?? []) ? ` (${t("Vorschlag")})` : ""}</option>)}
             </select>
           </label>
           <ol className="hidden space-y-0.5 lg:block">
             <li>
               <button type="button" onClick={() => go(BLICK)} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm ${active === BLICK ? "bg-tint font-semibold text-accent" : "hover:bg-bg"}`}>
                 <span className="grid size-5 shrink-0 place-items-center rounded-full bg-line-soft text-[11px] font-bold text-muted">i</span>
-                <span className="min-w-0 flex-1 truncate">Auf einen Blick</span>
+                <span className="min-w-0 flex-1 truncate">{t("Auf einen Blick")}</span>
               </button>
             </li>
             {SECTIONS.map((s, i) => {
@@ -237,30 +239,30 @@ export function PlanEditor(p: Props) {
               const ok = sectionDone(sec);
               return (
                 <li key={s.key}>
-                  <button type="button" onClick={() => go(s.key)} title={s.title} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm ${s.key === active ? "bg-tint font-semibold text-accent" : "hover:bg-bg"}`}>
+                  <button type="button" onClick={() => go(s.key)} title={t(s.title)} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm ${s.key === active ? "bg-tint font-semibold text-accent" : "hover:bg-bg"}`}>
                     <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${ok ? "bg-ok text-white" : sec.text.trim() ? "bg-gold/20 text-gold" : "bg-line-soft text-muted"}`}>{ok ? "✓" : i + 1}</span>
-                    <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                    {sec.conflict && <span className="text-danger" title="Konflikt">!</span>}
-                    {!sec.conflict && writing === s.key && <span className="animate-pulse text-gold" title="Schreibt …">✦</span>}
-                    {!sec.conflict && writing !== s.key && openProposal(chats[s.key] ?? []) && <span className="size-2 rounded-full bg-gold" title="Vorschlag wartet auf Prüfung" />}
+                    <span className="min-w-0 flex-1 truncate">{t(s.title)}</span>
+                    {sec.conflict && <span className="text-danger" title={t("Konflikt")}>!</span>}
+                    {!sec.conflict && writing === s.key && <span className="animate-pulse text-gold" title={t("Schreibt …")}>✦</span>}
+                    {!sec.conflict && writing !== s.key && openProposal(chats[s.key] ?? []) && <span className="size-2 rounded-full bg-gold" title={t("Vorschlag wartet auf Prüfung")} />}
                   </button>
                 </li>
               );
             })}
           </ol>
-          <p className="border-t border-line-soft pt-3 text-xs text-muted">Ein Kapitel gilt ab etwa 300 Zeichen als geschrieben. Die Executive Summary am besten zum Schluss.</p>
+          <p className="border-t border-line-soft pt-3 text-xs text-muted">{t("Ein Kapitel gilt ab etwa 300 Zeichen als geschrieben. Die Executive Summary am besten zum Schluss.")}</p>
           {p.ai && (
             <div className="space-y-1.5 border-t border-line-soft pt-3">
               {batch ? (
                 <>
                   <p className="text-xs font-semibold" role="status">✦ Entwirft Kapitel {Math.min(batch.done + 1, batch.keys.length)} von {batch.keys.length} …</p>
                   <div className="h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(batch.done / batch.keys.length) * 100}%` }} /></div>
-                  <button type="button" className="link text-xs" onClick={() => (stopBatch.current = true)}>Nach diesem Kapitel anhalten</button>
+                  <button type="button" className="link text-xs" onClick={() => (stopBatch.current = true)}>{t("Nach diesem Kapitel anhalten")}</button>
                 </>
               ) : (
                 <>
-                  <button type="button" className="btn-ghost btn-sm w-full" disabled={writing !== null || !SECTIONS.some((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? []))} onClick={() => void draftEmpty()}>✦ Alle leeren Kapitel entwerfen</button>
-                  <p className="text-xs text-muted">Jedes leere Kapitel bekommt nacheinander einen Vorschlag zum Prüfen. Nichts wird ohne dich übernommen.</p>
+                  <button type="button" className="btn-ghost btn-sm w-full" disabled={writing !== null || !SECTIONS.some((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? []))} onClick={() => void draftEmpty()}>✦ {t("Alle leeren Kapitel entwerfen")}</button>
+                  <p className="text-xs text-muted">{t("Jedes leere Kapitel bekommt nacheinander einen Vorschlag zum Prüfen. Nichts wird ohne dich übernommen.")}</p>
                 </>
               )}
             </div>
@@ -289,32 +291,32 @@ export function PlanEditor(p: Props) {
       <section className="card min-w-0 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Kapitel {index + 1} von {SECTIONS.length}</p>
-            <h2 className="h2">{index + 1}. {def.title}</h2>
-            <p className="text-sm text-muted">{def.hint}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("Kapitel {a} von {b}", { a: index + 1, b: SECTIONS.length })}</p>
+            <h2 className="h2">{index + 1}. {t(def.title)}</h2>
+            <p className="text-sm text-muted">{t(def.hint)}</p>
           </div>
         </div>
 
         <details className="rounded-xl bg-bg px-4 py-3" open={!sec.text.trim()}>
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">Leitfragen</summary>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{def.questions.map((q) => <li key={q}>{q}</li>)}</ul>
-          <p className="mt-2 text-xs text-muted">Umfang in der Vorlage: etwa {def.words[0]} bis {def.words[1]} Wörter, sachlich in der dritten Person.</p>
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">{t("Leitfragen")}</summary>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{def.questions.map((q) => <li key={q}>{t(q)}</li>)}</ul>
+          <p className="mt-2 text-xs text-muted">{t("Umfang in der Vorlage: etwa {a} bis {b} Wörter, sachlich in der dritten Person.", { a: def.words[0], b: def.words[1] })}</p>
         </details>
 
         {sec.conflict && (
           <div className="space-y-3 rounded-xl border border-danger/30 bg-[#f8e6e3] p-4 text-sm" role="alert">
-            <p className="font-semibold text-danger">{sec.conflict.by ?? "Jemand anderes"} hat dieses Kapitel gerade auch geändert. Welche Fassung soll gelten?</p>
-            <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-ink">{sec.conflict.text || "(leer)"}</div>
+            <p className="font-semibold text-danger">{t("{name} hat dieses Kapitel gerade auch geändert. Welche Fassung soll gelten?", { name: sec.conflict.by ?? t("Jemand anderes") })}</p>
+            <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-ink">{sec.conflict.text || t("(leer)")}</div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-sm" onClick={() => {
                 const c = sec.conflict!;
                 setSecs((prev) => ({ ...prev, [active]: { ...prev[active], text: c.text, sources: c.sources, saved: snapshot(c), version: c.version, conflict: undefined, updatedBy: null } }));
-              }}>Diese Fassung übernehmen</button>
+              }}>{t("Diese Fassung übernehmen")}</button>
               <button type="button" className="btn-ghost btn-sm" onClick={() => {
                 const c = sec.conflict!;
                 setSecs((prev) => ({ ...prev, [active]: { ...prev[active], version: c.version, conflict: undefined } }));
                 schedule();
-              }}>Meine Fassung behalten</button>
+              }}>{t("Meine Fassung behalten")}</button>
             </div>
           </div>
         )}
@@ -344,62 +346,62 @@ export function PlanEditor(p: Props) {
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("### Zwischenüberschrift", "Zwischenüberschrift")}>Zwischenüberschrift</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("- Erster Punkt\n- Zweiter Punkt", "Erster Punkt")}>Aufzählung</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n| | | |\n| | | |", "Spalte 1")}>Tabelle</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("### Zwischenüberschrift", "Zwischenüberschrift")}>{t("Zwischenüberschrift")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("- Erster Punkt\n- Zweiter Punkt", "Erster Punkt")}>{t("Aufzählung")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n| | | |\n| | | |", "Spalte 1")}>{t("Tabelle")}</button>
             <span className="flex-1" />
-            <button type="button" className="btn-ghost btn-sm" aria-pressed={preview} onClick={() => setPreview(!preview)}>{preview ? "Bearbeiten" : "Vorschau"}</button>
+            <button type="button" className="btn-ghost btn-sm" aria-pressed={preview} onClick={() => setPreview(!preview)}>{preview ? t("Bearbeiten") : t("Vorschau")}</button>
           </div>
           {preview ? (
-            <div className="bp-text min-h-80 rounded-xl border border-line-soft bg-surface px-4 py-3 text-[15px] leading-relaxed">{sec.text.trim() ? <Markdown text={sec.text} /> : <p className="text-muted">Noch kein Text.</p>}</div>
+            <div className="bp-text min-h-80 rounded-xl border border-line-soft bg-surface px-4 py-3 text-[15px] leading-relaxed">{sec.text.trim() ? <Markdown text={sec.text} /> : <p className="text-muted">{t("Noch kein Text.")}</p>}</div>
           ) : (
             <textarea
               ref={field}
-              aria-label={`Text für ${def.title}`}
+              aria-label={t("Text für {titel}", { titel: t(def.title) })}
               className="input min-h-80 resize-none text-[15px] leading-relaxed"
               value={sec.text}
               disabled={Boolean(sec.conflict)}
-              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder oben mit der Schreibhilfe aus Notizen entwerfen lassen.` : `Hier schreibst du das Kapitel „${def.title}“. Die Leitfragen oben helfen dir.`}
+              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder oben mit der Schreibhilfe aus Notizen entwerfen lassen.` : t("Hier schreibst du das Kapitel „{titel}“. Die Leitfragen oben helfen dir.", { titel: t(def.title) })}
               onChange={(e) => patch(active, { text: e.target.value })}
             />
           )}
           <p className="flex flex-wrap justify-between gap-2 text-xs text-muted">
-            <span>{words} Wörter · Absätze mit Leerzeile, Aufzählungen mit „- “, Zwischenüberschrift mit „### “, **fett**</span>
-            {sec.updatedAt && <span>Zuletzt {by ? `von ${by} ` : ""}am {new Date(sec.updatedAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
+            <span>{t("{n} Wörter · Absätze mit Leerzeile, Aufzählungen mit „- “, Zwischenüberschrift mit „### “, **fett**", { n: words })}</span>
+            {sec.updatedAt && <span>{t(by ? "Zuletzt von {name} am {zeit}" : "Zuletzt am {zeit}", { name: by === "dir" ? t("dir") : by ?? "", zeit: new Date(sec.updatedAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) })}</span>}
           </p>
         </div>
 
         {def.key === "finanzen" && (
           <div className="rounded-xl bg-bg px-4 py-3 text-sm">
-            <p className="font-semibold">Kennzahlen aus dem Finanzplan</p>
-            {p.figures ? <FiguresTable rows={p.figures} /> : <p className="text-muted">Sobald der <Link className="link" href={p.financeHref}>Finanzplan</Link> Zahlen hat, steht hier im fertigen Plan automatisch die Tabelle mit Umsatz, Material, Rohertrag, Ergebnis und Personal.</p>}
+            <p className="font-semibold">{t("Kennzahlen aus dem Finanzplan")}</p>
+            {p.figures ? <FiguresTable rows={p.figures} /> : <p className="text-muted">{t("Sobald der")} <Link className="link" href={p.financeHref}>{t("Finanzplan")}</Link> {t("Zahlen hat, steht hier im fertigen Plan automatisch die Tabelle mit Umsatz, Material, Rohertrag, Ergebnis und Personal.")}</p>}
           </div>
         )}
 
         <label className="block">
-          <span className="label">Quellen</span>
+          <span className="label">{t("Quellen")}</span>
           <textarea
             className="input min-h-20 text-sm"
             rows={Math.min(8, Math.max(2, sec.sources.split("\n").length + 1))}
             value={sec.sources}
             disabled={Boolean(sec.conflict)}
-            placeholder="Eine Quelle pro Zeile, z. B. Statistisches Landesamt (2025): Bestand an Wohngebäuden – https://…"
+            placeholder={t("Eine Quelle pro Zeile, z. B. Statistisches Landesamt (2025): Bestand an Wohngebäuden – https://…")}
             onChange={(e) => patch(active, { sources: e.target.value })}
           />
-          <span className="mt-1 block text-xs text-muted">Steht am Ende des Kapitels unter „Quellen“. Bitte nur echte, überprüfbare Quellen.</span>
+          <span className="mt-1 block text-xs text-muted">{t("Steht am Ende des Kapitels unter „Quellen“. Bitte nur echte, überprüfbare Quellen.")}</span>
         </label>
 
         {bausteine.length > 0 && (
           <details className="rounded-xl border border-line-soft" open={!sec.text.trim()}>
-            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Aus den Gesprächen ({bausteine.length})</summary>
+            <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">{t("Aus den Gesprächen ({n})", { n: bausteine.length })}</summary>
             <ul className="divide-y divide-line-soft border-t border-line-soft">
               {bausteine.map((b, i) => (
                 <li key={i} className="flex items-start gap-3 px-4 py-2.5 text-sm">
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium">{b.title} <span className="text-xs font-normal text-muted">· {p.categoryLabels[b.category] ?? b.category}</span></p>
+                    <p className="font-medium">{b.title} <span className="text-xs font-normal text-muted">· {t(p.categoryLabels[b.category] ?? b.category)}</span></p>
                     {b.detail && <p className="text-muted">{b.detail}</p>}
                   </div>
-                  <button type="button" className="link shrink-0 text-xs" disabled={Boolean(sec.conflict)} onClick={() => patch(active, { text: `${sec.text.trimEnd()}${sec.text.trim() ? "\n\n" : ""}${b.detail || b.title}` })}>Einfügen</button>
+                  <button type="button" className="link shrink-0 text-xs" disabled={Boolean(sec.conflict)} onClick={() => patch(active, { text: `${sec.text.trimEnd()}${sec.text.trim() ? "\n\n" : ""}${b.detail || b.title}` })}>{t("Einfügen")}</button>
                 </li>
               ))}
             </ul>
@@ -407,8 +409,8 @@ export function PlanEditor(p: Props) {
         )}
 
         <div className="flex justify-between gap-2 border-t border-line-soft pt-4">
-          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" onClick={() => go(index === 0 ? BLICK : SECTIONS[index - 1].key)}>← {index === 0 ? "Auf einen Blick" : SECTIONS[index - 1].title}</button>
-          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" disabled={index === SECTIONS.length - 1} onClick={() => go(SECTIONS[index + 1].key)}>{SECTIONS[index + 1]?.title ?? "Weiter"} →</button>
+          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" onClick={() => go(index === 0 ? BLICK : SECTIONS[index - 1].key)}>← {index === 0 ? t("Auf einen Blick") : t(SECTIONS[index - 1].title)}</button>
+          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" disabled={index === SECTIONS.length - 1} onClick={() => go(SECTIONS[index + 1].key)}>{SECTIONS[index + 1] ? t(SECTIONS[index + 1].title) : t("Weiter")} →</button>
         </div>
       </section>
     );
@@ -416,11 +418,12 @@ export function PlanEditor(p: Props) {
 }
 
 function FiguresTable({ rows }: { rows: string[][] }) {
+  const t = useT();
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-full min-w-[30rem] text-sm tabular-nums">
-        <thead><tr className="border-b border-line-soft text-left text-xs text-muted">{rows[0].map((c, i) => <th key={i} className={`py-1.5 pr-3 font-medium ${i ? "text-right" : ""}`}>{c}</th>)}</tr></thead>
-        <tbody>{rows.slice(1).map((r) => <tr key={r[0]} className="border-b border-line-soft last:border-0">{r.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${i ? "text-right" : ""}`}>{c}</td>)}</tr>)}</tbody>
+        <thead><tr className="border-b border-line-soft text-left text-xs text-muted">{rows[0].map((c, i) => <th key={i} className={`py-1.5 pr-3 font-medium ${i ? "text-right" : ""}`}>{t(c)}</th>)}</tr></thead>
+        <tbody>{rows.slice(1).map((r) => <tr key={r[0]} className="border-b border-line-soft last:border-0">{r.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${i ? "text-right" : ""}`}>{i ? c : t(c)}</td>)}</tr>)}</tbody>
       </table>
     </div>
   );
@@ -428,6 +431,7 @@ function FiguresTable({ rows }: { rows: string[][] }) {
 
 /** „Auf einen Blick“: die Steckbrief-Angaben der Vorlage, darunter die Kennzahlen aus dem Finanzplan */
 function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, projectNotes, schreibhilfeHref }: { coacheeId: string; initial: GlanceItem[]; figures: string[][] | null; financeHref: string; coach: boolean; ai: boolean; projectNotes: string; schreibhilfeHref: string }) {
+  const t = useT();
   const [items, setItems] = useState(initial);
   const [proposal, setProposal] = useState<(GlanceItem & { take: boolean })[] | null>(null);
   const [proposing, setProposing] = useState(false);
@@ -454,12 +458,12 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
       const res = await fetch(schreibhilfeHref, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blick: true }) });
       const data = (await res.json().catch(() => ({}))) as { items?: GlanceItem[]; error?: string };
       if (data.items) {
-        if (!data.items.length) setProposeError("Aus den Inhalten ergibt sich nichts Neues für diese Seite.");
+        if (!data.items.length) setProposeError(t("Aus den Inhalten ergibt sich nichts Neues für diese Seite."));
         // leere Felder sind vorausgewählt, schon ausgefüllte nicht
         else setProposal(data.items.map((g) => ({ ...g, take: !items.find((x) => x.label === g.label)?.value.trim() })));
-      } else setProposeError(data.error ?? "Das hat gerade nicht geklappt.");
+      } else setProposeError(t(data.error ?? "Das hat gerade nicht geklappt."));
     } catch {
-      setProposeError("Keine Verbindung. Bitte gleich noch einmal versuchen.");
+      setProposeError(t("Keine Verbindung. Bitte gleich noch einmal versuchen."));
     } finally {
       setProposing(false);
     }
@@ -478,8 +482,8 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
     <section className="card min-w-0 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="h2">Auf einen Blick</h2>
-          <p className="text-sm text-muted">Die wichtigsten Angaben in Stichworten, wie auf der zweiten Seite des Plans. Leere Felder erscheinen nicht im fertigen Plan.</p>
+          <h2 className="h2">{t("Auf einen Blick")}</h2>
+          <p className="text-sm text-muted">{t("Die wichtigsten Angaben in Stichworten, wie auf der zweiten Seite des Plans. Leere Felder erscheinen nicht im fertigen Plan.")}</p>
         </div>
         <SaveBadge state={state} />
       </div>
@@ -487,8 +491,8 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
       {ai && (
         <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm"><span className="text-gold">✦</span> <b>Aus den Inhalten ausfüllen:</b> <span className="text-muted">Die KI schlägt Stichworte aus Kapiteln, Finanzplan und Notizen vor. Du wählst, was übernommen wird.</span></p>
-            <button type="button" className="btn-ghost btn-sm" disabled={proposing} onClick={() => void propose()}>{proposing ? "Liest die Inhalte …" : "✦ Vorschlag machen"}</button>
+            <p className="text-sm"><span className="text-gold">✦</span> <b>{t("Aus den Inhalten ausfüllen:")}</b> <span className="text-muted">{t("Die KI schlägt Stichworte aus Kapiteln, Finanzplan und Notizen vor. Du wählst, was übernommen wird.")}</span></p>
+            <button type="button" className="btn-ghost btn-sm" disabled={proposing} onClick={() => void propose()}>{proposing ? t("Liest die Inhalte …") : t("✦ Vorschlag machen")}</button>
           </div>
           {proposeError && <p className="text-sm text-danger" role="alert">{proposeError}</p>}
           {proposal && (
@@ -510,8 +514,8 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
                 })}
               </ul>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn btn-sm" disabled={!proposal.some((g) => g.take)} onClick={applyProposal}>Ausgewählte übernehmen</button>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setProposal(null)}>Verwerfen</button>
+                <button type="button" className="btn btn-sm" disabled={!proposal.some((g) => g.take)} onClick={applyProposal}>{t("Ausgewählte übernehmen")}</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => setProposal(null)}>{t("Verwerfen")}</button>
               </div>
             </div>
           )}
@@ -520,28 +524,28 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
       <div className="space-y-3">
         {items.map((g, i) => (
           <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-xl border border-line-soft bg-bg/50 p-3 sm:grid-cols-[13rem_minmax(0,1fr)_auto]">
-            <input className="input !py-2 text-sm font-semibold" aria-label="Bezeichnung" value={g.label} onChange={(e) => update(items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
-            <button type="button" aria-label="Angabe löschen" title="Löschen" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-surface hover:text-danger sm:order-3" onClick={() => update(items.filter((_, j) => j !== i))}>✕</button>
+            <input className="input !py-2 text-sm font-semibold" aria-label={t("Bezeichnung")} value={g.label} onChange={(e) => update(items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+            <button type="button" aria-label={t("Angabe löschen")} title={t("Löschen")} className="grid size-9 place-items-center rounded-lg text-muted hover:bg-surface hover:text-danger sm:order-3" onClick={() => update(items.filter((_, j) => j !== i))}>✕</button>
             <textarea
               className="input col-span-2 !py-2 text-sm sm:order-2 sm:col-span-1"
-              aria-label={g.label || "Angabe"}
+              aria-label={g.label ? t(g.label) : t("Angabe")}
               rows={Math.min(6, Math.max(1, Math.ceil(g.value.length / 70) + g.value.split("\n").length - 1))}
               value={g.value}
-              placeholder={g.label === "Startdatum" ? "z. B. 01.02.2027" : ""}
+              placeholder={g.label === "Startdatum" ? t("z. B. 01.02.2027") : t(g.label) !== g.label ? t(g.label) : ""}
               onChange={(e) => update(items.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
             />
           </div>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => update([...items, { label: "", value: "" }])}>+ Eigene Angabe</button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => update([...items, { label: "", value: "" }])}>+ {t("Eigene Angabe")}</button>
         {missing.map((l) => (
-          <button key={l} type="button" className="rounded-full border border-line-soft px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => update([...items, { label: l, value: "" }])}>+ {l}</button>
+          <button key={l} type="button" className="rounded-full border border-line-soft px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => update([...items, { label: l, value: "" }])}>+ {t(l)}</button>
         ))}
       </div>
       <div className="rounded-xl bg-bg px-4 py-3 text-sm">
-        <p className="font-semibold">Kennzahlen aus dem Finanzplan</p>
-        {figures ? <FiguresTable rows={figures} /> : <p className="text-muted">Noch keine Zahlen. Die Tabelle entsteht aus dem <Link className="link" href={financeHref}>Finanzplan</Link>.</p>}
+        <p className="font-semibold">{t("Kennzahlen aus dem Finanzplan")}</p>
+        {figures ? <FiguresTable rows={figures} /> : <p className="text-muted">{t("Noch keine Zahlen. Die Tabelle entsteht aus dem")} <Link className="link" href={financeHref}>{t("Finanzplan")}</Link>.</p>}
       </div>
     </section>
   );
@@ -549,6 +553,7 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
 
 /** Notizen des Coachs zum ganzen Vorhaben: fließen in jedes Kapitel der Schreibhilfe ein, Coachees sehen sie nie */
 function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: string }) {
+  const t = useT();
   const [text, setText] = useState(initial);
   const latest = useRef(text);
   useEffect(() => {
@@ -561,7 +566,7 @@ function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: stri
   return (
     <label className="block rounded-xl bg-bg px-4 py-3">
       <span className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="label !mb-0">Notizen zum Vorhaben (nur für dich)</span>
+        <span className="label !mb-0">{t("Notizen zum Vorhaben (nur für dich)")}</span>
         {text !== initial && <SaveBadge state={state} />}
       </span>
       <textarea
@@ -569,7 +574,7 @@ function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: stri
         rows={Math.min(14, Math.max(4, text.split("\n").length + 1))}
         value={text}
         maxLength={8000}
-        placeholder="Alles, was für den ganzen Plan gilt: Ideen, Eindrücke aus den Gesprächen, Auskünfte, offene Punkte … Die Schreibhilfe nutzt diese Notizen in jedem Kapitel."
+        placeholder={t("Alles, was für den ganzen Plan gilt: Ideen, Eindrücke aus den Gesprächen, Auskünfte, offene Punkte … Die Schreibhilfe nutzt diese Notizen in jedem Kapitel.")}
         onChange={(e) => {
           setText(e.target.value);
           schedule();
