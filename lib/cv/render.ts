@@ -1,4 +1,4 @@
-import type { CvData, TemplateKey } from "./types";
+import type { CvData, CvLanguageKey, TemplateKey } from "./types";
 
 /*
  * Erzeugt das komplette HTML eines Lebenslaufs im A4-Format. Dieselbe Funktion liefert die Live-Vorschau im Editor
@@ -6,12 +6,38 @@ import type { CvData, TemplateKey } from "./types";
  * (Seitenleisten), sind als Hintergrund von <html> gemalt, damit sie auch auf Seite 2 durchgehen.
  */
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[c] as string);
+/** Feste Wörter im Dokument. Ein türkischer Lebenslauf bekommt türkische Überschriften (übliche Begriffe in türkischen CVs). */
+const TR: Record<string, string> = {
+  Profil: "Profil",
+  Berufserfahrung: "İş Deneyimi",
+  Ausbildung: "Eğitim",
+  "Weiterbildung und Zertifikate": "Kurslar ve Sertifikalar",
+  Kenntnisse: "Beceriler",
+  Sprachen: "Yabancı Diller",
+  Interessen: "İlgi Alanları",
+  Kontakt: "İletişim",
+  Telefon: "Telefon",
+  "E-Mail": "E-posta",
+  Adresse: "Adres",
+  Geboren: "Doğum",
+  Nationalität: "Uyruk",
+  Führerschein: "Ehliyet",
+  Web: "Web",
+  heute: "halen",
+  "Ort, Datum": "Yer, Tarih",
+  Unterschrift: "İmza",
+  Lebenslauf: "Özgeçmiş",
+};
+// Die Ausgabe läuft synchron in renderCvHtml, daher reicht die Sprache des gerade erzeugten Lebenslaufs hier
+let lang: CvLanguageKey = "de";
+const w = (de: string) => (lang === "tr" ? (TR[de] ?? de) : de);
+
 const month = (v: string) => (/^\d{4}-\d{2}$/.test(v) ? `${v.slice(5)}/${v.slice(0, 4)}` : esc(v));
-const range = (start: string, end: string, current = false) => [start && month(start), current ? "heute" : end && month(end)].filter(Boolean).join(" – ");
+const range = (start: string, end: string, current = false) => [start && month(start), current ? w("heute") : end && month(end)].filter(Boolean).join(" – ");
 const lines = (t: string) => t.split("\n").map((l) => l.replace(/^[\s•\-–*]+/, "").trim()).filter(Boolean);
 const bullets = (t: string) => (lines(t).length ? `<ul>${lines(t).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "");
 const has = (v: string | unknown[]) => (Array.isArray(v) ? v.length > 0 : Boolean(v && String(v).trim()));
-const today = () => new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const today = () => new Date().toLocaleDateString(lang === "tr" ? "tr-TR" : "de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 /** Farbe aufhellen (amount > 0, Richtung Weiß) oder abdunkeln (amount < 0). Hex rein, Hex raus. */
 export function tint(hex: string, amount: number) {
@@ -34,15 +60,15 @@ function photo(x: Ctx, cls = "photo") {
 }
 
 function contactItems(p: CvData["personal"]) {
-  const born = [p.birthDate, p.birthPlace && `in ${p.birthPlace}`].filter(Boolean).join(" ");
+  const born = lang === "tr" ? [p.birthDate, p.birthPlace].filter(Boolean).join(", ") : [p.birthDate, p.birthPlace && `in ${p.birthPlace}`].filter(Boolean).join(" ");
   return [
-    p.phone && ["Telefon", p.phone],
-    p.email && ["E-Mail", p.email],
-    (p.street || p.zip || p.city) && ["Adresse", [p.street, [p.zip, p.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")],
-    born && ["Geboren", born],
-    p.nationality && ["Nationalität", p.nationality],
-    p.license && ["Führerschein", p.license],
-    p.web && ["Web", p.web],
+    p.phone && [w("Telefon"), p.phone],
+    p.email && [w("E-Mail"), p.email],
+    (p.street || p.zip || p.city) && [w("Adresse"), [p.street, [p.zip, p.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")],
+    born && [w("Geboren"), born],
+    p.nationality && [w("Nationalität"), p.nationality],
+    p.license && [w("Führerschein"), p.license],
+    p.web && [w("Web"), p.web],
   ].filter(Boolean) as [string, string][];
 }
 
@@ -53,7 +79,7 @@ const contactInline = (p: CvData["personal"], sep = "") => contactItems(p).map((
 function section(title: string, body: string | string[], cls = "") {
   const items = (Array.isArray(body) ? body : [body]).filter((b) => b.trim());
   if (!items.length) return "";
-  return `<section class="${cls}"><div class="keep"><h3>${esc(title)}</h3>${items[0]}</div>${items.slice(1).join("")}</section>`;
+  return `<section class="${cls}"><div class="keep"><h3>${esc(w(title))}</h3>${items[0]}</div>${items.slice(1).join("")}</section>`;
 }
 
 function entries(d: CvData, kind: "experience" | "education") {
@@ -89,7 +115,7 @@ const mainSections = (d: CvData) =>
 
 function signature(x: Ctx) {
   if (!x.d.signature) return "";
-  return `<div class="signature"><div><p>${x.d.place ? `${esc(x.d.place)}, ${today()}` : "&nbsp;"}</p><span>Ort, Datum</span></div><div><p>${x.o.signature && x.d.signatureImage ? `<img src="${esc(x.o.signature)}" alt="Unterschrift">` : "&nbsp;"}</p><span>Unterschrift</span></div></div>`;
+  return `<div class="signature"><div><p>${x.d.place ? `${esc(x.d.place)}, ${today()}` : "&nbsp;"}</p><span>${w("Ort, Datum")}</span></div><div><p>${x.o.signature && x.d.signatureImage ? `<img src="${esc(x.o.signature)}" alt="${w("Unterschrift")}">` : "&nbsp;"}</p><span>${w("Unterschrift")}</span></div></div>`;
 }
 
 const BASE = (o: Opts) => `
@@ -134,10 +160,10 @@ function modern(x: Ctx) {
   const { d, c, p } = x;
   const side = [
     photo(x),
-    `<div class="block"><h3>Kontakt</h3>${contactList(p)}</div>`,
-    skillName(d).length ? `<div class="block"><h3>Kenntnisse</h3>${skillDots(d, "#fff", "rgba(255,255,255,.28)")}</div>` : "",
-    languageList(d) ? `<div class="block"><h3>Sprachen</h3>${languageList(d)}</div>` : "",
-    interests(d) ? `<div class="block"><h3>Interessen</h3>${interests(d)}</div>` : "",
+    `<div class="block"><h3>${w("Kontakt")}</h3>${contactList(p)}</div>`,
+    skillName(d).length ? `<div class="block"><h3>${w("Kenntnisse")}</h3>${skillDots(d, "#fff", "rgba(255,255,255,.28)")}</div>` : "",
+    languageList(d) ? `<div class="block"><h3>${w("Sprachen")}</h3>${languageList(d)}</div>` : "",
+    interests(d) ? `<div class="block"><h3>${w("Interessen")}</h3>${interests(d)}</div>` : "",
   ].join("");
   return `<style>${BASE(x.o)}
   html { background: linear-gradient(to right, ${c} 0 68mm, #fff 68mm); }
@@ -380,6 +406,7 @@ const RENDERERS: Record<TemplateKey, (x: Ctx) => string> = { modern, klassisch, 
 export function renderCvHtml(d: CvData, o: Opts) {
   const opts = o.template === "schlicht" ? { ...o, photo: null } : o;
   const x: Ctx = { d, o: opts, c: /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : "#1f3a5f", p: d.personal, name: [d.personal.firstName, d.personal.lastName].filter(Boolean).join(" ") };
+  lang = d.language;
   const body = (RENDERERS[o.template] ?? modern)(x);
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Lebenslauf ${esc(x.name)}</title></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>${w("Lebenslauf")} ${esc(x.name)}</title></head><body>${body}</body></html>`;
 }

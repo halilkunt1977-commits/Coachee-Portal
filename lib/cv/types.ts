@@ -22,7 +22,11 @@ export type CvData = {
   /** Digitale Unterschrift (gehört zur Akte, nicht zum Lebenslauf) über der Linie zeigen */
   signatureImage: boolean;
   photo: CvPhoto;
+  /** Sprache des Dokuments: Deutsch für deutsche Arbeitgeber, Türkisch, wenn der Lebenslauf so hochgeladen wurde */
+  language: CvLanguageKey;
 };
+
+export type CvLanguageKey = "de" | "tr";
 
 export const emptyCv = (p?: Partial<CvData["personal"]>): CvData => ({
   personal: { firstName: "", lastName: "", headline: "", email: "", phone: "", street: "", zip: "", city: "", birthDate: "", birthPlace: "", nationality: "", license: "", web: "", ...p },
@@ -37,6 +41,7 @@ export const emptyCv = (p?: Partial<CvData["personal"]>): CvData => ({
   signature: true,
   signatureImage: true,
   photo: { zoom: 1, x: 50, y: 50 },
+  language: "de",
 });
 
 /** Gespeicherte oder von der KI gelieferte Daten in eine saubere Form bringen. */
@@ -61,6 +66,7 @@ export function normalizeCv(raw: unknown): CvData {
     signature: r.signature === undefined ? true : Boolean(r.signature),
     signatureImage: r.signatureImage === undefined ? true : Boolean(r.signatureImage),
     photo: { zoom: clamp(ph.zoom, 1, 3, 1), x: clamp(ph.x, 0, 100, 50), y: clamp(ph.y, 0, 100, 50) },
+    language: r.language === "tr" ? "tr" : "de",
   };
 }
 

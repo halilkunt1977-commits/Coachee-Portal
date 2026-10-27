@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { improveWithAi, removePhoto, saveCv, skillsFromProfile, uploadPhoto, type AiField } from "@/app/actions/lebenslauf";
 import { renderCvHtml } from "@/lib/cv/render";
-import { COLORS, TEMPLATES, TIPS, type CvData, type CvPhoto, type PersonalLock, type TemplateKey } from "@/lib/cv/types";
+import { COLORS, TEMPLATES, TIPS, type CvData, type CvLanguageKey, type CvPhoto, type PersonalLock, type TemplateKey } from "@/lib/cv/types";
 import { CvPreview } from "./CvPreview";
 import { PhotoDialog } from "./PhotoDialog";
 import { SignatureField } from "./SignatureField";
@@ -200,7 +200,7 @@ export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignat
         </div>
       )}
 
-      {designOpen && <DesignPicker data={data} photo={photoUrl} template={template} color={color} onTemplate={setTemplate} onColor={setColor} onClose={() => setDesignOpen(false)} />}
+      {designOpen && <DesignPicker data={data} photo={photoUrl} template={template} color={color} onTemplate={setTemplate} onColor={setColor} onLanguage={(l) => set("language", l)} onClose={() => setDesignOpen(false)} />}
 
       {/* Umschalter am Handy */}
       <div className="grid grid-cols-2 rounded-xl border border-line bg-surface p-1 text-sm font-semibold lg:hidden">
@@ -604,7 +604,7 @@ function AiHelp({ cvId, ai, field, data, value, onApply, children }: { cvId: str
   );
 }
 
-function DesignPicker({ data, photo, template, color, onTemplate, onColor, onClose }: { data: CvData; photo: string | null; template: TemplateKey; color: string; onTemplate: (t: TemplateKey) => void; onColor: (c: string) => void; onClose: () => void }) {
+function DesignPicker({ data, photo, template, color, onTemplate, onColor, onLanguage, onClose }: { data: CvData; photo: string | null; template: TemplateKey; color: string; onTemplate: (t: TemplateKey) => void; onColor: (c: string) => void; onLanguage: (l: CvLanguageKey) => void; onClose: () => void }) {
   const tr = useT();
   return (
     <div className="card space-y-5">
@@ -621,6 +621,13 @@ function DesignPicker({ data, photo, template, color, onTemplate, onColor, onClo
           <input type="color" value={color} onChange={(e) => onColor(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-line bg-surface" />
         </label>
       </div>
+      <label className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted">{tr("Überschriften im Lebenslauf")}</span>
+        <select className="input !w-auto !py-1.5" value={data.language} onChange={(e) => onLanguage(e.target.value === "tr" ? "tr" : "de")}>
+          <option value="de">Deutsch</option>
+          <option value="tr">Türkçe</option>
+        </select>
+      </label>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {TEMPLATES.map((t) => (
           <button key={t.key} type="button" onClick={() => onTemplate(t.key)} aria-pressed={template === t.key} className={`group space-y-2 rounded-xl p-2 text-left transition ${template === t.key ? "bg-tint ring-2 ring-accent" : "hover:bg-bg"}`}>

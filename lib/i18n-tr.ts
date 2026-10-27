@@ -1846,4 +1846,5 @@ export const TR: Record<string, string> = {
   "Geteilt": "Paylaşıldı",
   "Hallo {name}, unser Coaching ist abgeschlossen.": "Merhaba {name}, koçluğumuz bitti.",
   "Hallo {name}, dieses Handbuch begleitet dich durch die Zeit während und nach dem Coaching.": "Merhaba {name}, bu el kitabı koçluk sırasında ve sonrasında sana yol gösterecek.",
+  "Überschriften im Lebenslauf": "CV'deki başlıklar",
 };
