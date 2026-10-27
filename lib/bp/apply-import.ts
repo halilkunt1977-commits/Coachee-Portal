@@ -100,15 +100,15 @@ export async function autoImportDocument(user: User, c: Coachee, doc: { id: stri
   try {
     if (doc.category === "businessplan" && ext === "docx") {
       const plan = await planFor(c);
-      if (!planIsEmpty(plan.sections, plan.glance)) return null;
+      if (!planIsEmpty(plan.sections, plan.glance)) return "Der Businessplan im Portal hat schon Text und wurde nicht überschrieben. Zum Ersetzen am Dokument auf „In den Businessplan übernehmen“ tippen.";
       const r = await applyPlanDocx(user, c, data, { document: doc.id, name: doc.name });
-      return r.ok ? `In den Businessplan übernommen: ${r.message}` : null;
+      return r.ok ? `In den Businessplan übernommen: ${r.message}` : `Nicht in den Businessplan übernommen: ${r.error}`;
     }
     if (doc.category === "finanzplan" && ext === "xlsx") {
       const plan = await planFor(c);
-      if (financeTouched(plan) && !financeIsEmpty(plan.finance)) return null;
+      if (financeTouched(plan) && !financeIsEmpty(plan.finance)) return "Der Finanzplan im Portal hat schon Zahlen und wurde nicht überschrieben. Zum Ersetzen am Dokument auf „In den Finanzplan übernehmen“ tippen.";
       const r = await applyFinanceXlsx(user, c, data, { document: doc.id, name: doc.name });
-      return r.ok ? "In den Finanzplan übernommen." : null;
+      return r.ok ? "In den Finanzplan übernommen." : `Nicht in den Finanzplan übernommen: ${r.error}`;
     }
   } catch (e) {
     console.error("Automatische Übernahme", e);
