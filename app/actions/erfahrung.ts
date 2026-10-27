@@ -60,7 +60,7 @@ export async function startSurvey(coacheeId: string, _prev: FormState, fd: FormD
       if (!(file instanceof File) || file.size === 0) return { error: "Bitte deinen Lebenslauf auswählen." };
       if (file.size > 10 * 1024 * 1024) return { error: "Die Datei ist größer als 10 MB." };
       const { text: content, buffer } = await extractCvText(file);
-      cv = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "", purpose: "survey_import" });
+      cv = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "", purpose: "survey_import", keepTurkish: false });
       if (!cv.skills.length) cv.skills = (await cvFromAkte(c)).skills;
       sourceId = await storeFile({ coacheeId: c.id, kind: "cv_vorlage", name: file.name, mime: file.type || "application/octet-stream", data: buffer, userId: user.id });
     }

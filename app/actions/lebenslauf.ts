@@ -40,7 +40,8 @@ export async function createCv(coacheeId: string, _prev: FormState, fd: FormData
       await assertAiAllowed(user, { feature: "lebenslauf_import", coachee: c });
       const { text: content, buffer } = await extractCvText(file);
       const parsed = await parseCvText(content, { coacheeId: c.id, userId: user.id, firstName: c.first_name, lastName: c.last_name, email: c.email, phone: c.phone ?? "" });
-      if (!parsed.skills.length) parsed.skills = data.skills;
+      // Kenntnisse aus der Akte sind deutsch, passen also nur in einen deutschen Lebenslauf
+      if (!parsed.skills.length && parsed.language === "de") parsed.skills = data.skills;
       data = parsed;
       sourceId = await storeFile({ coacheeId: c.id, kind: "cv_vorlage", name: file.name, mime: file.type || "application/octet-stream", data: buffer, userId: user.id });
     } catch (e) {
@@ -187,7 +188,7 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
       coacheeId: cv.coachee_id,
       userId: user.id,
       purpose: `cv_${field}`,
-      instructions: `Du hilfst beim Schreiben eines deutschen Lebenslaufs. ${FIELD_TASK[field]} Erfinde keine Tatsachen, nutze nur, was in den Angaben steht. Antworte nur mit dem fertigen Text im Feld "text".`,
+      instructions: `Du hilfst beim Schreiben eines ${data.language === "tr" ? "türkischen Lebenslaufs. Schreib den Text auf Türkisch" : "deutschen Lebenslaufs"}. ${FIELD_TASK[field]} Erfinde keine Tatsachen, nutze nur, was in den Angaben steht. Antworte nur mit dem fertigen Text im Feld "text".`,
       input: pseudonymize(`Aktueller Text:\n${current || "(leer)"}\n\nAngaben aus Lebenslauf und Akte:\n${JSON.stringify(facts)}`, names),
       schemaName: "text",
       schema: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },

@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/lebensl
   }
   await audit(session.user.id, "cv_pdf", cv.coachee_id, { cv: cv.id });
   const p = cv.data.personal;
-  const file = `Lebenslauf ${[p.firstName, p.lastName].filter(Boolean).join(" ") || cv.name}.pdf`;
+  const file = `${cv.data.language === "tr" ? "Özgeçmiş" : "Lebenslauf"} ${[p.firstName, p.lastName].filter(Boolean).join(" ") || cv.name}.pdf`;
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",

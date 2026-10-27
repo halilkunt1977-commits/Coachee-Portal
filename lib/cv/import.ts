@@ -40,6 +40,7 @@ const CV_SCHEMA = obj({
   languages: { type: "array", items: obj({ name: str, level: str }) },
   certificates: { type: "array", items: obj({ name: str, institution: str, year: str }) },
   interests: str,
+  language: { type: "string", enum: ["de", "tr", "andere"] },
 });
 
 const INSTRUCTIONS = `Du liest einen bestehenden Lebenslauf aus und überträgst ihn vollständig in die vorgegebene Struktur.
@@ -55,13 +56,22 @@ Regeln:
 - headline: Berufsbezeichnung oder Wunschposition, falls erkennbar.
 - summary: das Kurzprofil, falls vorhanden, sonst leer.
 - Platzhalter wie [Name], [E-Mail] oder [Telefon] nicht übernehmen.
-- Text in fremder Sprache ins Deutsche übertragen.`;
+- language: "tr", wenn der Lebenslauf überwiegend auf Türkisch geschrieben ist, "de" bei Deutsch, sonst "andere".`;
+
+const KEEP_TURKISH = `
+- Ist der Lebenslauf auf Türkisch, bleibt alles Türkisch: nichts übersetzen, Aufgaben in knappem Lebenslauf-Türkisch, Sprachniveaus wie "Ana dil" oder "İyi derecede".
+- Text in einer anderen Sprache ins Deutsche übertragen.`;
+const ALL_GERMAN = `
+- Text in fremder Sprache, auch Türkisch, ins Deutsche übertragen.`;
 
 const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)+/g;
 const PHONE = /(?:\+\d{1,3}[\s-]?(?:\(0\))?\s?|\b0)\d{2,5}[\s/.-]?\d[\d\s/-]{3,}\d/g;
 
-/** Alten Lebenslauf in Felder übertragen. Name, E-Mail und Telefon werden vorher entfernt und lokal ergänzt. */
-export async function parseCvText(text: string, ctx: { coacheeId: string; userId: string; firstName: string; lastName: string; email: string; phone: string; purpose?: string }): Promise<CvData> {
+/**
+ * Alten Lebenslauf in Felder übertragen. Name, E-Mail und Telefon werden vorher entfernt und lokal ergänzt.
+ * Ein türkischer Lebenslauf bleibt Türkisch, außer bei keepTurkish = false (dann wird alles Deutsch).
+ */
+export async function parseCvText(text: string, ctx: { coacheeId: string; userId: string; firstName: string; lastName: string; email: string; phone: string; purpose?: string; keepTurkish?: boolean }): Promise<CvData> {
   const email = text.match(EMAIL)?.[0] ?? "";
   const phone = text.match(PHONE)?.[0]?.trim() ?? "";
   const clean = pseudonymize(text.replace(EMAIL, "[E-Mail]").replace(PHONE, "[Telefon]"), [ctx.firstName, ctx.lastName]);
@@ -69,13 +79,13 @@ export async function parseCvText(text: string, ctx: { coacheeId: string; userId
     coacheeId: ctx.coacheeId,
     userId: ctx.userId,
     purpose: ctx.purpose ?? "cv_import",
-    instructions: INSTRUCTIONS,
+    instructions: INSTRUCTIONS + (ctx.keepTurkish === false ? ALL_GERMAN : KEEP_TURKISH),
     input: clean,
     schemaName: "lebenslauf",
     schema: CV_SCHEMA,
     maxTokens: 9000,
   });
-  const cv = normalizeCv(result);
+  const cv = normalizeCv({ ...result, language: result.language === "tr" && ctx.keepTurkish !== false ? "tr" : "de" });
   cv.personal.firstName = ctx.firstName;
   cv.personal.lastName = ctx.lastName;
   cv.personal.email = ctx.email || email;
