@@ -2,6 +2,8 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { coacheeFor } from "@/lib/access";
+import { AiError, assertAiAllowed } from "@/lib/ai";
+import { changeFinance, type FinanceTurn } from "@/lib/bp/finanz-ki";
 import { audit, requireCoach, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { DOC_TYPES, MAX_DOC_BYTES, extOf } from "@/lib/documents";
@@ -13,6 +15,7 @@ import { MAX_NOTE, VORHABEN, type ChatTurn } from "@/lib/bp/notes";
 import { appendTurns, setTurnStatus } from "@/lib/bp/schreibhilfe";
 import { SECTIONS, normalizeGlance, normalizeSections, type GlanceItem } from "@/lib/bp/sections";
 import { financeFromItems, financeItems, planFor } from "@/lib/bp/store";
+import { backupFinance, gist, listVersions, saveSnapshot, snapshotFinance, type FinanceGist, type Version } from "@/lib/bp/fassungen";
 
 async function gruendungCoachee(user: User, coacheeId: string) {
   const c = await coacheeFor(user, coacheeId);
@@ -146,7 +149,9 @@ export async function importFinanceItems(coacheeId: string): Promise<{ ok: true;
   const items = await financeItems(c.id);
   if (!items.length) return { ok: false, error: "Es gibt noch keine Zahlen aus den Gesprächen." };
   const current = await one<{ finance: unknown }>("SELECT finance FROM business_plans WHERE coachee_id = $1", [c.id]);
-  const f = { ...financeFromItems(items), start: normalizeFinance(current?.finance).start };
+  const before = normalizeFinance(current?.finance);
+  const f = { ...financeFromItems(items), start: before.start };
+  await saveSnapshot(c.id, before, "Vor der Übernahme der Zahlen aus den Gesprächen", user.id);
   const row = await one<{ finance_version: number }>(
     "UPDATE business_plans SET finance = $2, finance_version = finance_version + 1, finance_updated_by = $3, updated_at = now() WHERE coachee_id = $1 RETURNING finance_version",
     [c.id, JSON.stringify(f), user.id],
@@ -194,4 +199,56 @@ export async function importDocument(coacheeId: string, docId: string): Promise<
   const result = target === "plan" ? await applyPlanDocx(coach, c, data, { document: doc.id, name: doc.name }) : await applyFinanceXlsx(coach, c, data, { document: doc.id, name: doc.name });
   revalidatePath(`/coach/coachees/${c.id}`);
   return result;
+}
+
+/**
+ * KI im Finanzplan (nur Coach): trägt die Angaben des Coachs in den Finanzplan ein. Gespeichert wird über das normale
+ * automatische Speichern im Editor, damit „Rückgängig“ und der Schutz vor gleichzeitigen Änderungen greifen.
+ */
+export async function askFinanceAi(coacheeId: string, current: unknown, message: string, earlier: FinanceTurn[]): Promise<{ ok: true; finance: FinanceInput; note: string } | { ok: false; error: string }> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const text = message.trim().slice(0, 4000);
+  if (!text) return { ok: false, error: "Bitte schreib, was eingetragen oder geändert werden soll." };
+  try {
+    await assertAiAllowed(coach, { coachOnly: true });
+    const turns = (Array.isArray(earlier) ? earlier : []).slice(-6).map((t) => ({ message: String(t?.message ?? "").slice(0, 2000), note: String(t?.note ?? "").slice(0, 1000) }));
+    const res = await changeFinance(coach, c, normalizeFinance(current), text, turns);
+    await auditThrottled(coach, "finance_ai", c.id);
+    return { ok: true, ...res };
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("KI im Finanzplan", e);
+    return { ok: false, error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
+  }
+}
+
+// ---------- Frühere Fassungen (nur Coach) ----------
+
+export async function financeVersions(coacheeId: string): Promise<Version[]> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  return listVersions(c.id);
+}
+
+/** Eine frühere Fassung laden, damit der Coach sie ansehen und ganz oder teilweise zurückholen kann */
+export async function loadFinanceVersion(coacheeId: string, source: "fassung" | "sicherung", id: string): Promise<{ ok: true; finance: FinanceInput; gist: FinanceGist } | { ok: false; error: string }> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  try {
+    const f = source === "fassung" ? await snapshotFinance(c.id, id) : await backupFinance(c.id, id);
+    if (!f) return { ok: false, error: source === "fassung" ? "Diese Fassung gibt es nicht mehr." : "In dieser Sicherung steht für diese Person noch kein Finanzplan." };
+    return { ok: true, finance: f, gist: gist(f) };
+  } catch (e) {
+    console.error("Frühere Fassung laden", e);
+    return { ok: false, error: e instanceof Error && e.message.startsWith("Falscher Schlüssel") ? "Die Sicherung lässt sich mit dem jetzigen Schlüssel nicht öffnen." : "Die Sicherung ließ sich nicht lesen." };
+  }
+}
+
+/** Vor dem Zurückholen: den jetzigen Stand als Fassung ablegen */
+export async function keepCurrentFinance(coacheeId: string, reason: string) {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const row = await one<{ finance: unknown }>("SELECT finance FROM business_plans WHERE coachee_id = $1", [c.id]);
+  if (row) await saveSnapshot(c.id, normalizeFinance(row.finance), reason, coach.id);
+  await audit(coach.id, "finance_restored", c.id, { reason: reason.slice(0, 120) });
 }

@@ -2,7 +2,8 @@ import "server-only";
 import type { Coachee } from "../access";
 import { audit, type User } from "../auth";
 import { one, query } from "../db";
-import { calculate, eur, financeIsEmpty } from "./finance";
+import { calculate, eur, financeIsEmpty, monthsBetween, shiftMonths, type FinanceInput } from "./finance";
+import { saveSnapshot } from "./fassungen";
 import { importBusinessplanDocx } from "./import-docx";
 import { importFinanceXlsx } from "./import-xlsx";
 import { SECTIONS, planIsEmpty } from "./sections";
@@ -11,7 +12,8 @@ import { financeTouched, planFor } from "./store";
 /*
  * Übernahme einer Word- oder Excel-Datei in Businessplan bzw. Finanzplan eines Coachees. Wird vom Upload im
  * Businessplan, vom Knopf „übernehmen“ an einem Dokument und automatisch beim Hochladen unter Dokumente genutzt.
- * Leere Kapitel der Datei überschreiben keinen vorhandenen Text.
+ * Leere Kapitel der Datei überschreiben keinen vorhandenen Text. Beim Finanzplan bleiben Bereiche, die in der Datei
+ * leer sind oder nur 0 € enthalten, wie sie im Portal waren; der vorige Stand wird als frühere Fassung abgelegt.
  */
 
 export type ImportResult = { ok: true; message: string; details: string[] } | { ok: false; error: string };
@@ -64,18 +66,22 @@ export async function applyFinanceXlsx(user: User, c: Coachee, data: Buffer, sou
     console.error("Excel-Import", e);
     return { ok: false, error: "Die Excel-Datei ließ sich nicht lesen. Bitte als .xlsx speichern und noch einmal versuchen." };
   }
-  if (financeIsEmpty(res.finance)) return { ok: false, error: `In der Datei wurden keine Blätter der Vorlage erkannt (Umsatzherleitung, Kostenherleitung, Investitionsplan, Personalplan).${res.warnings.length ? ` ${res.warnings.join(" ")}` : ""}` };
-  await planFor(c);
+  if (financeIsEmpty(res.finance)) return { ok: false, error: `In der Datei wurden keine Zahlen gefunden (Umsatzherleitung, Kostenherleitung, Investitionsplan, Personalplan; Zeilen mit 0 € zählen nicht).${res.warnings.length ? ` ${res.warnings.join(" ")}` : ""}` };
+  const plan = await planFor(c);
+  const had = financeTouched(plan) && !financeIsEmpty(plan.finance);
+  const { finance: f, kept } = had ? mergeFinance(plan.finance, res.finance) : { finance: res.finance, kept: [] };
+  if (had) await saveSnapshot(c.id, plan.finance, `Vor der Übernahme aus „${source.name}“`, user.id);
   const now = new Date().toISOString();
   await query(
     `UPDATE business_plans SET finance = $2, finance_version = finance_version + 1, finance_updated_by = $3,
             imports = imports || jsonb_build_object('finance', $4::jsonb), updated_at = now() WHERE coachee_id = $1`,
-    [c.id, JSON.stringify(res.finance), user.id, JSON.stringify({ document: source.document, name: source.name.slice(0, 200), at: now })],
+    [c.id, JSON.stringify(f), user.id, JSON.stringify({ document: source.document, name: source.name.slice(0, 200), at: now })],
   );
   await audit(user.id, "finance_imported_file", c.id, { name: source.name.slice(0, 120) });
-  const r = calculate(res.finance);
-  const f = res.finance;
+  const r = calculate(f);
   const details = [`${f.revenues.length} Leistungsarten, ${f.costs.length} Kostenarten, ${f.investments.length} Investitionen, ${f.staff.length} Positionen im Personalplan`];
+  if (kept.length) details.push(`Aus dem Portal behalten, weil die Datei dort nichts oder nur 0 € enthält: ${kept.join(", ")}.`);
+  if (had) details.push("Der vorige Stand liegt im Finanzplan unter „Frühere Fassungen“.");
   // Abgleich mit den Summen, die in der Datei stehen
   const cmp = (label: string, file: number[] | undefined, own: number[]) => {
     if (!file?.length) return;
@@ -88,6 +94,41 @@ export async function applyFinanceXlsx(user: User, c: Coachee, data: Buffer, sou
   cmp("Kontostand am Jahresende", res.fileTotals.balance, r.years.map((y) => y.balance));
   details.push(...res.warnings);
   return { ok: true, message: "Finanzplan aus der Excel-Datei übernommen.", details };
+}
+
+/**
+ * Datei-Stand mit dem Portal-Stand zusammenführen: Bereiche und Annahmen, die in der Datei fehlen oder 0 sind, bleiben
+ * aus dem Portal. Finanzierung, Förderung und Reserve kommen in der Vorlage nicht vor und bleiben immer.
+ */
+function mergeFinance(cur: FinanceInput, imp: FinanceInput): { finance: FinanceInput; kept: string[] } {
+  const old = shiftMonths(cur, monthsBetween(cur.start, imp.start));
+  const kept: string[] = [];
+  const keep = <K extends "revenues" | "costs" | "investments" | "staff">(k: K, label: string) => {
+    if (imp[k].length || !old[k].length) return imp[k];
+    kept.push(label);
+    return old[k];
+  };
+  const zero = (y: number[]) => !y.some((v) => v);
+  const notes = { ...imp.notes };
+  for (const k of Object.keys(notes) as (keyof typeof notes)[]) notes[k] ||= old.notes[k];
+  return {
+    finance: {
+      ...imp,
+      revenues: keep("revenues", "Umsätze"),
+      costs: keep("costs", "laufende Kosten"),
+      investments: keep("investments", "Investitionen"),
+      staff: keep("staff", "Personal"),
+      financing: old.financing,
+      grants: old.grants,
+      reserve: old.reserve,
+      openingCash: imp.openingCash || old.openingCash,
+      privateDraw: zero(imp.privateDraw) ? old.privateDraw : imp.privateDraw,
+      materialPct: zero(imp.materialPct) ? old.materialPct : imp.materialPct,
+      taxPct: imp.taxPct || old.taxPct,
+      notes,
+    },
+    kept,
+  };
 }
 
 /**
