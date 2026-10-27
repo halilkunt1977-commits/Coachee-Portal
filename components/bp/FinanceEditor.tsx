@@ -7,6 +7,8 @@ import {
   type FinanceInput, type FinanceResult, type Financing, type NoteKey, type Revenue, type Year3,
 } from "@/lib/bp/finance";
 import { Num, Pick, QtyInput, Rows, Text } from "./fields";
+import { FinanzFassungen } from "./FinanzFassungen";
+import { FinanzKi } from "./FinanzKi";
 import { ImportFileButton } from "./ImportButtons";
 import { SaveBadge, useAutosave } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
@@ -119,6 +121,9 @@ export function FinanceEditor(p: Props) {
           <button type="button" aria-label={t("Hinweis schließen")} onClick={() => setNotice(null)}>✕</button>
         </div>
       )}
+
+      {p.coach && <FinanzKi coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} onApply={(next) => { setF(next); schedule(); }} />}
+      {p.coach && <FinanzFassungen coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} onApply={(next) => { setF(next); schedule(); }} />}
 
       <Summary f={f} r={r} />
 

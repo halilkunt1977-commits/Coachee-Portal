@@ -436,3 +436,24 @@ export function financeSummary(f: FinanceInput) {
   r.years.forEach((y, i) => out.push(`- Jahr ${i + 1}: Umsatz ${eur(y.revenue)}, Material ${eur(y.material)}, Rohertrag ${eur(y.grossProfit)}, Personal ${eur(y.personnel)}, Gesamtkosten ${eur(y.totalCosts)}, Ergebnis vor Steuern ${eur(y.profit)}, Kontostand am Jahresende ${eur(y.balance)}`));
   return out.join("\n");
 }
+
+/** Monatsangaben um delta Monate verschieben (wenn sich der erste Planmonat ändert, bleiben Einträge im selben Kalendermonat) */
+export function shiftMonths(f: FinanceInput, delta: number): FinanceInput {
+  if (!delta) return f;
+  const m = (i: number) => Math.min(MONTHS - 1, Math.max(0, i + delta));
+  return {
+    ...f,
+    costs: f.costs.map((c) => ({ ...c, from: m(c.from) })),
+    investments: f.investments.map((i) => ({ ...i, month: m(i.month) })),
+    staff: f.staff.map((s) => ({ ...s, start: m(s.start) })),
+    revenues: f.revenues.map((r) => ({ ...r, qty: Array.from({ length: MONTHS }, (_, i) => r.qty[i - delta] ?? 0) })),
+    financing: f.financing.map((x) => ({ ...x, month: m(x.month) })),
+    grants: f.grants.map((g) => ({ ...g, from: m(g.from) })),
+  };
+}
+
+/** Abstand in Monaten von to bis from (für shiftMonths beim Wechsel des ersten Planmonats) */
+export const monthsBetween = (from: string, to: string) => {
+  const [a, b] = [from.split("-").map(Number), to.split("-").map(Number)];
+  return (a[0] - b[0]) * 12 + (a[1] - b[1]);
+};

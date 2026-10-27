@@ -59,7 +59,7 @@ export function ImportFileButton({ coacheeId, accept, filled, label }: { coachee
       </label>
       {file && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[#fbf1e3] px-3 py-2 text-sm">
-          <span>„{file.name}“ ersetzt die vorhandenen Eingaben. Kapitel, die in der Datei leer sind, bleiben erhalten.</span>
+          <span>„{file.name}“ ersetzt die vorhandenen Eingaben. {accept === ".xlsx" ? "Bereiche, die in der Datei leer sind oder nur 0 € enthalten, bleiben erhalten; der jetzige Stand wird als frühere Fassung abgelegt." : "Kapitel, die in der Datei leer sind, bleiben erhalten."}</span>
           <button type="button" className="btn btn-sm" onClick={() => void run(file)}>Übernehmen</button>
           <button type="button" className="btn-ghost btn-sm" onClick={() => { setFile(null); if (input.current) input.current.value = ""; }}>Abbrechen</button>
         </div>
@@ -91,7 +91,7 @@ export function ImportDocumentButton({ coacheeId, docId, target, filled, done }:
       {done && !res && <p className="text-xs text-ok">✓ {done}</p>}
       {armed ? (
         <span className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted">{target === "plan" ? "Der Businessplan" : "Der Finanzplan"} im Portal ist schon ausgefüllt und wird ersetzt.</span>
+          <span className="text-muted">{target === "plan" ? "Der Businessplan im Portal ist schon ausgefüllt und wird ersetzt." : "Der Finanzplan im Portal ist schon ausgefüllt. Was in der Datei steht, ersetzt ihn; leere oder 0-€-Bereiche bleiben, der jetzige Stand wird als frühere Fassung abgelegt."}</span>
           <button type="button" className="btn btn-sm" onClick={() => void run()}>Ja, übernehmen</button>
           <button type="button" className="btn-ghost btn-sm" onClick={() => setArmed(false)}>Abbrechen</button>
         </span>

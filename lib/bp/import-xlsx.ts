@@ -1,12 +1,15 @@
 import "server-only";
 import ExcelJS from "exceljs";
 import { MONTHS, canonicalCategory, emptyFinance, type FinanceInput, type Year3 } from "./finance";
+import { makeEvaluator } from "./xlsx-formula";
 
 /*
  * Finanzplan aus einer Excel-Datei im Aufbau der Vorlage übernehmen (Blätter Annahmen, Kostenherleitung,
  * Investitionsplan, Personalplan, Umsatzherleitung). Gelesen werden die Werte, nicht die Formeln; die Blätter
  * und Spalten werden an ihren Namen und Kopfzeilen erkannt, nicht an festen Zellen.
  * Rentabilität und Liquidität rechnet das Portal selbst; deren Summen aus der Datei dienen nur zum Abgleich.
+ * Daneben wird ein freierer Aufbau erkannt: Umsatz als Euro-Zeilen je Monat („Feb 2027“ …), Preise im Blatt Annahmen.
+ * Zeilen, in denen nur 0 steht, werden nicht übernommen.
  */
 
 type Val = string | number | Date | null;
@@ -15,7 +18,9 @@ export type XlsxImport = { finance: FinanceInput; warnings: string[]; fileTotals
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
-function value(c: ExcelJS.Cell): Val {
+type Calc = (c: ExcelJS.Cell) => number | null;
+
+function value(c: ExcelJS.Cell, calc?: Calc): Val {
   const v = c.value as unknown;
   if (v == null) return null;
   if (typeof v === "number" || typeof v === "string" || v instanceof Date) return v;
@@ -25,6 +30,7 @@ function value(c: ExcelJS.Cell): Val {
     if ("result" in o) return o.result == null || typeof o.result === "object" && !(o.result instanceof Date) ? null : (o.result as Val);
     if (o.richText) return o.richText.map((t) => t.text).join("");
     if (typeof o.text === "string") return o.text;
+    if (calc && c.formula) return calc(c);
   }
   return null;
 }
@@ -45,7 +51,16 @@ const percent = (v: Val) => {
 };
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** "02/2027", "2027-02", ein Datum oder eine Excel-Seriennummer → [Jahr, Monat] */
+const MONTH_NAMES: Record<string, number> = { jan: 1, feb: 2, mar: 3, mrz: 3, apr: 4, mai: 5, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, okt: 10, oct: 10, nov: 11, dez: 12, dec: 12 };
+/** "Feb 2027", "März 2027", "Jan. 28" → [Jahr, Monat] */
+function namedMonth(s: string): [number, number] | null {
+  const m = /^([a-z]{3})[a-z]*\.?\s*(\d{4}|\d{2})$/.exec(norm(s));
+  const mon = m ? MONTH_NAMES[m[1]] : undefined;
+  if (!m || !mon) return null;
+  return [m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]), mon];
+}
+
+/** "02/2027", "2027-02", "Feb 2027", ein Datum oder eine Excel-Seriennummer → [Jahr, Monat] */
 function yearMonth(v: Val): [number, number] | null {
   if (v instanceof Date) return [v.getUTCFullYear(), v.getUTCMonth() + 1];
   if (typeof v === "number" && v > 20000 && v < 80000) {
@@ -57,7 +72,7 @@ function yearMonth(v: Val): [number, number] | null {
   if (m) return [Number(m[2]), Number(m[1])];
   m = /(\d{4})-(\d{2})/.exec(s);
   if (m) return [Number(m[1]), Number(m[2])];
-  return null;
+  return namedMonth(s);
 }
 
 function sheet(wb: ExcelJS.Workbook, ...names: string[]) {
@@ -65,11 +80,11 @@ function sheet(wb: ExcelJS.Workbook, ...names: string[]) {
 }
 
 /** Zeilen als Wertelisten (Index 1 = Spalte A) */
-function rows(ws: ExcelJS.Worksheet): Val[][] {
+function readRows(ws: ExcelJS.Worksheet, calc?: Calc): Val[][] {
   const out: Val[][] = [];
   ws.eachRow({ includeEmpty: true }, (row, n) => {
     const r: Val[] = [];
-    row.eachCell({ includeEmpty: true }, (c, i) => (r[i] = value(c)));
+    row.eachCell({ includeEmpty: true }, (c, i) => (r[i] = value(c, calc)));
     out[n] = r;
   });
   for (let i = 0; i < out.length; i++) out[i] ??= [];
@@ -95,9 +110,23 @@ const findCol = (cols: Map<string, number>, ...starts: string[]) => {
 const at = (r: Val[] | undefined, j: number) => (j > 0 && r ? (r[j] ?? null) : null);
 const isEnd = (label: string) => !label || /^(summe|gesamt|monats)/i.test(label);
 
+/**
+ * Preis zu einer Umsatzzeile in Euro: ein Preis aus den Annahmen, von dem jeder Monatswert ein ganzes Vielfaches ist.
+ * Bei mehreren passenden gewinnt der, dessen Name am meisten Wörter mit der Zeile teilt.
+ */
+function matchPrice(label: string, euros: number[], prices: { label: string; price: number }[]) {
+  const words = norm(label).split(" ");
+  const shared = (p: string) => norm(p).split(" ").filter((w) => w.length > 2 && words.some((x) => x.startsWith(w) || w.startsWith(x))).length;
+  const fits = prices.filter((p) => euros.every((v) => Math.abs(v / p.price - Math.round(v / p.price)) < 1e-6));
+  const best = fits.map((p) => ({ p, s: shared(p.label) })).sort((a, b) => b.s - a.s)[0];
+  return best && best.s > 0 ? best.p : null;
+}
+
 export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+  const calc = makeEvaluator(wb);
+  const rows = (ws: ExcelJS.Worksheet) => readRows(ws, calc);
   const warnings: string[] = [];
   const f = emptyFinance();
   f.taxPct = 0; // die Vorlage rechnet ohne Steuerrücklage; kann im Portal ergänzt werden
@@ -105,6 +134,8 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
   // ---------- Annahmen ----------
   const annahmen = sheet(wb, "Annahmen");
   let start: [number, number] | null = null;
+  /** Preise aus dem Blatt Annahmen, z. B. „Webseite Verkauf (€)“, für Umsatzzeilen in Euro */
+  const prices: { label: string; price: number }[] = [];
   if (annahmen) {
     const d = rows(annahmen);
     const h = header(d, ["Annahme"]);
@@ -113,7 +144,7 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
       const label = norm(text(at(r, 1)));
       const note = text(at(r, noteCol)).slice(0, 500);
       const y3 = (fn: (v: Val) => number): Year3 => [fn(at(r, 2)), fn(at(r, 3)), fn(at(r, 4))];
-      if (label.startsWith("planungszeitraum")) {
+      if (label.startsWith("planungszeitraum") || label.startsWith("beginn") || label.startsWith("planbeginn") || label.startsWith("geschaftsbeginn")) {
         start = yearMonth(at(r, 2));
         f.notes.period = note;
       } else if (label.startsWith("materialquote") || label.startsWith("wareneinsatz")) {
@@ -122,12 +153,14 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
       } else if (label.startsWith("anfangsliquiditat") || label.startsWith("anfangsbestand")) {
         f.openingCash = number(at(r, 2));
         f.notes.opening = note;
-      } else if (label.startsWith("private entnahme") || label.startsWith("privatentnahme")) {
+      } else if (label.includes("private entnahme") || label.includes("privatentnahme")) {
         f.privateDraw = y3(number);
         f.notes.private = note;
       } else if (label.startsWith("steuerrucklage")) {
         f.taxPct = percent(at(r, 2));
         f.notes.tax = note;
+      } else if (/€|eur/i.test(text(at(r, 1))) && number(at(r, 2)) > 0) {
+        prices.push({ label: text(at(r, 1)).replace(/\s*\(.*$/, "").trim(), price: number(at(r, 2)) });
       }
     }
   } else warnings.push("Das Blatt „Annahmen“ fehlt. Start, Materialquote und Anfangsliquidität bitte im Portal prüfen.");
@@ -137,11 +170,17 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
   type Rev = FinanceInput["revenues"][number];
   const revenues = new Map<string, Rev>();
   const blocks: { row: number; months: { col: number; ym: [number, number] }[]; priceCol: number }[] = [];
+  const euroBlocks: { row: number; months: { col: number; ym: [number, number] }[] }[] = [];
   let data: Val[][] = [];
   if (umsatz) {
     data = rows(umsatz);
     for (let i = 1; i < data.length; i++) {
-      if (norm(text(at(data[i], 1))) !== "leistungsart") continue;
+      if (norm(text(at(data[i], 1))) !== "leistungsart") {
+        // freierer Aufbau: eine Kopfzeile mit Monaten (Datum oder „Feb 2027“), darunter Zeilen mit Euro je Monat
+        const months = data[i].map((v, col) => ({ col, ym: col > 1 && v != null ? yearMonth(v) : null })).filter((x): x is { col: number; ym: [number, number] } => x.ym !== null);
+        if (months.length >= 6) euroBlocks.push({ row: i, months });
+        continue;
+      }
       const months = data[i].map((v, col) => ({ col, ym: v instanceof Date || (typeof v === "number" && v > 20000) ? yearMonth(v) : null })).filter((x): x is { col: number; ym: [number, number] } => x.ym !== null);
       if (months.length >= 6) {
         const cols = new Map<string, number>();
@@ -160,6 +199,7 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
       }
     }
     if (!start && blocks[0]) start = blocks[0].months[0].ym;
+    if (!start && !blocks.length && euroBlocks[0]) start = euroBlocks[0].months[0].ym;
   } else warnings.push("Das Blatt „Umsatzherleitung“ fehlt, es wurden keine Umsätze übernommen.");
 
   if (!start) {
@@ -188,11 +228,37 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
       }
     }
   }
+  if (!blocks.length) {
+    for (const [n, b] of euroBlocks.entries()) {
+      const end = euroBlocks[n + 1]?.row ?? data.length;
+      for (let k = b.row + 1; k < end; k++) {
+        const label = text(at(data[k], 1));
+        const l = norm(label);
+        if (!/erlos|umsatz/.test(l) || /gesamt|summe|total/.test(l)) continue;
+        const euros = Array<number>(MONTHS).fill(0);
+        for (const m of b.months) {
+          const i = monthIndex(m.ym);
+          if (i >= 0 && i < MONTHS) euros[i] = number(at(data[k], m.col));
+        }
+        if (!euros.some((v) => v)) continue;
+        const p = matchPrice(label, euros, prices);
+        const name = p ? p.label : label;
+        revenues.set(norm(name), {
+          label: name.slice(0, 120),
+          description: "",
+          price: p ? p.price : 1,
+          note: p ? `Aus der Zeile „${label}“; Menge = Umsatz ÷ Preis.`.slice(0, 300) : `Aus der Zeile „${label}“ in Euro (Preis 1 €, Menge = Umsatz).`.slice(0, 300),
+          qty: euros.map((v) => (p ? Math.round((v / p.price) * 1000) / 1000 : round2(v))),
+        });
+      }
+    }
+  }
   f.revenues = [...revenues.values()];
-  if (umsatz && !blocks.length) warnings.push("In der Umsatzherleitung wurden keine Monatsmengen gefunden.");
+  if (umsatz && !f.revenues.length) warnings.push("In der Umsatzherleitung wurden keine Monatsmengen oder Umsätze gefunden.");
 
   // ---------- Kostenherleitung ----------
   const kosten = sheet(wb, "Kostenherleitung", "Kosten");
+  let zeroCosts = 0;
   if (kosten) {
     const d = rows(kosten);
     const h = header(d, ["Kostenart", "Kosten", "Position"]);
@@ -202,8 +268,14 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
         const label = text(at(d[k], 1));
         if (!label) continue;
         if (isEnd(label)) break;
-        f.costs.push({ label: label.slice(0, 120), monthly: [round2(number(at(d[k], y1))), round2(number(at(d[k], y2 > 0 ? y2 : y1))), round2(number(at(d[k], y3 > 0 ? y3 : y1)))], category: canonicalCategory(text(at(d[k], cat))), note: text(at(d[k], note)).slice(0, 300), from: 0 });
+        const monthly: Year3 = [round2(number(at(d[k], y1))), round2(number(at(d[k], y2 > 0 ? y2 : y1))), round2(number(at(d[k], y3 > 0 ? y3 : y1)))];
+        if (!monthly.some((v) => v)) {
+          zeroCosts++;
+          continue;
+        }
+        f.costs.push({ label: label.slice(0, 120), monthly, category: canonicalCategory(text(at(d[k], cat))), note: text(at(d[k], note)).slice(0, 300), from: 0 });
       }
+      if (zeroCosts) warnings.push(`${zeroCosts} Kostenarten stehen in der Datei mit 0 € und wurden nicht übernommen.`);
     } else warnings.push("In der Kostenherleitung fehlt die Kopfzeile „Kostenart“.");
   } else warnings.push("Das Blatt „Kostenherleitung“ fehlt, es wurden keine laufenden Kosten übernommen.");
 
@@ -215,10 +287,20 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
     if (h) {
       const [amount, life, pay, reason, note] = [findCol(h.cols, "betrag"), findCol(h.cols, "nutzungsdauer"), findCol(h.cols, "zahlung", "monat"), findCol(h.cols, "begrundung"), findCol(h.cols, "hinweis")];
       const years = norm([...h.cols.keys()].find((k) => k.startsWith("nutzungsdauer")) ?? "").includes("jahr");
+      // ohne Spalte „Betrag“: Beträge je Planjahr („Jahr 1 (€)“ …), angesetzt im ersten Monat des Jahres
+      const yearCols = amount > 0 ? [] : [findCol(h.cols, "jahr 1"), findCol(h.cols, "jahr 2"), findCol(h.cols, "jahr 3")];
       for (let k = h.row + 1; k < d.length; k++) {
         const label = text(at(d[k], 1));
         if (!label) continue;
         if (isEnd(label)) break;
+        if (yearCols.length) {
+          yearCols.forEach((col, y) => {
+            const a = round2(number(at(d[k], col)));
+            if (col > 0 && a) f.investments.push({ label: `${label}${yearCols.filter((c) => c > 0 && number(at(d[k], c))).length > 1 ? ` (Jahr ${y + 1})` : ""}`.slice(0, 120), amount: a, life: Math.max(0, Math.round(number(at(d[k], life)) * (years ? 12 : 1))), month: y * 12, reason: text(at(d[k], reason)).slice(0, 300), note: text(at(d[k], note)).slice(0, 300) });
+          });
+          continue;
+        }
+        if (!number(at(d[k], amount))) continue;
         const ym = yearMonth(at(d[k], pay));
         const lifeV = Math.round(number(at(d[k], life)) * (years ? 12 : 1));
         f.investments.push({ label: label.slice(0, 120), amount: round2(number(at(d[k], amount))), life: Math.max(0, lifeV), month: ym ? Math.min(MONTHS - 1, Math.max(0, monthIndex(ym))) : 0, reason: text(at(d[k], reason)).slice(0, 300), note: text(at(d[k], note)).slice(0, 300) });
@@ -237,6 +319,7 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
         const label = text(at(d[k], 1));
         if (!label) continue;
         if (isEnd(label)) break;
+        if (!number(at(d[k], gross))) continue;
         const ym = yearMonth(at(d[k], startCol));
         f.staff.push({ label: label.slice(0, 120), start: ym ? Math.min(MONTHS - 1, Math.max(0, monthIndex(ym))) : 0, gross: round2(number(at(d[k], gross))), surcharge: percent(at(d[k], sur)), note: text(at(d[k], note)).slice(0, 300) });
       }
@@ -250,7 +333,7 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
     for (const r of rows(over)) {
       const label = norm(text(at(r, 1)));
       const y = [2, 3, 4].map((j) => number(at(r, j)));
-      if (label === "umsatz") fileTotals.revenue = y;
+      if (label === "umsatz" || label === "gesamtumsatz" || label === "umsatzerlose netto") fileTotals.revenue = y;
       else if (label === "gesamtkosten") fileTotals.totalCosts = y;
       else if (label.startsWith("ergebnis vor steuern")) fileTotals.profit = y;
     }

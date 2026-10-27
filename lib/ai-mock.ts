@@ -33,6 +33,13 @@ export function mockJson(schemaName: string, input: string): unknown {
       note: `Testantwort ohne KI. Material: ${parts.join(", ") || "keins"}.`,
     };
   }
+  if (schemaName === "finanzplan") {
+    const json = input.match(/^Aktueller Finanzplan \(JSON\):\n(.+)$/m)?.[1] ?? "{}";
+    const finance = JSON.parse(json) as { costs?: unknown[] };
+    const message = input.match(/^Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
+    finance.costs = [...(finance.costs ?? []), { label: "Miete Büro", monthly: [450, 450, 450], category: "Raumkosten", note: "Testeintrag ohne KI", from: 1 }];
+    return { note: `Testantwort ohne KI zu „${message}“: Miete Büro mit 450 € im Monat ab Monat 2 eingetragen.`, finance };
+  }
   if (schemaName === "auf_einen_blick") {
     return {
       items: [
