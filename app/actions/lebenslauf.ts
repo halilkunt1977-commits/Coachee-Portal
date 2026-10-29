@@ -163,10 +163,28 @@ const FIELD_TASK: Record<AiField, string> = {
   interests: "Formuliere zwei bis drei Interessen kurz und positiv, kommagetrennt.",
 };
 
-export async function improveWithAi(cvId: string, field: AiField, current: string, context: unknown): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+/** Gespeicherte Stellen des Coachees (Bewerbungen), auf die das Kurzprofil zugeschnitten werden kann */
+export async function cvJobs(cvId: string): Promise<{ id: string; title: string; employer: string }[]> {
+  const user = await requireUser();
+  const { cv } = await cvFor(user, cvId);
+  return query<{ id: string; title: string; employer: string }>(
+    "SELECT id, title, employer FROM applications WHERE coachee_id = $1 AND status NOT IN ('verworfen', 'absage') ORDER BY updated_at DESC LIMIT 50",
+    [cv.coachee_id],
+  );
+}
+
+const JOB_TASK =
+  "Schreibe das Kurzprofil passend zur unten genannten Stelle neu: drei bis vier Sätze, gut lesbar und flüssig, sachlich und selbstbewusst, ohne „ich“, ohne leere Floskeln. Stelle die Erfahrungen und Kompetenzen nach vorn, die für diese Stelle zählen, und nimm Begriffe aus der Anzeige auf, wo sie ehrlich passen. Nenne den Arbeitgeber nicht. Übertreibe nicht und behaupte keine Kenntnisse, die nicht in den Angaben stehen.";
+
+export async function improveWithAi(cvId: string, field: AiField, current: string, context: unknown, applicationId?: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
   const { cv, coachee } = await cvFor(user, cvId);
   if (!(field in FIELD_TASK)) return { ok: false, error: "Unbekanntes Feld." };
+  const job =
+    field === "summary" && applicationId && /^[0-9a-f-]{36}$/i.test(applicationId)
+      ? await one<{ title: string; employer: string; job_text: string; analysis: unknown }>("SELECT title, employer, job_text, analysis FROM applications WHERE id = $1 AND coachee_id = $2", [applicationId, cv.coachee_id])
+      : null;
+  if (applicationId && !job) return { ok: false, error: "Diese Stelle gibt es nicht mehr." };
   try {
     await assertAiAllowed(user, { coachOnly: true });
     const data = normalizeCv(context);
@@ -187,9 +205,14 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
     const result = await jsonResponse<{ text: string }>({
       coacheeId: cv.coachee_id,
       userId: user.id,
-      purpose: `cv_${field}`,
-      instructions: `Du hilfst beim Schreiben eines ${data.language === "tr" ? "türkischen Lebenslaufs. Schreib den Text auf Türkisch" : "deutschen Lebenslaufs"}. ${FIELD_TASK[field]} Erfinde keine Tatsachen, nutze nur, was in den Angaben steht. Antworte nur mit dem fertigen Text im Feld "text".`,
-      input: pseudonymize(`Aktueller Text:\n${current || "(leer)"}\n\nAngaben aus Lebenslauf und Akte:\n${JSON.stringify(facts)}`, names),
+      purpose: job ? "cv_summary_job" : `cv_${field}`,
+      instructions: `Du hilfst beim Schreiben eines ${data.language === "tr" ? "türkischen Lebenslaufs. Schreib den Text auf Türkisch" : "deutschen Lebenslaufs"}. ${job ? JOB_TASK : FIELD_TASK[field]} Erfinde keine Tatsachen, nutze nur, was in den Angaben steht. Antworte nur mit dem fertigen Text im Feld "text".`,
+      input: pseudonymize(
+        `Aktueller Text:\n${current || "(leer)"}\n\nAngaben aus Lebenslauf und Akte:\n${JSON.stringify(facts)}${
+          job ? `\n\nStelle: ${job.title}${job.employer ? ` bei ${job.employer}` : ""}\n${job.job_text ? `Anzeigentext:\n${job.job_text.slice(0, 6000)}` : "(kein Anzeigentext gespeichert, nur der Titel)"}${job.analysis ? `\nAuswertung der Anzeige: ${JSON.stringify(job.analysis).slice(0, 3000)}` : ""}` : ""
+        }`,
+        names,
+      ),
       schemaName: "text",
       schema: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },
       maxTokens: 1500,
