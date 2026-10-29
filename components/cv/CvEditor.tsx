@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { improveWithAi, removePhoto, saveCv, skillsFromProfile, uploadPhoto, type AiField } from "@/app/actions/lebenslauf";
+import { cvJobs, improveWithAi, removePhoto, saveCv, skillsFromProfile, uploadPhoto, type AiField } from "@/app/actions/lebenslauf";
 import { renderCvHtml } from "@/lib/cv/render";
 import { COLORS, TEMPLATES, TIPS, type CvData, type CvLanguageKey, type CvPhoto, type PersonalLock, type TemplateKey } from "@/lib/cv/types";
 import { CvPreview } from "./CvPreview";
@@ -280,7 +280,7 @@ export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignat
           </Step>
 
           <Step n={2} title="Profil" tip={TIPS.summary} open={!data.summary}>
-            <AiHelp cvId={cvId} ai={ai} field="summary" data={data} value={data.summary} onApply={(v) => set("summary", v)}>
+            <AiHelp cvId={cvId} ai={ai} field="summary" jobs data={data} value={data.summary} onApply={(v) => set("summary", v)}>
               <Area label="Kurzprofil" value={data.summary} onChange={(v) => set("summary", v)} rows={4} />
             </AiHelp>
           </Step>
@@ -564,31 +564,66 @@ function ListEditor<T>({ items, onChange, add, summary, render, extra }: { items
 }
 
 /** Feld mit KI-Knopf: der Vorschlag erscheint darunter und wird erst nach Klick übernommen. */
-function AiHelp({ cvId, ai, field, data, value, onApply, children }: { cvId: string; ai: boolean; field: AiField; data: CvData; value: string; onApply: (v: string) => void; children: ReactNode }) {
+function AiHelp({ cvId, ai, field, jobs, data, value, onApply, children }: { cvId: string; ai: boolean; field: AiField; jobs?: boolean; data: CvData; value: string; onApply: (v: string) => void; children: ReactNode }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jobList, setJobList] = useState<{ id: string; title: string; employer: string }[] | null>(null);
+  const [jobId, setJobId] = useState("");
   if (!ai) return <>{children}</>;
   const label = value.trim() ? t("Verbessern lassen") : t("Formulieren lassen");
+  async function run(applicationId?: string) {
+    setBusy(true);
+    setError(null);
+    const res = await improveWithAi(cvId, field, value, data, applicationId).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
+    setBusy(false);
+    if (res.ok) setSuggestion(res.text);
+    else setError(res.error);
+  }
   return (
     <div className="space-y-2">
       {children}
-      <button
-        type="button"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline disabled:opacity-50"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          const res = await improveWithAi(cvId, field, value, data).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
-          setBusy(false);
-          if (res.ok) setSuggestion(res.text);
-          else setError(res.error);
-        }}
-      >
-        <span aria-hidden>✦</span> {busy ? t("Wird geschrieben …") : label}
-      </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <button type="button" className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline disabled:opacity-50" disabled={busy} onClick={() => void run()}>
+          <span aria-hidden>✦</span> {busy ? t("Wird geschrieben …") : label}
+        </button>
+        {jobs && jobList === null && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline disabled:opacity-50"
+            disabled={busy}
+            onClick={async () => {
+              const list = await cvJobs(cvId).catch(() => []);
+              setJobList(list);
+              setJobId(list[0]?.id ?? "");
+            }}
+          >
+            <span aria-hidden>✦</span> {t("Auf eine Stelle anpassen")}
+          </button>
+        )}
+      </div>
+      {jobs && jobList !== null && (
+        <div className="space-y-2 rounded-xl border border-line-soft bg-tint p-3">
+          {jobList.length === 0 ? (
+            <p className="text-sm text-muted">{t("Noch keine Stelle gespeichert. Stellen unter Bewerbungen merken, dann hier auswählen.")}</p>
+          ) : (
+            <>
+              <label className="block text-sm font-semibold" htmlFor={`job-${cvId}`}>{t("Profil passend schreiben für")}</label>
+              <select id={`job-${cvId}`} className="input w-full" value={jobId} onChange={(e) => setJobId(e.target.value)}>
+                {jobList.map((j) => (
+                  <option key={j.id} value={j.id}>{j.title}{j.employer ? ` – ${j.employer}` : ""}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted">{t("Nutzt nur, was im Lebenslauf und im Kompetenzprofil steht, nichts wird dazuerfunden.")}</p>
+            </>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {jobList.length > 0 && <button type="button" className="btn btn-sm tap" disabled={busy || !jobId} onClick={() => void run(jobId)}>{busy ? t("Wird geschrieben …") : t("Profil für diese Stelle schreiben")}</button>}
+            <button type="button" className="btn-ghost btn-sm tap" onClick={() => setJobList(null)}>{t("Schließen")}</button>
+          </div>
+        </div>
+      )}
       {error && <p className="text-sm text-danger">{t(error)}</p>}
       {suggestion && (
         <div className="space-y-2 rounded-xl border border-gold/40 bg-[#fbf6ee] p-3">
