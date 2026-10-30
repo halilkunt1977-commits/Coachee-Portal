@@ -2,6 +2,7 @@ import { CvEditor } from "@/components/cv/CvEditor";
 import { ShareButton } from "@/components/teilen/ShareButton";
 import { aiEnabled } from "@/lib/ai";
 import { fullName } from "@/lib/access";
+import { hasFeature } from "@/lib/features";
 import { audit, requireUser } from "@/lib/auth";
 import { cvFor, personalLockOf } from "@/lib/cv/store";
 import { signatureId } from "@/lib/signature";
@@ -24,6 +25,7 @@ export default async function CvPage({ params }: PageProps<"/lebenslauf/[id]">) 
       signatureId={await signatureId(coachee.id)}
       initial={{ name: cv.name, template: cv.template, color: cv.color, data: cv.data, version: cv.version, photoId: cv.photo_file_id }}
       ai={aiEnabled() && coach}
+      jobAi={aiEnabled() && (coach || hasFeature(coachee, "profil_stelle"))}
       backHref={coach ? `/coach/coachees/${coachee.id}?tab=lebenslauf` : "/mein-bereich/lebenslauf"}
       backLabel={coach ? fullName(coachee) : (await getT())("Meine Lebensläufe")}
       locked={coach ? null : personalLockOf(coachee)}
