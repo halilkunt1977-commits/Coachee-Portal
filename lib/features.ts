@@ -23,6 +23,15 @@ export const FEATURES = [
     ai: true,
   },
   {
+    key: "profil_stelle",
+    label: "Profil passend zur Stelle",
+    description: "Im Lebenslauf das Kurzprofil von der KI passend zu einer gemerkten Stelle schreiben lassen. Der Vorschlag wird erst nach Klick übernommen.",
+    where: "Lebenslauf › Kurzprofil",
+    purposes: ["cv_summary_job"],
+    types: ["job", "gruendung"],
+    ai: true,
+  },
+  {
     key: "anschreiben",
     label: "Anschreiben-Textvorschläge",
     description: "Brieftext und Kurzfassung für die E-Mail-Bewerbung passend zur Stelle von der KI vorschlagen lassen.",

@@ -186,7 +186,8 @@ export async function improveWithAi(cvId: string, field: AiField, current: strin
       : null;
   if (applicationId && !job) return { ok: false, error: "Diese Stelle gibt es nicht mehr." };
   try {
-    await assertAiAllowed(user, { coachOnly: true });
+    // Coachees dürfen nur das Kurzprofil für eine Stelle schreiben lassen, und nur mit Freigabe
+    await assertAiAllowed(user, job ? { feature: "profil_stelle", coachee } : { coachOnly: true });
     const data = normalizeCv(context);
     // Das Kompetenzprofil liefert dem Kurzprofil Belege (nur freigegebene Einträge, nie interne)
     const profile =

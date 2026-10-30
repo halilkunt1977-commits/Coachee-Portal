@@ -18,6 +18,8 @@ type Props = {
   signatureId: string | null;
   initial: { name: string; template: TemplateKey; color: string; data: CvData; version: number; photoId: string | null };
   ai: boolean;
+  /** Kurzprofil auf eine gemerkte Stelle zuschneiden: Coach immer, Coachee mit Freigabe „profil_stelle“ */
+  jobAi: boolean;
   backHref: string;
   backLabel: string;
   /** Coachee: Name und Kontakt kommen aus den Stammdaten und lassen sich nur ein- oder ausblenden */
@@ -33,7 +35,7 @@ const PREVIEW_FONTS = '@import url("/api/lebenslauf/schriften.css");';
 const LEVELS = ["ohne Stufe", "Grundkenntnisse", "Erweitert", "Gut", "Sehr gut", "Experte"];
 const LANGUAGE_LEVELS = ["Muttersprache", "Verhandlungssicher", "Fließend", "Gute Kenntnisse", "Grundkenntnisse", "C2", "C1", "B2", "B1", "A2", "A1"];
 
-export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignature, initial, ai, backHref, backLabel, locked = null, share }: Props) {
+export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignature, initial, ai, jobAi, backHref, backLabel, locked = null, share }: Props) {
   const t = useT();
   const [name, setName] = useState(initial.name);
   const [template, setTemplate] = useState<TemplateKey>(initial.template);
@@ -280,7 +282,7 @@ export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignat
           </Step>
 
           <Step n={2} title="Profil" tip={TIPS.summary} open={!data.summary}>
-            <AiHelp cvId={cvId} ai={ai} field="summary" jobs data={data} value={data.summary} onApply={(v) => set("summary", v)}>
+            <AiHelp cvId={cvId} ai={ai} field="summary" jobs={jobAi} data={data} value={data.summary} onApply={(v) => set("summary", v)}>
               <Area label="Kurzprofil" value={data.summary} onChange={(v) => set("summary", v)} rows={4} />
             </AiHelp>
           </Step>
@@ -571,7 +573,7 @@ function AiHelp({ cvId, ai, field, jobs, data, value, onApply, children }: { cvI
   const [error, setError] = useState<string | null>(null);
   const [jobList, setJobList] = useState<{ id: string; title: string; employer: string }[] | null>(null);
   const [jobId, setJobId] = useState("");
-  if (!ai) return <>{children}</>;
+  if (!ai && !jobs) return <>{children}</>;
   const label = value.trim() ? t("Verbessern lassen") : t("Formulieren lassen");
   async function run(applicationId?: string) {
     setBusy(true);
@@ -585,9 +587,11 @@ function AiHelp({ cvId, ai, field, jobs, data, value, onApply, children }: { cvI
     <div className="space-y-2">
       {children}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <button type="button" className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline disabled:opacity-50" disabled={busy} onClick={() => void run()}>
-          <span aria-hidden>✦</span> {busy ? t("Wird geschrieben …") : label}
-        </button>
+        {ai && (
+          <button type="button" className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline disabled:opacity-50" disabled={busy} onClick={() => void run()}>
+            <span aria-hidden>✦</span> {busy ? t("Wird geschrieben …") : label}
+          </button>
+        )}
         {jobs && jobList === null && (
           <button
             type="button"
