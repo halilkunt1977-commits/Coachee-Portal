@@ -31,7 +31,7 @@ export function withoutHealth(text: string) {
 }
 
 /** Begrenzter Platz fürs Material: wer zuerst kommt, bekommt zuerst */
-class Budget {
+export class Budget {
   out: string[] = [];
   constructor(private left: number) {}
   block(title: string, body: string, max: number) {

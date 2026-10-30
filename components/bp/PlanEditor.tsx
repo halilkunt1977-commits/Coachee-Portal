@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { addChapterNote, clearChapterChat, markProposal, saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
-import { openProposal, type ChapterChats, type ChatTurn } from "@/lib/bp/notes";
-import { GLANCE_PRESETS, SECTIONS, sectionDone, type GlanceItem, type Sections } from "@/lib/bp/sections";
+import { saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
+import type { RunView } from "@/lib/bp/gesamt-ki";
+import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sections } from "@/lib/bp/sections";
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
-import { Schreibhilfe } from "./Schreibhilfe";
+import { GesamtKi } from "./GesamtKi";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
 
@@ -30,10 +30,11 @@ type Props = {
   financeHref: string;
   imported: { name: string; at: string } | null;
   filled: boolean;
-  /** Schreibhilfe: Verlauf pro Kapitel und Notizen zum Vorhaben (nur Coach) */
-  chats: ChapterChats;
+  /** KI für den ganzen Plan und Notizen zum Vorhaben (nur Coach) */
   projectNotes: string;
   schreibhilfeHref: string;
+  gesamtHref: string;
+  lastRun: RunView | null;
 };
 
 type Sec = { text: string; sources: string; saved: string; version: number; updatedAt: string | null; updatedBy: string | null; conflict?: { text: string; sources: string; version: number; by: string | null } };
@@ -48,13 +49,11 @@ export function PlanEditor(p: Props) {
       return [s.key, { text: v.text, sources: v.sources, saved: snapshot(v), version: v.version, updatedAt: v.updated_at, updatedBy: v.updated_by }];
     })),
   );
-  const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && !sectionDone(p.sections[s.key]))?.key ?? "idee"));
+  const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && chapterProgress(p.sections[s.key].text, s).state !== "fertig")?.key ?? "idee"));
   const [title, setTitle] = useState(p.title);
-  const [chats, setChats] = useState<ChapterChats>(p.chats);
-  const [writing, setWriting] = useState<string | null>(null);
-  const [chatError, setChatError] = useState<{ key: string; message: string } | null>(null);
-  const [batch, setBatch] = useState<{ keys: string[]; done: number } | null>(null);
-  const stopBatch = useRef(false);
+  const [glance, setGlance] = useState({ items: p.glance, key: 0 });
+  /** Die KI passt gerade den ganzen Plan an: so lange nichts bearbeiten */
+  const [aiRunning, setAiRunning] = useState(false);
   const [preview, setPreview] = useState(false);
   const latest = useRef(secs);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -95,7 +94,20 @@ export function PlanEditor(p: Props) {
     el.style.height = `${Math.max(320, el.scrollHeight + 4)}px`;
   }, [current?.text, active, preview]);
 
-  const done = SECTIONS.filter((s) => sectionDone(secs[s.key])).length;
+  const progress = Object.fromEntries(SECTIONS.map((s) => [s.key, chapterProgress(secs[s.key].text, s)]));
+  const done = SECTIONS.filter((s) => progress[s.key].state === "fertig").length;
+  const overall = Math.round(SECTIONS.reduce((a, s) => a + progress[s.key].pct, 0) / SECTIONS.length);
+
+  /** Stand nach einem Durchgang der KI übernehmen (alle Kapitel frisch vom Server) */
+  function takeOver(sections: Sections, items: GlanceItem[]) {
+    const next = Object.fromEntries(SECTIONS.map((s) => {
+      const v = sections[s.key];
+      return [s.key, { text: v.text, sources: v.sources, saved: snapshot(v), version: v.version, updatedAt: v.updated_at, updatedBy: v.updated_by }];
+    }));
+    latest.current = next;
+    setSecs(next);
+    setGlance((g) => ({ items, key: g.key + 1 }));
+  }
 
   async function download(href: string) {
     // erst speichern, damit die Datei den letzten Stand enthält
@@ -107,58 +119,7 @@ export function PlanEditor(p: Props) {
 
   function go(key: string) {
     setActive(key);
-    setChatError(null);
     setPreview(false);
-  }
-
-  /** Nachricht an die Schreibhilfe; die KI schreibt oder überarbeitet das Kapitel als Vorschlag */
-  async function ask(key: string, message: string) {
-    setChatError(null);
-    setWriting(key);
-    try {
-      const res = await fetch(p.schreibhilfeHref, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, message }) });
-      const data = (await res.json().catch(() => ({}))) as { history?: ChatTurn[]; error?: string };
-      if (data.history) setChats((prev) => ({ ...prev, [key]: data.history! }));
-      if (data.error || !res.ok) setChatError({ key, message: data.error ?? "Das hat gerade nicht geklappt." });
-      // Die Nachricht ist gespeichert, sobald ein Verlauf zurückkommt, auch wenn die KI nicht geantwortet hat
-      return Boolean(data.history);
-    } catch {
-      setChatError({ key, message: "Keine Verbindung. Bitte gleich noch einmal versuchen." });
-      return false;
-    } finally {
-      setWriting(null);
-    }
-  }
-
-  async function note(key: string, message: string) {
-    const history = await addChapterNote(p.coacheeId, key, message).catch(() => null);
-    if (history) setChats((prev) => ({ ...prev, [key]: history }));
-    return Boolean(history);
-  }
-
-  function apply(key: string, turn: ChatTurn) {
-    patch(key, { text: turn.text, sources: turn.sources || secs[key].sources });
-    setChats((prev) => ({ ...prev, [key]: (prev[key] ?? []).map((t) => (t.id === turn.id ? { ...t, status: "uebernommen" } : t)) }));
-    void markProposal(p.coacheeId, key, turn.id, "uebernommen");
-  }
-
-  function discard(key: string, turn: ChatTurn) {
-    setChats((prev) => ({ ...prev, [key]: (prev[key] ?? []).map((t) => (t.id === turn.id ? { ...t, status: "verworfen" } : t)) }));
-    void markProposal(p.coacheeId, key, turn.id, "verworfen");
-  }
-
-  /** Alle leeren Kapitel (ohne Summary) nacheinander entwerfen: Jedes bekommt einen Vorschlag zum Prüfen */
-  async function draftEmpty() {
-    const keys = SECTIONS.filter((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? [])).map((s) => s.key);
-    if (!keys.length) return;
-    stopBatch.current = false;
-    setBatch({ keys, done: 0 });
-    for (const [i, key] of keys.entries()) {
-      if (stopBatch.current) break;
-      await ask(key, "");
-      setBatch({ keys, done: i + 1 });
-    }
-    setBatch(null);
   }
 
   /** Baustein (Zwischenüberschrift, Liste, Tabelle) an der Cursorposition einfügen */
@@ -211,20 +172,32 @@ export function PlanEditor(p: Props) {
         )}
       </div>
 
+      {p.ai && (
+        <GesamtKi
+          href={p.gesamtHref}
+          initial={p.lastRun}
+          beforeStart={async () => void (await save())}
+          onRunning={setAiRunning}
+          onUpdate={takeOver}
+          onOpen={go}
+        />
+      )}
+
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="card space-y-3 !p-4 lg:sticky lg:top-20">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <span className="whitespace-nowrap font-semibold">{t("{a} von {b} Kapiteln", { a: done, b: SECTIONS.length })}</span>
+              <span className="whitespace-nowrap font-semibold">{t("{a} von {b} Kapiteln fertig", { a: done, b: SECTIONS.length })}</span>
               <SaveBadge state={state} />
             </div>
-            <div className="mt-1.5 h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok transition-all" style={{ width: `${(done / SECTIONS.length) * 100}%` }} /></div>
+            <div className="mt-1.5 h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok transition-all" style={{ width: `${overall}%` }} /></div>
+            <p className="mt-1 text-xs text-muted">{t("Ganzer Plan zu {n} % geschrieben", { n: overall })}</p>
           </div>
           <label className="block lg:hidden">
             <span className="sr-only">{t("Kapitel")}</span>
             <select className="input" value={active} onChange={(e) => go(e.target.value)}>
               <option value={BLICK}>{t("Auf einen Blick")}</option>
-              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {t(s.title)}{secs[s.key].conflict ? ` (${t("Konflikt")})` : openProposal(chats[s.key] ?? []) ? ` (${t("Vorschlag")})` : ""}</option>)}
+              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {t(s.title)} · {progress[s.key].state === "fertig" ? "✓" : `${progress[s.key].pct} %`}{secs[s.key].conflict ? ` (${t("Konflikt")})` : ""}</option>)}
             </select>
           </label>
           <ol className="hidden space-y-0.5 lg:block">
@@ -236,41 +209,30 @@ export function PlanEditor(p: Props) {
             </li>
             {SECTIONS.map((s, i) => {
               const sec = secs[s.key];
-              const ok = sectionDone(sec);
+              const pr = progress[s.key];
+              const ok = pr.state === "fertig";
               return (
                 <li key={s.key}>
-                  <button type="button" onClick={() => go(s.key)} title={t(s.title)} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm ${s.key === active ? "bg-tint font-semibold text-accent" : "hover:bg-bg"}`}>
+                  <button type="button" onClick={() => go(s.key)} title={t(s.title)} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm ${s.key === active ? "bg-tint font-semibold text-accent" : "hover:bg-bg"}`}>
                     <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${ok ? "bg-ok text-white" : sec.text.trim() ? "bg-gold/20 text-gold" : "bg-line-soft text-muted"}`}>{ok ? "✓" : i + 1}</span>
-                    <span className="min-w-0 flex-1 truncate">{t(s.title)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{t(s.title)}</span>
+                      <span className="mt-1 flex items-center gap-2">
+                        <span className="h-1 flex-1 rounded-full bg-line-soft"><span className={`block h-1 rounded-full ${ok ? "bg-ok" : "bg-gold"}`} style={{ width: `${pr.pct}%` }} /></span>
+                        <span className="w-14 shrink-0 text-right text-[11px] font-normal text-muted">{ok ? t("Fertig") : pr.open ? t("{n} offen", { n: pr.open }) : `${pr.pct} %`}</span>
+                      </span>
+                    </span>
                     {sec.conflict && <span className="text-danger" title={t("Konflikt")}>!</span>}
-                    {!sec.conflict && writing === s.key && <span className="animate-pulse text-gold" title={t("Schreibt …")}>✦</span>}
-                    {!sec.conflict && writing !== s.key && openProposal(chats[s.key] ?? []) && <span className="size-2 rounded-full bg-gold" title={t("Vorschlag wartet auf Prüfung")} />}
                   </button>
                 </li>
               );
             })}
           </ol>
-          <p className="border-t border-line-soft pt-3 text-xs text-muted">{t("Ein Kapitel gilt ab etwa 300 Zeichen als geschrieben. Die Executive Summary am besten zum Schluss.")}</p>
-          {p.ai && (
-            <div className="space-y-1.5 border-t border-line-soft pt-3">
-              {batch ? (
-                <>
-                  <p className="text-xs font-semibold" role="status">✦ Entwirft Kapitel {Math.min(batch.done + 1, batch.keys.length)} von {batch.keys.length} …</p>
-                  <div className="h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(batch.done / batch.keys.length) * 100}%` }} /></div>
-                  <button type="button" className="link text-xs" onClick={() => (stopBatch.current = true)}>{t("Nach diesem Kapitel anhalten")}</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" className="btn-ghost btn-sm w-full" disabled={writing !== null || !SECTIONS.some((s) => s.key !== "summary" && !secs[s.key].text.trim() && !openProposal(chats[s.key] ?? []))} onClick={() => void draftEmpty()}>✦ {t("Alle leeren Kapitel entwerfen")}</button>
-                  <p className="text-xs text-muted">{t("Jedes leere Kapitel bekommt nacheinander einen Vorschlag zum Prüfen. Nichts wird ohne dich übernommen.")}</p>
-                </>
-              )}
-            </div>
-          )}
+          <p className="border-t border-line-soft pt-3 text-xs text-muted">{t("Fertig heißt: Umfang der Vorlage erreicht und keine offenen Angaben in eckigen Klammern mehr.")}</p>
         </aside>
 
         {active === BLICK ? (
-          <GlanceEditor coacheeId={p.coacheeId} initial={p.glance} figures={p.figures} financeHref={p.financeHref} coach={p.coach} ai={p.ai} projectNotes={p.projectNotes} schreibhilfeHref={p.schreibhilfeHref} />
+          <GlanceEditor key={glance.key} coacheeId={p.coacheeId} initial={glance.items} figures={p.figures} financeHref={p.financeHref} coach={p.coach} ai={p.ai} projectNotes={p.projectNotes} schreibhilfeHref={p.schreibhilfeHref} />
         ) : (
           renderChapter()
         )}
@@ -294,6 +256,11 @@ export function PlanEditor(p: Props) {
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("Kapitel {a} von {b}", { a: index + 1, b: SECTIONS.length })}</p>
             <h2 className="h2">{index + 1}. {t(def.title)}</h2>
             <p className="text-sm text-muted">{t(def.hint)}</p>
+          </div>
+          <div className="w-full max-w-56 space-y-1 text-right text-xs text-muted sm:w-auto">
+            <p className="font-semibold text-ink">{progress[active].state === "fertig" ? t("Fertig") : progress[active].state === "leer" ? t("Noch leer") : t("Zu {n} % geschrieben", { n: progress[active].pct })}</p>
+            <div className="h-1.5 rounded-full bg-line-soft"><div className={`h-1.5 rounded-full ${progress[active].state === "fertig" ? "bg-ok" : "bg-gold"}`} style={{ width: `${progress[active].pct}%` }} /></div>
+            <p>{t("{n} von etwa {a} bis {b} Wörtern", { n: words, a: def.words[0], b: def.words[1] })}{progress[active].open ? ` · ${t("{n} offene Angaben", { n: progress[active].open })}` : ""}</p>
           </div>
         </div>
 
@@ -321,34 +288,13 @@ export function PlanEditor(p: Props) {
           </div>
         )}
 
-        {p.ai && (
-          <Schreibhilfe
-            key={active}
-            title={def.title}
-            summary={def.key === "summary"}
-            hasText={Boolean(sec.text.trim())}
-            turns={chats[active] ?? []}
-            writing={writing === active}
-            busy={writing !== null || batch !== null}
-            blocked={Boolean(sec.conflict)}
-            error={chatError?.key === active ? chatError.message : null}
-            writtenChapters={SECTIONS.filter((s) => s.key !== "summary" && secs[s.key].text.trim()).length}
-            onSend={(m) => ask(active, m)}
-            onNote={(m) => note(active, m)}
-            onApply={(t) => apply(active, t)}
-            onDiscard={(t) => discard(active, t)}
-            onClear={() => {
-              setChats((prev) => ({ ...prev, [active]: [] }));
-              void clearChapterChat(p.coacheeId, active);
-            }}
-          />
-        )}
+        {aiRunning && <p className="rounded-xl bg-[#fdfaf3] px-4 py-3 text-sm" role="status"><span className="animate-pulse text-gold">✦</span> Die KI passt gerade den ganzen Plan an. Danach kannst du hier weiterschreiben.</p>}
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("### Zwischenüberschrift", "Zwischenüberschrift")}>{t("Zwischenüberschrift")}</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("- Erster Punkt\n- Zweiter Punkt", "Erster Punkt")}>{t("Aufzählung")}</button>
-            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict)} onClick={() => insert("| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n| | | |\n| | | |", "Spalte 1")}>{t("Tabelle")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict) || aiRunning} onClick={() => insert("### Zwischenüberschrift", "Zwischenüberschrift")}>{t("Zwischenüberschrift")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict) || aiRunning} onClick={() => insert("- Erster Punkt\n- Zweiter Punkt", "Erster Punkt")}>{t("Aufzählung")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={preview || Boolean(sec.conflict) || aiRunning} onClick={() => insert("| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n| | | |\n| | | |", "Spalte 1")}>{t("Tabelle")}</button>
             <span className="flex-1" />
             <button type="button" className="btn-ghost btn-sm" aria-pressed={preview} onClick={() => setPreview(!preview)}>{preview ? t("Bearbeiten") : t("Vorschau")}</button>
           </div>
@@ -360,8 +306,8 @@ export function PlanEditor(p: Props) {
               aria-label={t("Text für {titel}", { titel: t(def.title) })}
               className="input min-h-80 resize-none text-[15px] leading-relaxed"
               value={sec.text}
-              disabled={Boolean(sec.conflict)}
-              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder oben mit der Schreibhilfe aus Notizen entwerfen lassen.` : t("Hier schreibst du das Kapitel „{titel}“. Die Leitfragen oben helfen dir.", { titel: t(def.title) })}
+              disabled={Boolean(sec.conflict) || aiRunning}
+              placeholder={p.coach ? `Hier entsteht das Kapitel „${def.title}“ für ${p.name}. Selbst schreiben oder oben die KI den ganzen Plan anpassen lassen.` : t("Hier schreibst du das Kapitel „{titel}“. Die Leitfragen oben helfen dir.", { titel: t(def.title) })}
               onChange={(e) => patch(active, { text: e.target.value })}
             />
           )}
@@ -384,7 +330,7 @@ export function PlanEditor(p: Props) {
             className="input min-h-20 text-sm"
             rows={Math.min(8, Math.max(2, sec.sources.split("\n").length + 1))}
             value={sec.sources}
-            disabled={Boolean(sec.conflict)}
+            disabled={Boolean(sec.conflict) || aiRunning}
             placeholder={t("Eine Quelle pro Zeile, z. B. Statistisches Landesamt (2025): Bestand an Wohngebäuden – https://…")}
             onChange={(e) => patch(active, { sources: e.target.value })}
           />
@@ -401,7 +347,7 @@ export function PlanEditor(p: Props) {
                     <p className="font-medium">{b.title} <span className="text-xs font-normal text-muted">· {t(p.categoryLabels[b.category] ?? b.category)}</span></p>
                     {b.detail && <p className="text-muted">{b.detail}</p>}
                   </div>
-                  <button type="button" className="link shrink-0 text-xs" disabled={Boolean(sec.conflict)} onClick={() => patch(active, { text: `${sec.text.trimEnd()}${sec.text.trim() ? "\n\n" : ""}${b.detail || b.title}` })}>{t("Einfügen")}</button>
+                  <button type="button" className="link shrink-0 text-xs" disabled={Boolean(sec.conflict) || aiRunning} onClick={() => patch(active, { text: `${sec.text.trimEnd()}${sec.text.trim() ? "\n\n" : ""}${b.detail || b.title}` })}>{t("Einfügen")}</button>
                 </li>
               ))}
             </ul>
@@ -551,7 +497,7 @@ function GlanceEditor({ coacheeId, initial, figures, financeHref, coach, ai, pro
   );
 }
 
-/** Notizen des Coachs zum ganzen Vorhaben: fließen in jedes Kapitel der Schreibhilfe ein, Coachees sehen sie nie */
+/** Notizen des Coachs zum ganzen Vorhaben: fließen in die KI für den ganzen Plan ein, Coachees sehen sie nie */
 function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: string }) {
   const t = useT();
   const [text, setText] = useState(initial);
@@ -574,7 +520,7 @@ function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: stri
         rows={Math.min(14, Math.max(4, text.split("\n").length + 1))}
         value={text}
         maxLength={8000}
-        placeholder={t("Alles, was für den ganzen Plan gilt: Ideen, Eindrücke aus den Gesprächen, Auskünfte, offene Punkte … Die Schreibhilfe nutzt diese Notizen in jedem Kapitel.")}
+        placeholder={t("Alles, was für den ganzen Plan gilt: Ideen, Eindrücke aus den Gesprächen, Auskünfte, offene Punkte … Die KI nutzt diese Notizen für den ganzen Plan.")}
         onChange={(e) => {
           setText(e.target.value);
           schedule();
