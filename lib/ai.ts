@@ -88,6 +88,30 @@ export async function jsonResponse<T>(opts: Usage & { instructions: string; inpu
   }
 }
 
+/**
+ * Foto (z. B. abfotografiertes Angebot, Notizzettel, Flyer) lesen: aller lesbare Text und eine kurze Beschreibung.
+ * Das Bild wird nur für diese Anfrage gesendet und bei OpenAI nicht gespeichert.
+ */
+export async function readImage(data: Buffer, mime: string, usage: Usage): Promise<string> {
+  if (!aiEnabled()) throw new AiError(AI_MISSING);
+  if (mockAi()) {
+    await logUsage(usage, "mock");
+    return `Foto (Test ohne KI), ${Math.round(data.length / 1024)} KB.`;
+  }
+  const model = MODEL();
+  const response = await openai().responses.create({
+    model,
+    instructions:
+      "Lies das Bild für einen Gründungscoach aus. Gib zuerst allen lesbaren Text wörtlich wieder (Tabellen als Zeilen mit Spalten, Zahlen genau), danach in ein bis drei Sätzen, was zu sehen ist (z. B. Angebot, Preisliste, Flyer, Ladenlokal, Notizzettel). Beschreibe keine Personen. Lass Angaben zur Gesundheit weg. Antworte auf Deutsch, ohne Vorrede.",
+    input: [{ role: "user", content: [{ type: "input_image", image_url: `data:${mime};base64,${data.toString("base64")}`, detail: "high" }] }],
+    reasoning: { effort: "low" },
+    max_output_tokens: 4000,
+    store: false,
+  });
+  await logUsage(usage, model, response.usage?.input_tokens, response.usage?.output_tokens);
+  return response.output_text.trim();
+}
+
 /** Sprache zu Text. Die Aufnahme wird nur im Arbeitsspeicher gehalten und nirgends abgelegt. */
 export async function transcribe(file: File, usage: Usage) {
   if (!aiEnabled()) throw new AiError(AI_MISSING);

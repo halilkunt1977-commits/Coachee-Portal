@@ -39,6 +39,8 @@ export function GesamtKi(p: Props) {
   const [asking, setAsking] = useState(false);
   const chatList = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState("");
+  const [files, setFiles] = useState<{ id: string; name: string; image: boolean }[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [run, setRun] = useState<RunView | null>(p.initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,13 +78,45 @@ export function GesamtKi(p: Props) {
     el.scrollTop = last && !asking ? last.offsetTop - 4 : el.scrollHeight;
   }, [turns.length, asking, tab]);
 
+  async function upload(list: FileList | null) {
+    if (!list?.length) return;
+    setError(null);
+    for (const f of [...list].slice(0, 10)) {
+      setUploading((n) => n + 1);
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await fetch(`${p.href}/datei`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte noch einmal versuchen." })) as { id?: string; name?: string; image?: boolean; error?: string };
+      setUploading((n) => n - 1);
+      if (res.id) setFiles((x) => [...x, { id: res.id!, name: res.name ?? f.name, image: Boolean(res.image) }]);
+      else setError(`${f.name}: ${res.error ?? "ließ sich nicht hochladen."}`);
+    }
+  }
+
+  const attach = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <label className={`btn-ghost btn-sm cursor-pointer ${uploading ? "pointer-events-none opacity-60" : ""}`}>
+        📎 {uploading ? "Wird gelesen …" : "Datei oder Foto"}
+        <input type="file" multiple accept=".pdf,.docx,.xlsx,.txt,image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+      </label>
+      {files.map((f) => (
+        <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs">
+          <span className="truncate">{f.image ? "🖼" : "📄"} {f.name}</span>
+          <button type="button" className="text-muted hover:text-danger" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>×</button>
+        </span>
+      ))}
+    </div>
+  );
+  const sendFiles = () => ({ files: files.map((f) => f.id), fileNames: files.map((f) => f.name) });
+
   async function ask(text = question) {
-    if (!text.trim() || asking) return;
+    if ((!text.trim() && !files.length) || asking || uploading) return;
     setAsking(true);
     setError(null);
-    setTurns((t) => [...t, { id: `neu-${t.length}`, role: "coach", text, at: new Date().toISOString() }]);
+    setTurns((t) => [...t, { id: `neu-${t.length}`, role: "coach", text: `${text}${files.length ? `\n📎 ${files.map((f) => f.name).join(", ")}` : ""}`.trim(), at: new Date().toISOString() }]);
     setQuestion("");
-    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ask: text }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { turns?: ChatTurn[]; error?: string };
+    const extra = sendFiles();
+    setFiles([]);
+    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ask: text, ...extra }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { turns?: ChatTurn[]; error?: string };
     setAsking(false);
     if (res.turns) setTurns(res.turns);
     if (res.error) setError(res.error);
@@ -94,15 +128,16 @@ export function GesamtKi(p: Props) {
   }
 
   async function start(text = message) {
-    if (busy || running) return;
+    if (busy || running || uploading) return;
     setBusy(true);
     setError(null);
     await p.beforeStart();
-    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { run?: RunView; error?: string };
+    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, ...sendFiles() }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { run?: RunView; error?: string };
     setBusy(false);
     if (res.error || !res.run) return setError(res.error ?? "Das hat gerade nicht geklappt.");
     setRun(res.run);
     setMessage("");
+    setFiles([]);
     setDetails(false);
     setTab("anpassen");
   }
@@ -171,8 +206,9 @@ export function GesamtKi(p: Props) {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void ask();
             }}
           />
+          {attach}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-sm" disabled={asking || !question.trim()} onClick={() => void ask()}>Fragen</button>
+            <button type="button" className="btn btn-sm" disabled={asking || uploading > 0 || (!question.trim() && !files.length)} onClick={() => void ask()}>Fragen</button>
             {turns.length > 0 && <button type="button" className="btn-ghost btn-sm" disabled={asking} onClick={() => void clearChat()}>Gespräch leeren</button>}
           </div>
         </div>
@@ -199,8 +235,9 @@ export function GesamtKi(p: Props) {
               ))}
             </div>
           )}
+          {attach}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void start()}>✦ {message.trim() ? "Angaben einarbeiten und alles anpassen" : "Ganzen Plan prüfen und anpassen"}</button>
+            <button type="button" className="btn btn-sm" disabled={busy || uploading > 0} onClick={() => void start()}>✦ {message.trim() || files.length ? "Angaben einarbeiten und alles anpassen" : "Ganzen Plan prüfen und anpassen"}</button>
             <span className="text-xs text-muted">Der Stand davor wird gesichert und lässt sich zurückholen.</span>
           </div>
         </>

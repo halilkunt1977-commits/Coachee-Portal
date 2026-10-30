@@ -75,8 +75,20 @@ Regeln:
 const MAX_PARALLEL = 4;
 
 /** Material für die Prüfung: alles auf einmal, die Kapitel vollständig */
+type Attached = { title: string; text: string };
+const UUID = /^[0-9a-f-]{36}$/i;
+
+/** Vom Coach mitgegebene Dateien und Fotos (liegen unter Dokumente) */
+async function attachedDocs(coacheeId: string, ids: string[]): Promise<Attached[]> {
+  const ok = ids.filter((x) => UUID.test(x)).slice(0, 10);
+  if (!ok.length) return [];
+  const rows = await query<{ title: string; extracted_text: string | null }>("SELECT title, extracted_text FROM documents WHERE coachee_id = $1 AND id = ANY($2::uuid[])", [coacheeId, ok]);
+  return rows.map((r) => ({ title: r.title, text: withoutHealth(r.extracted_text ?? "") })).filter((r) => r.text.trim());
+}
+const attachedBlock = (a: Attached[], max: number) => a.map((d) => `### ${d.title}\n${d.text.slice(0, Math.floor(max / Math.max(1, a.length)))}`).join("\n\n");
+
 /** Material zum ganzen Plan als Textblöcke (noch nicht pseudonymisiert) */
-async function planMaterial(c: Coachee, earlier: string[]) {
+async function planMaterial(c: Coachee, earlier: string[], attached: Attached[] = []) {
   const plan = await planFor(c);
   const [items, meetings, notes] = await Promise.all([
     query<{ category: string; title: string; detail: string }>("SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' ORDER BY category, created_at", [c.id]),
@@ -86,6 +98,7 @@ async function planMaterial(c: Coachee, earlier: string[]) {
   const b = new Budget(110000);
   if (plan.title || c.goal) b.out.push(`Vorhaben: ${plan.title || c.goal}`);
   b.block("Notizen des Coachs zum ganzen Vorhaben", notes.vorhaben, 8000);
+  b.block("Vom Coach gerade mitgegebene Dateien und Fotos (wichtig, gehören zu seiner Nachricht)", attachedBlock(attached, 24000), 24000);
   b.block("Frühere Angaben des Coachs an dich (älteste zuerst, gelten weiter)", earlier.map((m) => `- ${m}`).join("\n"), 8000);
   b.block("Finanzplan (maßgebliche Zahlen)", financeSummary(plan.finance), 8000);
   b.block(
@@ -107,9 +120,9 @@ async function planMaterial(c: Coachee, earlier: string[]) {
   return b.out;
 }
 
-async function checkInput(c: Coachee, message: string, earlier: string[]) {
+async function checkInput(c: Coachee, message: string, earlier: string[], attached: Attached[]) {
   const tail = message.trim() ? `Neue Angaben des Coachs: ${message.trim()}` : "Neue Angaben des Coachs: keine. Gleiche den ganzen Plan mit dem aktuellen Material und Finanzplan ab.";
-  return pseudonymize([...(await planMaterial(c, earlier)), tail].join("\n\n"), [c.first_name, c.last_name]);
+  return pseudonymize([...(await planMaterial(c, earlier, attached)), tail].join("\n\n"), [c.first_name, c.last_name]);
 }
 
 async function saveProgress(id: string, progress: RunProgress) {
@@ -133,6 +146,8 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
   const progress: RunProgress = { phase: "pruefen", chapters: [] };
   try {
     const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND id <> $2 AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id, runId])).map((r) => r.message);
+    const files = (await one<{ files: string[] }>("SELECT files FROM bp_runs WHERE id = $1", [runId]))?.files ?? [];
+    const attached = await attachedDocs(c.id, files);
     const check = await jsonResponse<{ note: string; glance: boolean; chapters: { key: string; action: RunAction; todo: string }[] }>({
       coacheeId: c.id,
       userId: user.id,
@@ -141,7 +156,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
       schema: CHECK_SCHEMA,
       maxTokens: 6000,
       instructions: CHECK_INSTRUCTIONS,
-      input: await checkInput(c, message, earlier),
+      input: await checkInput(c, message, earlier, attached),
     });
     const byKey = new Map(check.chapters.map((x) => [x.key, x]));
     progress.chapters = SECTIONS.map((s) => {
@@ -164,7 +179,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     const rewrite = async (x: RunChapter) => {
       x.status = "schreibt";
       await saveProgress(runId, progress);
-      const order = `${x.action === "neu" ? "Schreib dieses Kapitel neu." : "Pass dieses Kapitel an und behalte, was weiter stimmt."} Auftrag aus der Prüfung des ganzen Plans: ${x.reason || "mit dem aktuellen Material abgleichen"}${message.trim() ? ` Neue Angaben des Coachs (gelten für den ganzen Plan): ${message.trim()}` : ""}`;
+      const order = `${x.action === "neu" ? "Schreib dieses Kapitel neu." : "Pass dieses Kapitel an und behalte, was weiter stimmt."} Auftrag aus der Prüfung des ganzen Plans: ${x.reason || "mit dem aktuellen Material abgleichen"}${message.trim() ? ` Neue Angaben des Coachs (gelten für den ganzen Plan): ${message.trim()}` : ""}${attached.length ? `\nMitgegebene Dateien und Fotos des Coachs (nutze, was zu diesem Kapitel passt):\n${attachedBlock(attached, 12000)}` : ""}`;
       try {
         const out = await jsonResponse<{ text: string; sources: string[]; note: string }>({
           coacheeId: c.id,
@@ -230,12 +245,13 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
  * Einen Durchgang anlegen; läuft schon einer (jünger als 20 Minuten), kommt dieser zurück (fresh: false).
  * Den neuen startet der Aufrufer mit executeRun im Hintergrund (after()).
  */
-export async function createRun(user: User, c: Coachee, message: string): Promise<{ id: string; fresh: boolean; message: string }> {
+export async function createRun(user: User, c: Coachee, message: string, files: string[] = []): Promise<{ id: string; fresh: boolean; message: string }> {
   await query("UPDATE bp_runs SET status = 'fehler', error = 'Abgebrochen (der Server wurde neu gestartet). Bitte noch einmal starten.', finished_at = now() WHERE coachee_id = $1 AND status = 'laeuft' AND created_at <= now() - interval '20 minutes'", [c.id]);
   const running = await one<{ id: string }>("SELECT id FROM bp_runs WHERE coachee_id = $1 AND status = 'laeuft' ORDER BY created_at DESC LIMIT 1", [c.id]);
   if (running) return { id: running.id, fresh: false, message: "" };
   const text = message.trim().slice(0, 8000);
-  const row = await one<{ id: string }>("INSERT INTO bp_runs (coachee_id, message, created_by) VALUES ($1, $2, $3) RETURNING id", [c.id, text, user.id]);
+  const ids = files.filter((x) => UUID.test(x)).slice(0, 10);
+  const row = await one<{ id: string }>("INSERT INTO bp_runs (coachee_id, message, created_by, files) VALUES ($1, $2, $3, $4::uuid[]) RETURNING id", [c.id, text, user.id, ids]);
   return { id: row!.id, fresh: true, message: text };
 }
 
@@ -292,13 +308,14 @@ const CHAT_INSTRUCTIONS = `Du bist erfahrene Gründungsberaterin und begutachtes
 - Du änderst den Plan hier nicht. Wenn sich etwas verbessern lässt, formuliere es so, dass der Coach es direkt als Auftrag übernehmen kann.
 - Namen sind durch [Name] ersetzt. Keine Angaben zur Gesundheit.`;
 
-export async function askPlan(user: User, c: Coachee, question: string) {
-  const text = question.trim().slice(0, 4000);
+export async function askPlan(user: User, c: Coachee, question: string, files: string[] = [], fileNames: string[] = []) {
+  const attached = await attachedDocs(c.id, files);
+  const text = `${question.trim().slice(0, 4000)}${fileNames.length ? `\n📎 ${fileNames.map((n) => n.slice(0, 120)).join(", ")}` : ""}`;
   const history = (await loadChats(c.id)).chats[CHAT_KEY] ?? [];
   const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id])).map((r) => r.message);
   const talk = history.slice(-10).map((t) => `${t.role === "coach" ? "Coach" : "Du"}: ${t.text.slice(0, 3000)}`).join("\n\n");
   const input = pseudonymize(
-    [...(await planMaterial(c, earlier)), talk ? `== Bisheriges Gespräch ==\n${talk}` : "", `Neue Frage des Coachs: ${text}`].filter(Boolean).join("\n\n"),
+    [...(await planMaterial(c, earlier, attached)), talk ? `== Bisheriges Gespräch ==\n${talk}` : "", `Neue Frage des Coachs: ${text}`].filter(Boolean).join("\n\n"),
     [c.first_name, c.last_name],
   );
   const now = new Date().toISOString();

@@ -96,6 +96,11 @@ export const PARSER_VERSION = 2;
 
 /** Dokument (erneut) auslesen und Text und erkannte Termine speichern */
 export async function reparseDocument(doc: { id: string; file_id: string; category: string; name: string }) {
+  // Fotos liest die KI einmal beim Hochladen; dieser Text bleibt
+  if (["jpg", "jpeg", "png", "webp"].includes(extOf(doc.name))) {
+    await query("UPDATE documents SET parser_version = $2 WHERE id = $1", [doc.id, PARSER_VERSION]);
+    return;
+  }
   const data = await loadFile(doc.file_id).catch(() => null);
   if (!data) return;
   const plain = await extractDocumentText(doc.name, data);
