@@ -13,6 +13,10 @@ export function mockJson(schemaName: string, input: string): unknown {
   const parts = [...input.matchAll(/^== (.+?) ==$/gm)].map((m) => m[1]);
   const vorhaben = input.match(/^Vorhaben: (.+)$/m)?.[1] ?? "die Gründung";
   const instruction = input.match(/^Neue Nachricht des Coachs \(Notizen oder Anweisung\): (.+)$/m)?.[1] ?? "";
+  if (schemaName === "bp_chat") {
+    const q = input.match(/^Neue Frage des Coachs: (.+)$/m)?.[1] ?? "";
+    return { answer: `**Testantwort ohne KI** zur Frage „${q}“.\n\n- Stärke: Kapitel 3 ist klar.\n- Schwäche: Umsatz in Kapitel 12 fehlt.\n\nNächster Schritt: Zielgruppe schärfen.` };
+  }
   if (schemaName === "bp_pruefung") {
     const neu = input.match(/^Neue Angaben des Coachs: (.+)$/m)?.[1] ?? "";
     const leer = [...input.matchAll(/^## \d+\. .+? \[key: (\w+)\] – 0 Wörter/gm)].map((m) => m[1]);

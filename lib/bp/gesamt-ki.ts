@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { fullName, type Coachee } from "../access";
 import { AiError, jsonResponse, pseudonymize } from "../ai";
 import type { User } from "../auth";
@@ -6,7 +7,7 @@ import { one, query } from "../db";
 import { categoryLabel } from "../profile";
 import { Budget, chapterContext, loadChats, withoutHealth } from "./context";
 import { financeSummary } from "./finance";
-import { DRAFT_SCHEMA, instructions, proposeGlance } from "./schreibhilfe";
+import { DRAFT_SCHEMA, appendTurns, instructions, proposeGlance } from "./schreibhilfe";
 import { SECTIONS, chapterProgress, normalizeGlance, normalizeSections, type GlanceItem, type SectionState } from "./sections";
 import { planFor } from "./store";
 
@@ -74,7 +75,8 @@ Regeln:
 const MAX_PARALLEL = 4;
 
 /** Material für die Prüfung: alles auf einmal, die Kapitel vollständig */
-async function checkInput(c: Coachee, message: string, earlier: string[]) {
+/** Material zum ganzen Plan als Textblöcke (noch nicht pseudonymisiert) */
+async function planMaterial(c: Coachee, earlier: string[]) {
   const plan = await planFor(c);
   const [items, meetings, notes] = await Promise.all([
     query<{ category: string; title: string; detail: string }>("SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' ORDER BY category, created_at", [c.id]),
@@ -102,8 +104,12 @@ async function checkInput(c: Coachee, message: string, earlier: string[]) {
     meetings.map((m) => withoutHealth([m.notes, m.results].filter(Boolean).join("\n")).slice(0, 1200)).filter(Boolean).join("\n\n"),
     6000,
   );
+  return b.out;
+}
+
+async function checkInput(c: Coachee, message: string, earlier: string[]) {
   const tail = message.trim() ? `Neue Angaben des Coachs: ${message.trim()}` : "Neue Angaben des Coachs: keine. Gleiche den ganzen Plan mit dem aktuellen Material und Finanzplan ab.";
-  return pseudonymize([...b.out, tail].join("\n\n"), [c.first_name, c.last_name]);
+  return pseudonymize([...(await planMaterial(c, earlier)), tail].join("\n\n"), [c.first_name, c.last_name]);
 }
 
 async function saveProgress(id: string, progress: RunProgress) {
@@ -270,4 +276,44 @@ export async function undoRun(user: User, coacheeId: string, id: string) {
   if (Array.isArray(before.glance)) await query("UPDATE business_plans SET glance = $2 WHERE coachee_id = $1", [coacheeId, JSON.stringify(normalizeGlance(before.glance))]);
   await query("UPDATE bp_runs SET undone_at = now() WHERE id = $1", [id]);
   return true;
+}
+
+// ---------- Chat zum ganzen Plan: Fragen, Analyse, Bewertung (ändert nichts) ----------
+
+export const CHAT_KEY = "gesamt_chat";
+
+const CHAT_INSTRUCTIONS = `Du bist erfahrene Gründungsberaterin und begutachtest den kompletten Businessplan einer Gründung in Deutschland, so wie ihn die fachkundige Stelle (Gründungszuschuss der Agentur für Arbeit) oder eine Bank prüfen würde. Der Gründungscoach stellt dir Fragen: Analyse, Bewertung, Schwachstellen, Tragfähigkeit, Plausibilität der Zahlen, was fehlt, wie man etwas verbessert.
+
+- Antworte konkret und ehrlich, auch kritisch, per du an den Coach, auf Deutsch. Beziehe dich auf Kapitel (mit Nummer) und auf Zahlen aus dem Finanzplan.
+- Prüfe auf Widersprüche zwischen Kapiteln und Finanzplan, unrealistische Annahmen (Preise, Mengen, Auslastung, Kosten, Lebensunterhalt), fehlende Angaben und Platzhalter.
+- Bei einer Bewertung: kurze Gesamteinschätzung, dann Stärken, Schwächen und konkrete nächste Schritte. Eine Note oder Ampel nur, wenn der Coach danach fragt.
+- Gliedere mit kurzen Absätzen, Aufzählungen mit „- “ und **fett** für das Wichtigste. Keine Floskeln, keine Wiederholung der Frage.
+- Erfinde keine Fakten. Was nicht im Material steht, benennst du als offen.
+- Du änderst den Plan hier nicht. Wenn sich etwas verbessern lässt, formuliere es so, dass der Coach es direkt als Auftrag übernehmen kann.
+- Namen sind durch [Name] ersetzt. Keine Angaben zur Gesundheit.`;
+
+export async function askPlan(user: User, c: Coachee, question: string) {
+  const text = question.trim().slice(0, 4000);
+  const history = (await loadChats(c.id)).chats[CHAT_KEY] ?? [];
+  const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id])).map((r) => r.message);
+  const talk = history.slice(-10).map((t) => `${t.role === "coach" ? "Coach" : "Du"}: ${t.text.slice(0, 3000)}`).join("\n\n");
+  const input = pseudonymize(
+    [...(await planMaterial(c, earlier)), talk ? `== Bisheriges Gespräch ==\n${talk}` : "", `Neue Frage des Coachs: ${text}`].filter(Boolean).join("\n\n"),
+    [c.first_name, c.last_name],
+  );
+  const now = new Date().toISOString();
+  let turns = await appendTurns(c.id, CHAT_KEY, user.id, [{ id: randomUUID(), role: "coach", text, at: now }]);
+  const out = await jsonResponse<{ answer: string }>({
+    coacheeId: c.id,
+    userId: user.id,
+    purpose: "businessplan",
+    schemaName: "bp_chat",
+    schema: { type: "object", additionalProperties: false, required: ["answer"], properties: { answer: { type: "string" } } },
+    maxTokens: 6000,
+    instructions: CHAT_INSTRUCTIONS,
+    input,
+  });
+  const answer = out.answer.replaceAll("[Name]", fullName(c)).trim();
+  if (answer) turns = await appendTurns(c.id, CHAT_KEY, user.id, [{ id: randomUUID(), role: "ki", text: answer.slice(0, 20000), at: new Date().toISOString() }]);
+  return turns;
 }

@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 import { financeIsEmpty, keyFigures } from "@/lib/bp/finance";
 import { planIsEmpty } from "@/lib/bp/sections";
 import { loadChats } from "@/lib/bp/context";
-import { getRun } from "@/lib/bp/gesamt-ki";
+import { CHAT_KEY, getRun } from "@/lib/bp/gesamt-ki";
 import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { FinanceEditor } from "./FinanceEditor";
@@ -27,7 +27,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       [c.id, coach],
     ),
     // Notizen und Verlauf der Schreibhilfe nur für den Coach
-    coach ? loadChats(c.id) : Promise.resolve({ chats: {}, vorhaben: "" }),
+    coach ? loadChats(c.id) : Promise.resolve({ chats: {} as Awaited<ReturnType<typeof loadChats>>["chats"], vorhaben: "" }),
     coach ? getRun(c.id) : Promise.resolve(null),
   ]);
   const names = Object.fromEntries(users.map((u) => [u.id, u.id === user.id ? "dir" : u.name]));
@@ -49,6 +49,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       financeHref={links.finance}
       imported={coach && plan.imports.plan ? { name: plan.imports.plan.name, at: plan.imports.plan.at } : null}
       lastRun={lastRun}
+      chat={notes.chats[CHAT_KEY] ?? []}
       gesamtHref={files(c.id).gesamt}
       projectNotes={notes.vorhaben}
       schreibhilfeHref={files(c.id).schreibhilfe}
