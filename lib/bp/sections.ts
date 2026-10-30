@@ -147,6 +147,20 @@ export function normalizeSections(raw: unknown): Sections {
 /** Fortschritt: Kapitel mit mindestens 300 Zeichen gelten als geschrieben */
 export const sectionDone = (s: Pick<SectionState, "text">) => s.text.trim().length >= 300;
 
+/**
+ * Wie weit ist ein Kapitel? Prozent am Mindestumfang der Vorlage, offene Platzhalter in eckigen Klammern
+ * (z. B. „[Anzahl Betriebe mit Quelle]“, nicht „[Name]“) zählen als offene Angaben.
+ * fertig: Mindestumfang erreicht und keine Platzhalter mehr.
+ */
+export function chapterProgress(text: string, def: Pick<SectionDef, "words">) {
+  const t = text.trim();
+  const words = t ? t.split(/\s+/).length : 0;
+  const open = (t.match(/\[(?!Name\])[^\]\n]{3,}\](?!\()/g) ?? []).length;
+  const pct = Math.min(100, Math.round((words / def.words[0]) * 100));
+  const state: "leer" | "begonnen" | "fertig" = !t ? "leer" : pct >= 100 && !open ? "fertig" : "begonnen";
+  return { words, open, pct, state };
+}
+
 /** Quellen: eine pro Zeile */
 export const sourceList = (s: string) => s.split(/\r?\n/).map((l) => l.trim().replace(/^[-•*]\s+/, "")).filter(Boolean);
 

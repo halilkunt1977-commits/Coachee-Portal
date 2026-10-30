@@ -13,14 +13,14 @@ import { GLANCE_PRESETS, SECTIONS, type GlanceItem } from "./sections";
  * die KI schreibt oder überarbeitet daraus das Kapitel als Vorschlag. Übernommen wird im Editor über das normale Speichern.
  */
 
-const DRAFT_SCHEMA = {
+export const DRAFT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["text", "sources", "note"],
   properties: { text: { type: "string" }, sources: { type: "array", items: { type: "string" } }, note: { type: "string" } },
 };
 
-function instructions(key: string) {
+export function instructions(key: string) {
   const def = SECTIONS.find((s) => s.key === key)!;
   const number = SECTIONS.indexOf(def) + 1;
   const summary = key === "summary";

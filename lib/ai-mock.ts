@@ -13,6 +13,16 @@ export function mockJson(schemaName: string, input: string): unknown {
   const parts = [...input.matchAll(/^== (.+?) ==$/gm)].map((m) => m[1]);
   const vorhaben = input.match(/^Vorhaben: (.+)$/m)?.[1] ?? "die Gründung";
   const instruction = input.match(/^Neue Nachricht des Coachs \(Notizen oder Anweisung\): (.+)$/m)?.[1] ?? "";
+  if (schemaName === "bp_pruefung") {
+    const neu = input.match(/^Neue Angaben des Coachs: (.+)$/m)?.[1] ?? "";
+    const leer = [...input.matchAll(/^## \d+\. .+? \[key: (\w+)\] – 0 Wörter/gm)].map((m) => m[1]);
+    const keys = [...input.matchAll(/\[key: (\w+)\]/g)].map((m) => m[1]);
+    return {
+      note: `Testprüfung ohne KI. Angaben: ${neu}`,
+      glance: true,
+      chapters: keys.map((key, i) => ({ key, action: leer.includes(key) ? "neu" : i < 3 ? "anpassen" : "lassen", todo: leer.includes(key) ? "Kapitel ist leer." : i < 3 ? `Neue Angaben einarbeiten: ${neu.slice(0, 80)}` : "Stimmig." })),
+    };
+  }
   if (schemaName === "kapitel") {
     const short = /kürzer/i.test(instruction);
     const text = [
