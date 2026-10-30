@@ -15,7 +15,8 @@ export function mockJson(schemaName: string, input: string): unknown {
   const instruction = input.match(/^Neue Nachricht des Coachs \(Notizen oder Anweisung\): (.+)$/m)?.[1] ?? "";
   if (schemaName === "bp_chat") {
     const q = input.match(/^Neue Frage des Coachs: (.+)$/m)?.[1] ?? "";
-    return { answer: `**Testantwort ohne KI** zur Frage „${q}“.\n\n- Stärke: Kapitel 3 ist klar.\n- Schwäche: Umsatz in Kapitel 12 fehlt.\n\nNächster Schritt: Zielgruppe schärfen.` };
+    const att = input.includes("gerade mitgegebene Dateien") ? " (mit Anhang gelesen)" : "";
+    return { answer: `**Testantwort ohne KI**${att} zur Frage „${q}“.\n\n- Stärke: Kapitel 3 ist klar.\n- Schwäche: Umsatz in Kapitel 12 fehlt.\n\nNächster Schritt: Zielgruppe schärfen.` };
   }
   if (schemaName === "bp_pruefung") {
     const neu = input.match(/^Neue Angaben des Coachs: (.+)$/m)?.[1] ?? "";

@@ -25,17 +25,19 @@ async function coach(ctx: RouteContext<"/api/businessplan/[id]/gesamt">) {
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/businessplan/[id]/gesamt">) {
   const who = await coach(ctx);
   if (!who) return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
-  const body = (await request.json().catch(() => null)) as { message?: unknown; undo?: unknown; ask?: unknown; clear?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { message?: unknown; undo?: unknown; ask?: unknown; clear?: unknown; files?: unknown; fileNames?: unknown } | null;
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 10) : []);
+  const files = strings(body?.files);
   try {
     if (body?.clear === true) {
       await query("DELETE FROM bp_notes WHERE coachee_id = $1 AND section = $2", [who.c.id, CHAT_KEY]);
       return NextResponse.json({ turns: [] });
     }
     if (typeof body?.ask === "string") {
-      if (!body.ask.trim()) return NextResponse.json({ error: "Bitte eine Frage schreiben." }, { status: 400 });
+      if (!body.ask.trim() && !files.length) return NextResponse.json({ error: "Bitte eine Frage schreiben." }, { status: 400 });
       await assertAiAllowed(who.user, { coachOnly: true });
       await planFor(who.c);
-      const turns = await askPlan(who.user, who.c, body.ask);
+      const turns = await askPlan(who.user, who.c, body.ask.trim() || "Was sagst du zu diesen Unterlagen im Blick auf den Plan?", files, strings(body?.fileNames));
       await audit(who.user.id, "bp_ai_chat", who.c.id);
       return NextResponse.json({ turns });
     }
@@ -47,7 +49,8 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/busines
     }
     await assertAiAllowed(who.user, { coachOnly: true });
     await planFor(who.c);
-    const run = await createRun(who.user, who.c, String(body?.message ?? ""));
+    const names = strings(body?.fileNames);
+    const run = await createRun(who.user, who.c, `${String(body?.message ?? "").trim()}${names.length ? `${String(body?.message ?? "").trim() ? "\n" : ""}📎 ${names.join(", ")}` : ""}`, files);
     if (run.fresh) {
       await audit(who.user.id, "bp_ai_run", who.c.id);
       after(() => executeRun(run.id, who.user, who.c, run.message));
