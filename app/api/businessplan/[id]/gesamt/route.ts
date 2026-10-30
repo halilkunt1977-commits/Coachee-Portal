@@ -2,12 +2,14 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { coacheeFor } from "@/lib/access";
 import { AiError, assertAiAllowed } from "@/lib/ai";
 import { audit, getSession } from "@/lib/auth";
-import { createRun, executeRun, getRun, undoRun } from "@/lib/bp/gesamt-ki";
+import { query } from "@/lib/db";
+import { CHAT_KEY, askPlan, createRun, executeRun, getRun, undoRun } from "@/lib/bp/gesamt-ki";
 import { planFor } from "@/lib/bp/store";
 
 /*
  * KI für den ganzen Businessplan, nur für den Coach.
- * POST { message } startet einen Durchgang (läuft im Hintergrund weiter), POST { undo: id } macht ihn rückgängig.
+ * POST { message } startet einen Durchgang (läuft im Hintergrund weiter), POST { undo: id } macht ihn rückgängig,
+ * POST { ask } stellt eine Frage zum ganzen Plan (Analyse, Bewertung) und liefert den Chatverlauf.
  * GET ?run=id liefert den Stand, nach dem Ende mit allen Kapiteln, damit der Editor sie übernimmt.
  */
 
@@ -23,8 +25,20 @@ async function coach(ctx: RouteContext<"/api/businessplan/[id]/gesamt">) {
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/businessplan/[id]/gesamt">) {
   const who = await coach(ctx);
   if (!who) return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
-  const body = (await request.json().catch(() => null)) as { message?: unknown; undo?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { message?: unknown; undo?: unknown; ask?: unknown; clear?: unknown } | null;
   try {
+    if (body?.clear === true) {
+      await query("DELETE FROM bp_notes WHERE coachee_id = $1 AND section = $2", [who.c.id, CHAT_KEY]);
+      return NextResponse.json({ turns: [] });
+    }
+    if (typeof body?.ask === "string") {
+      if (!body.ask.trim()) return NextResponse.json({ error: "Bitte eine Frage schreiben." }, { status: 400 });
+      await assertAiAllowed(who.user, { coachOnly: true });
+      await planFor(who.c);
+      const turns = await askPlan(who.user, who.c, body.ask);
+      await audit(who.user.id, "bp_ai_chat", who.c.id);
+      return NextResponse.json({ turns });
+    }
     if (typeof body?.undo === "string") {
       const ok = await undoRun(who.user, who.c.id, body.undo);
       if (ok) await audit(who.user.id, "bp_ai_undo", who.c.id);

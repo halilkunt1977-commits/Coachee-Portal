@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
 import type { RunView } from "@/lib/bp/gesamt-ki";
+import type { ChatTurn } from "@/lib/bp/notes";
 import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sections } from "@/lib/bp/sections";
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
@@ -35,6 +36,7 @@ type Props = {
   schreibhilfeHref: string;
   gesamtHref: string;
   lastRun: RunView | null;
+  chat: ChatTurn[];
 };
 
 type Sec = { text: string; sources: string; saved: string; version: number; updatedAt: string | null; updatedBy: string | null; conflict?: { text: string; sources: string; version: number; by: string | null } };
@@ -176,6 +178,7 @@ export function PlanEditor(p: Props) {
         <GesamtKi
           href={p.gesamtHref}
           initial={p.lastRun}
+          chat={p.chat}
           beforeStart={async () => void (await save())}
           onRunning={setAiRunning}
           onUpdate={takeOver}
