@@ -5,7 +5,7 @@ import { normalizeCv } from "../cv/types";
 import { one, query } from "../db";
 import { categoryLabel } from "../profile";
 import { audit, type User } from "../auth";
-import { ANGEBOTSART, ARBEITSZEIT, UMKREIS, type Application, type Job, type JobQuery, type SavedSearch, type Status } from "./shared";
+import { ANGEBOTSART, ARBEITSZEIT, LAENDER, UMKREIS, type Application, type Job, type JobQuery, type SavedSearch, type Status } from "./shared";
 import { cleanWas } from "./ba";
 
 export const APP_COLUMNS = `a.id, a.refnr, a.title, a.employer, a.location, a.url, a.published_on::text, a.status, a.channel, a.applied_on::text, a.next_on::text,
@@ -55,7 +55,7 @@ export async function storeJob(coacheeId: string, user: User, job: Job, reason =
 }
 
 export const listSearches = (coacheeId: string) =>
-  query<SavedSearch>("SELECT id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit FROM job_searches WHERE coachee_id = $1 ORDER BY created_at", [coacheeId]);
+  query<SavedSearch>("SELECT id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit, land FROM job_searches WHERE coachee_id = $1 ORDER BY created_at", [coacheeId]);
 
 export const hiddenRefs = async (coacheeId: string) => (await query<{ refnr: string }>("SELECT refnr FROM job_hidden WHERE coachee_id = $1", [coacheeId])).map((r) => r.refnr);
 
@@ -72,6 +72,7 @@ export function normalizeQuery(raw: Partial<JobQuery> | null | undefined): JobQu
     arbeitszeit: [...new Set(zeiten)].join(";"),
     angebotsart: ANGEBOTSART.some((a) => a.key === art) ? art : 1,
     ohne_zeitarbeit: Boolean(q.ohne_zeitarbeit),
+    land: LAENDER.find((l) => l.key === q.land)?.key ?? "de",
   };
 }
 

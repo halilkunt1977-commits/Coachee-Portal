@@ -28,6 +28,7 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
       known={Object.fromEntries(known.map((k) => [k.refnr, k.status]))}
       trackerHref={links.tracker}
       sources={activeSources()}
+      sourcesTr={activeSources("tr")}
     />
   );
 }

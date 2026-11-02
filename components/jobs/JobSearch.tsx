@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { addSearch, deleteSearch, hideJob, rateJobs, runSearch, saveJob, suggestSearches, type SearchIdea, type SearchResult } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
 import { SetupHint } from "../coach/SetupHint";
-import { ANGEBOTSART, ARBEITSZEIT, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { ANGEBOTSART, ARBEITSZEIT, LAENDER, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import type { SourceInfo } from "@/lib/jobs/sources";
 import type { T } from "@/lib/i18n";
 import { useLocale, useT } from "../i18n/LangProvider";
@@ -20,6 +20,8 @@ type Props = {
   trackerHref: string;
   /** Abgefragte Börsen: immer die Arbeitsagentur, dazu die eingerichteten weiteren */
   sources: JobSource[];
+  /** Börsen für Suchen in der Türkei (leer, solange keine eingerichtet ist) */
+  sourcesTr: JobSource[];
 };
 
 const ago = (iso: string | null, t: T) => {
@@ -31,8 +33,12 @@ const ago = (iso: string | null, t: T) => {
   return new Date(iso).toLocaleDateString("de-DE");
 };
 
-const sourceText = (s: JobSource[], t: T) =>
-  s.length === 1 ? t("Live aus der Jobbörse der Bundesagentur für Arbeit.") : t("Live aus der Jobbörse der Bundesagentur für Arbeit, {weitere}.", { weitere: s.filter((k) => k !== "ba").map((k) => SOURCE_LABEL[k]).join(` ${t("und")} `) });
+const sourceText = (s: JobSource[], t: T, land: JobQuery["land"] = "de") =>
+  land === "tr"
+    ? s.length
+      ? t("Stellen in der Türkei live über {quelle}.", { quelle: s.map((k) => SOURCE_LABEL[k]).join(", ") })
+      : t("Für die Türkei gibt es Links zu Kariyer.net, Indeed und weiteren Börsen.")
+    : s.length === 1 ? t("Live aus der Jobbörse der Bundesagentur für Arbeit.") : t("Live aus der Jobbörse der Bundesagentur für Arbeit, {weitere}.", { weitere: s.filter((k) => k !== "ba").map((k) => SOURCE_LABEL[k]).join(` ${t("und")} `) });
 
 const FIT_TONE = { hoch: "bg-[#e3f1e7] text-ok", mittel: "bg-[#fbf1e3] text-gold", gering: "bg-bg text-muted" } as const;
 const FIT_LABEL = { hoch: "Passt gut", mittel: "Passt teilweise", gering: "Passt kaum" } as const;
@@ -179,7 +185,7 @@ export function JobSearch(p: Props) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1 basis-64">
             <h2 className="h2">{t("Suchen")}</h2>
-            <p className="text-sm text-muted">{sourceText(p.sources, t)} {p.coach ? `Gespeicherte Suchen sehen du und ${p.firstName}.` : t("Gespeicherte Suchen sehen du und dein Coach.")}</p>
+            <p className="text-sm text-muted">{sourceText(form.land === "tr" ? p.sourcesTr : p.sources, t, form.land)} {p.coach ? `Gespeicherte Suchen sehen du und ${p.firstName}.` : t("Gespeicherte Suchen sehen du und dein Coach.")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {p.ai && (
@@ -234,11 +240,11 @@ export function JobSearch(p: Props) {
           >
             <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium text-muted">{t("Beruf oder Stichwort")}</span>
-              <input className="input !py-2" value={form.was} maxLength={100} placeholder={t("z. B. Lagerist, Disponent")} onChange={(e) => setForm({ ...form, was: e.target.value })} />
+              <input className="input !py-2" value={form.was} maxLength={100} placeholder={form.land === "tr" ? t("auf Türkisch, z. B. muhasebe, depo") : t("z. B. Lagerist, Disponent")} onChange={(e) => setForm({ ...form, was: e.target.value })} />
             </label>
             <label className="block min-w-0">
-              <span className="mb-1 block text-xs font-medium text-muted">{t("Ort oder PLZ")}</span>
-              <input className="input !py-2" value={form.wo} maxLength={80} placeholder={t("z. B. Nürnberg")} onChange={(e) => setForm({ ...form, wo: e.target.value })} />
+              <span className="mb-1 block text-xs font-medium text-muted">{form.land === "tr" ? t("Stadt") : t("Ort oder PLZ")}</span>
+              <input className="input !py-2" value={form.wo} maxLength={80} placeholder={form.land === "tr" ? t("z. B. İstanbul") : t("z. B. Nürnberg")} onChange={(e) => setForm({ ...form, wo: e.target.value })} />
             </label>
             <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium text-muted">{t("Umkreis")}</span>
@@ -252,6 +258,14 @@ export function JobSearch(p: Props) {
                 {ANGEBOTSART.map((a) => <option key={a.key} value={a.key}>{t(a.label)}</option>)}
               </select>
             </label>
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
+              <span className="text-sm text-muted">{t("Land")}:</span>
+              {LAENDER.map((l) => (
+                <button key={l.key} type="button" aria-pressed={form.land === l.key} onClick={() => setForm({ ...form, land: l.key, wo: form.land === l.key ? form.wo : "" })} className={`rounded-full border px-3 py-1 text-sm ${form.land === l.key ? "border-accent bg-tint text-accent" : "border-line-soft text-muted hover:border-accent"}`}>
+                  {t(l.label)}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
               {ARBEITSZEIT.map((a) => {
                 const on = form.arbeitszeit.split(";").includes(a.key);
@@ -366,9 +380,14 @@ export function JobSearch(p: Props) {
             <p className="text-xs text-muted">{t("Öffnet die Börse mit Beruf und Ort. Eine passende Stelle dort trägst du unter Bewerbungen mit „+ Bewerbung eintragen“ ein.")}</p>
           </div>
           <p className="text-center text-xs text-muted">
-            {t("Quellen:")} {p.sources.map((s) => SOURCE_LABEL[s]).join(", ")}. {p.coach ? "Es werden nur die Suchbegriffe übertragen, keine Daten über Coachees." : t("Es werden nur die Suchbegriffe übertragen, keine Daten über dich.")}
+            {(ran.land === "tr" ? p.sourcesTr : p.sources).length > 0 && <>{t("Quellen:")} {(ran.land === "tr" ? p.sourcesTr : p.sources).map((s) => SOURCE_LABEL[s]).join(", ")}. </>} {p.coach ? "Es werden nur die Suchbegriffe übertragen, keine Daten über Coachees." : t("Es werden nur die Suchbegriffe übertragen, keine Daten über dich.")}
           </p>
-          {p.coach && p.sources.length < 3 && (
+          {p.coach && ran.land === "tr" && p.sourcesTr.length === 0 && (
+            <SetupHint>
+              Stellen aus der Türkei direkt in die Trefferliste holen: bei careerjet.com/partners/register/as-publisher kostenlos als Publisher anmelden, als Website portal.gruendarium.de und die IP-Adresse des Servers eintragen, den Schlüssel als CAREERJET_API_KEY in den Einstellungen der App eintragen, dann neu starten.
+            </SetupHint>
+          )}
+          {p.coach && ran.land !== "tr" && p.sources.length < 3 && (
             <SetupHint>
               Weitere Börsen direkt in die Trefferliste holen: kostenlose Schlüssel bei developer.adzuna.com (App-ID und Key als ADZUNA_APP_ID und ADZUNA_APP_KEY) und jooble.org/api/about (als JOOBLE_API_KEY) in den Einstellungen der App eintragen, dann neu starten. Adzuna und Jooble sammeln Stellen aus StepStone, Indeed, Firmen-Karriereseiten und vielen weiteren Börsen.
             </SetupHint>
