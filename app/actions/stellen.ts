@@ -1,4 +1,5 @@
 "use server";
+import { headers } from "next/headers";
 import { coacheeFor } from "@/lib/access";
 import { AiError, assertAiAllowed, jsonResponse } from "@/lib/ai";
 import { audit, requireUser, type User } from "@/lib/auth";
@@ -37,13 +38,13 @@ export async function addSearch(coacheeId: string, raw: Partial<JobQuery>): Prom
   const count = await one<{ n: number }>("SELECT count(*)::int AS n FROM job_searches WHERE coachee_id = $1", [c.id]);
   if ((count?.n ?? 0) >= 12) return { error: "Höchstens 12 Suchen. Bitte zuerst eine alte entfernen." };
   const same = await one<SavedSearch>(
-    "SELECT id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit FROM job_searches WHERE coachee_id = $1 AND lower(was) = lower($2) AND lower(wo) = lower($3) AND umkreis = $4 AND arbeitszeit = $5 AND angebotsart = $6 AND ohne_zeitarbeit = $7",
-    [c.id, q.was, q.wo, q.umkreis, q.arbeitszeit, q.angebotsart, q.ohne_zeitarbeit],
+    "SELECT id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit, land FROM job_searches WHERE coachee_id = $1 AND lower(was) = lower($2) AND lower(wo) = lower($3) AND umkreis = $4 AND arbeitszeit = $5 AND angebotsart = $6 AND ohne_zeitarbeit = $7 AND land = $8",
+    [c.id, q.was, q.wo, q.umkreis, q.arbeitszeit, q.angebotsart, q.ohne_zeitarbeit, q.land],
   );
   if (same) return { search: same };
   const search = await one<SavedSearch>(
-    "INSERT INTO job_searches (coachee_id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit",
-    [c.id, q.was, q.wo, q.umkreis, q.arbeitszeit, q.angebotsart, q.ohne_zeitarbeit, user.id],
+    "INSERT INTO job_searches (coachee_id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit, land, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, was, wo, umkreis, arbeitszeit, angebotsart, ohne_zeitarbeit, land",
+    [c.id, q.was, q.wo, q.umkreis, q.arbeitszeit, q.angebotsart, q.ohne_zeitarbeit, q.land, user.id],
   );
   await audit(user.id, "job_search_saved", c.id, { was: q.was, wo: q.wo });
   return { search: search! };
@@ -65,7 +66,10 @@ export async function runSearch(coacheeId: string, raw: Partial<JobQuery>, page 
   const q = normalizeQuery(raw);
   if (!q.was && !q.wo) return { jobs: [], total: 0, hidden: 0, error: "Bitte mindestens einen Beruf oder einen Ort eingeben." };
   try {
-    const [res, hidden] = await Promise.all([searchAll(q, Math.max(1, Math.min(40, Math.floor(page) || 1))), hiddenRefs(c.id)]);
+    // Careerjet verlangt IP und Browser der suchenden Person (nur dafür, es wird nichts gespeichert)
+    const h = await headers();
+    const visitor = { ip: h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || "", agent: h.get("user-agent") || "" };
+    const [res, hidden] = await Promise.all([searchAll(q, Math.max(1, Math.min(40, Math.floor(page) || 1)), visitor), hiddenRefs(c.id)]);
     const skip = new Set(hidden);
     const jobs = res.jobs.filter((j) => !skip.has(j.refnr));
     return { jobs, total: res.total, hidden: res.jobs.length - jobs.length, sources: res.sources };

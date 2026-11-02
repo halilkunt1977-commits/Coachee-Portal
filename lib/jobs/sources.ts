@@ -1,6 +1,7 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { cleanWas, JobSearchError, PAGE_SIZE, searchJobs } from "./ba";
-import { SOURCE_LABEL, type Job, type JobQuery, type JobSource } from "./shared";
+import { SOURCE_LABEL, type Job, type JobQuery, type JobSource, type Land } from "./shared";
 
 /*
  * Stellensuche über mehrere Börsen: immer die Bundesagentur, dazu Adzuna und Jooble, sobald deren Zugangsschlüssel
@@ -8,6 +9,10 @@ import { SOURCE_LABEL, type Job, type JobQuery, type JobSource } from "./shared"
  * Beide sammeln Stellen aus vielen Börsen und Firmenseiten (StepStone, Indeed, Karriereseiten usw.).
  * Wie bei der Arbeitsagentur gehen nur Suchbegriff und Ort hinaus, nie Daten über Coachees.
  * Fällt eine Börse aus, kommen die Treffer der anderen trotzdem. ADZUNA_URL und JOOBLE_URL ersetzen die Adressen für Tests.
+ *
+ * Suchen in der Türkei laufen über Careerjet (careerjet.com.tr, Sprache tr_TR). Dafür braucht es einen kostenlosen
+ * Publisher-Schlüssel (CAREERJET_API_KEY), bei Careerjet auf die Domain des Portals und die IP des Servers eingetragen.
+ * Careerjet verlangt IP und Browserkennung der suchenden Person; beides geht nur mit der Suche hinaus. CAREERJET_URL für Tests.
  */
 
 export type SourceInfo = { key: JobSource; label: string; count: number; error?: string };
@@ -15,9 +20,14 @@ export type MultiResult = { jobs: Job[]; total: number; sources: SourceInfo[] };
 
 const adzunaKeys = () => (process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY ? { id: process.env.ADZUNA_APP_ID, key: process.env.ADZUNA_APP_KEY } : null);
 const joobleKey = () => process.env.JOOBLE_API_KEY || null;
+const careerjetKey = () => process.env.CAREERJET_API_KEY || null;
 
 /** Welche Börsen gerade abgefragt werden (für den Hinweis in der Suche) */
-export const activeSources = (): JobSource[] => ["ba", ...(adzunaKeys() ? (["adzuna"] as const) : []), ...(joobleKey() ? (["jooble"] as const) : [])];
+export const activeSources = (land: Land = "de"): JobSource[] =>
+  land === "tr" ? (careerjetKey() ? ["careerjet"] : []) : ["ba", ...(adzunaKeys() ? (["adzuna"] as const) : []), ...(joobleKey() ? (["jooble"] as const) : [])];
+
+/** Wer sucht (nur für Careerjet) */
+export type Visitor = { ip: string; agent: string };
 
 const cache = new Map<string, { at: number; data: { jobs: Job[]; total: number } }>();
 const TTL = 10 * 60 * 1000;
@@ -184,6 +194,75 @@ export function parseJooble(data: unknown, q: Pick<JobQuery, "ohne_zeitarbeit" |
   return { jobs, total: Number(d.totalCount) || jobs.length };
 }
 
+// Careerjet: Vertragsart statt Angebotsart
+const CJ_CONTRACT: Record<number, string> = { 4: "i", 34: "i" };
+
+export async function searchCareerjet(q: JobQuery, page = 1, visitor?: Visitor): Promise<{ jobs: Job[]; total: number }> {
+  const key = careerjetKey();
+  if (!key || !visitor?.ip) return { jobs: [], total: 0 };
+  if (q.angebotsart === 2) return { jobs: [], total: 0 };
+  const params = new URLSearchParams({ locale_code: "tr_TR", sort: "date", page_size: String(PAGE_SIZE), page: String(Math.min(10, page)), user_ip: visitor.ip, user_agent: visitor.agent || "Mozilla/5.0" });
+  // Türkische Anzeigen: Homeoffice heißt dort „uzaktan“, Ausbildung/Praktikum laufen über contract_type
+  const what = [cleanWas(q.was), q.arbeitszeit.split(";").includes("ho") && "uzaktan"].filter(Boolean).join(" ");
+  if (what) params.set("keywords", what);
+  if (q.wo.trim()) {
+    params.set("location", q.wo.trim());
+    if (q.umkreis) params.set("radius", String(q.umkreis));
+  }
+  const zeiten = q.arbeitszeit.split(";");
+  if (zeiten.includes("vz") && !zeiten.includes("tz")) params.set("work_hours", "f");
+  if (zeiten.includes("tz") && !zeiten.includes("vz")) params.set("work_hours", "p");
+  if (CJ_CONTRACT[q.angebotsart]) params.set("contract_type", CJ_CONTRACT[q.angebotsart]);
+  if (page > 10) return { jobs: [], total: 0 };
+  const url = `${process.env.CAREERJET_URL || "https://search.api.careerjet.net/v4/query"}?${params}`;
+  const cacheKey = `careerjet ${q.ohne_zeitarbeit} ${url.replace(/user_ip=[^&]*&user_agent=[^&]*/, "")}`;
+  return cached(cacheKey, async () => {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}`, Referer: process.env.PORTAL_URL || "https://portal.gruendarium.de" },
+      signal: AbortSignal.timeout(15000),
+      cache: "no-store",
+    }).catch((e) => {
+      console.error("Careerjet nicht erreichbar", e);
+      throw new JobSearchError("Careerjet antwortet gerade nicht.");
+    });
+    if (!res.ok) {
+      console.error("[careerjet] Suche abgelehnt:", res.status, (await res.text().catch(() => "")).slice(0, 200));
+      throw new JobSearchError(res.status === 403 ? "Careerjet hat die Suche abgelehnt (Fehler 403). Meist fehlt dort die IP des Servers in den Einstellungen." : `Careerjet hat die Suche abgelehnt (Fehler ${res.status}).`);
+    }
+    return parseCareerjet(await res.json().catch(() => ({})), q.ohne_zeitarbeit);
+  });
+}
+
+export function parseCareerjet(data: unknown, ohneZeitarbeit = false): { jobs: Job[]; total: number } {
+  const d = (data ?? {}) as Raw;
+  // „LOCATIONS“: Ort unbekannt oder mehrdeutig, es wurde nicht gesucht
+  if (d.type === "LOCATIONS") throw new JobSearchError("Diesen Ort kennt Careerjet nicht oder er ist mehrdeutig. Bitte eine Stadt in der Türkei eingeben, z. B. İstanbul oder Ankara.");
+  const jobs: Job[] = [];
+  for (const x of Array.isArray(d.jobs) ? (d.jobs as Raw[]) : []) {
+    const url = httpUrl(x.url);
+    if (!url) continue;
+    const employer = plain(x.company);
+    if (ohneZeitarbeit && ZEITARBEIT.test(employer)) continue;
+    // Careerjet liefert keine Kennung, die Adresse ist pro Anzeige eindeutig
+    const id = createHash("sha1").update(url).digest("hex").slice(0, 24);
+    jobs.push({
+      refnr: refOf("careerjet", id),
+      title: plain(x.title) || "Stellenangebot",
+      beruf: "",
+      employer,
+      location: plain(x.locations).split(",")[0],
+      distance: null,
+      published: isoDay(x.date),
+      start: null,
+      url,
+      externalUrl: url,
+      homeoffice: undefined,
+      source: "careerjet",
+    });
+  }
+  return { jobs, total: Number(d.hits) || jobs.length };
+}
+
 /** Gleiche Stelle aus mehreren Börsen nur einmal zeigen (Titel + Arbeitgeber, ohne Zusätze wie „(m/w/d)“) */
 const sameKey = (j: Job) =>
   `${j.title.toLowerCase().replace(/\((?:m|w|d|f|x|gn|all genders?)(?:\s*[/|,]\s*(?:m|w|d|f|x|gn))*\)|\*in\b/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${j.employer
@@ -210,12 +289,14 @@ export function merge(lists: Job[][]): Job[] {
 }
 
 /** Alle eingerichteten Börsen gleichzeitig abfragen. Fehler nur, wenn keine einzige geantwortet hat. */
-export async function searchAll(q: JobQuery, page = 1): Promise<MultiResult> {
-  const keys = activeSources();
+export async function searchAll(q: JobQuery, page = 1, visitor?: Visitor): Promise<MultiResult> {
+  const keys = activeSources(q.land);
+  if (!keys.length) throw new JobSearchError("Für die Türkei ist noch keine Jobbörse eingerichtet. Unten öffnen die Links Kariyer.net, Indeed und weitere mit deiner Suche.");
   const run: Record<JobSource, () => Promise<{ jobs: Job[]; total: number }>> = {
     ba: () => searchJobs(q, page).then((r) => ({ ...r, jobs: r.jobs.map((j) => ({ ...j, source: "ba" as const })) })),
     adzuna: () => searchAdzuna(q, page),
     jooble: () => searchJooble(q, page),
+    careerjet: () => searchCareerjet(q, page, visitor),
   };
   const results = await Promise.allSettled(keys.map((k) => run[k]()));
   const sources: SourceInfo[] = results.map((r, i) => ({

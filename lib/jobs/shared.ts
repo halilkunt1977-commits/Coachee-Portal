@@ -1,11 +1,17 @@
 // Gemeinsame Typen und Bezeichnungen für Stellensuche und Bewerbungs-Tracker (Server und Browser).
 
-export type JobQuery = { was: string; wo: string; umkreis: number; arbeitszeit: string; angebotsart: number; ohne_zeitarbeit: boolean };
+/** land: in Deutschland (Arbeitsagentur, Adzuna, Jooble) oder in der Türkei (Careerjet) suchen */
+export type Land = "de" | "tr";
+export const LAENDER: { key: Land; label: string }[] = [
+  { key: "de", label: "Deutschland" },
+  { key: "tr", label: "Türkei" },
+];
+export type JobQuery = { was: string; wo: string; umkreis: number; arbeitszeit: string; angebotsart: number; ohne_zeitarbeit: boolean; land: Land };
 export type SavedSearch = JobQuery & { id: string };
 
 /** Woher ein Treffer stammt: Bundesagentur oder eine der weiteren Jobbörsen (lib/jobs/sources.ts) */
-export type JobSource = "ba" | "adzuna" | "jooble";
-export const SOURCE_LABEL: Record<JobSource, string> = { ba: "Arbeitsagentur", adzuna: "Adzuna", jooble: "Jooble" };
+export type JobSource = "ba" | "adzuna" | "jooble" | "careerjet";
+export const SOURCE_LABEL: Record<JobSource, string> = { ba: "Arbeitsagentur", adzuna: "Adzuna", jooble: "Jooble", careerjet: "Careerjet" };
 
 /** Ein Treffer aus der Jobbörse */
 export type Job = {
@@ -25,13 +31,21 @@ export type Job = {
 };
 
 /** Referenznummer zum Vorzeigen: nur die der Arbeitsagentur, die anderen Börsen haben interne Kennungen („adzuna:…“) */
-export const publicRefnr = (refnr: string | null) => (refnr && !/^(adzuna|jooble):/.test(refnr) ? refnr : null);
+export const publicRefnr = (refnr: string | null) => (refnr && !/^(adzuna|jooble|careerjet):/.test(refnr) ? refnr : null);
 
 /** Dieselbe Suche bei Börsen ohne offene Schnittstelle öffnen (Link, es wird nichts automatisch abgerufen) */
-export function boardLinks(q: Pick<JobQuery, "was" | "wo" | "umkreis">) {
+export function boardLinks(q: Pick<JobQuery, "was" | "wo" | "umkreis"> & { land?: Land }) {
   const was = q.was.trim();
   const wo = q.wo.trim();
   const e = encodeURIComponent;
+  if (q.land === "tr")
+    return [
+      { label: "Kariyer.net", url: `https://www.kariyer.net/is-ilanlari?kw=${e(was)}${wo ? `&loc=${e(wo)}` : ""}` },
+      { label: "Indeed Türkiye", url: `https://tr.indeed.com/jobs?q=${e(was)}&l=${e(wo)}` },
+      { label: "LinkedIn", url: `https://www.linkedin.com/jobs/search/?keywords=${e(was)}&location=${e(wo || "Türkiye")}` },
+      { label: "İŞKUR", url: "https://esube.iskur.gov.tr/Istihdam/AcikIsIlanAra.aspx" },
+      { label: "Google Jobs", url: `https://www.google.com/search?ibp=htl;jobs&q=${e([was, "iş ilanları", wo || "Türkiye"].filter(Boolean).join(" "))}` },
+    ];
   const slug = (v: string) => v.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const r = q.umkreis || 0;
   return [
@@ -135,6 +149,6 @@ export type Salutation = (typeof SALUTATIONS)[number]["key"];
 
 /** Suche in Worten; t übersetzt für Coachees mit türkischer Oberfläche (lib/i18n.ts) */
 export const describeQuery = (q: JobQuery, t: (de: string, vars?: Record<string, string | number>) => string = (s) => s) =>
-  [q.was, q.wo && `${t("in {ort}", { ort: q.wo })}${q.umkreis ? ` +${q.umkreis} km` : ""}`, q.arbeitszeit && q.arbeitszeit.split(";").map((k) => t(ARBEITSZEIT.find((a) => a.key === k)?.label ?? k)).join(", ")].filter(Boolean).join(" · ");
+  [q.was, q.land === "tr" && !q.wo && t("in der Türkei"), q.wo && `${t("in {ort}", { ort: q.wo })}${q.land === "tr" ? ` (${t("Türkei")})` : ""}${q.umkreis ? ` +${q.umkreis} km` : ""}`, q.arbeitszeit && q.arbeitszeit.split(";").map((k) => t(ARBEITSZEIT.find((a) => a.key === k)?.label ?? k)).join(", ")].filter(Boolean).join(" · ");
 
 export const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
