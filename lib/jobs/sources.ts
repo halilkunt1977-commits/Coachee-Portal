@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { cleanWas, JobSearchError, PAGE_SIZE, searchJobs } from "./ba";
-import { SOURCE_LABEL, type Job, type JobQuery, type JobSource, type Land } from "./shared";
+import { SOURCE_LABEL, jobKey, type Job, type JobQuery, type JobSource, type Land } from "./shared";
 
 /*
  * Stellensuche über mehrere Börsen: immer die Bundesagentur, dazu Adzuna und Jooble, sobald deren Zugangsschlüssel
@@ -263,12 +263,7 @@ export function parseCareerjet(data: unknown, ohneZeitarbeit = false): { jobs: J
   return { jobs, total: Number(d.hits) || jobs.length };
 }
 
-/** Gleiche Stelle aus mehreren Börsen nur einmal zeigen (Titel + Arbeitgeber, ohne Zusätze wie „(m/w/d)“) */
-const sameKey = (j: Job) =>
-  `${j.title.toLowerCase().replace(/\((?:m|w|d|f|x|gn|all genders?)(?:\s*[/|,]\s*(?:m|w|d|f|x|gn))*\)|\*in\b/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${j.employer
-    .toLowerCase()
-    .replace(/\b(gmbh|ag|kg|se|e\.?v\.?|co\.?|mbh|ug|ohg|&)\b/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "")}`;
+
 
 /** Treffer abwechselnd aus den Börsen mischen, die Arbeitsagentur zuerst, Doppelte fallen weg */
 export function merge(lists: Job[][]): Job[] {
@@ -279,7 +274,7 @@ export function merge(lists: Job[][]): Job[] {
     for (const l of lists) {
       const j = l[i];
       if (!j) continue;
-      const k = sameKey(j);
+      const k = jobKey(j);
       if (seen.has(j.refnr) || seen.has(k)) continue;
       seen.add(j.refnr);
       seen.add(k);

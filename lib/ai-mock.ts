@@ -13,6 +13,10 @@ export function mockJson(schemaName: string, input: string): unknown {
   const parts = [...input.matchAll(/^== (.+?) ==$/gm)].map((m) => m[1]);
   const vorhaben = input.match(/^Vorhaben: (.+)$/m)?.[1] ?? "die Gründung";
   const instruction = input.match(/^Neue Nachricht des Coachs \(Notizen oder Anweisung\): (.+)$/m)?.[1] ?? "";
+  if (schemaName === "passung") {
+    const nrs = [...input.matchAll(/^(\d+)\. (.+)$/gm)];
+    return { bewertungen: nrs.map((m, i) => ({ nr: Number(m[1]), prozent: [92, 84, 65, 40][i % 4], grund: `Testeinschätzung ohne KI für „${m[2].slice(0, 40)}“.` })) };
+  }
   if (schemaName === "bp_chat") {
     const q = input.match(/^Neue Frage des Coachs: (.+)$/m)?.[1] ?? "";
     const att = input.includes("gerade mitgegebene Dateien") ? " (mit Anhang gelesen)" : "";

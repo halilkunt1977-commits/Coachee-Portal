@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addSearch, deleteSearch, hideJob, rateJobs, runSearch, saveJob, suggestSearches, type SearchIdea, type SearchResult } from "@/app/actions/stellen";
+import { addSearch, deleteSearch, findMatchingJobs, hideJob, rateJobs, runSearch, saveJob, setAutoJobs, suggestSearches, type SearchIdea, type SearchResult } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
 import { SetupHint } from "../coach/SetupHint";
-import { ANGEBOTSART, ARBEITSZEIT, LAENDER, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { ANGEBOTSART, ARBEITSZEIT, LAENDER, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, jobKey, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import type { SourceInfo } from "@/lib/jobs/sources";
 import type { T } from "@/lib/i18n";
 import { useLocale, useT } from "../i18n/LangProvider";
@@ -17,6 +17,10 @@ type Props = {
   searches: SavedSearch[];
   initialQuery: JobQuery;
   known: Record<string, Status>;
+  /** Stand je Titel + Arbeitgeber (jobKey): erkennt dieselbe Stelle aus einer anderen Börse oder von Hand eingetragen */
+  knownKeys: Record<string, Status>;
+  /** Nur Coach: täglich passende Stellen vorschlagen (null für Coachees) */
+  autoJobs: boolean | null;
   trackerHref: string;
   /** Abgefragte Börsen: immer die Arbeitsagentur, dazu die eingerichteten weiteren */
   sources: JobSource[];
@@ -60,6 +64,9 @@ export function JobSearch(p: Props) {
   const [loading, setLoading] = useState(false);
   const [sourceInfo, setSourceInfo] = useState<SourceInfo[]>([]);
   const [known, setKnown] = useState(p.known);
+  const [auto, setAuto] = useState(p.autoJobs);
+  const [matching, setMatching] = useState(false);
+  const [matchNote, setMatchNote] = useState<string | null>(null);
   const [fits, setFits] = useState<Record<string, Fit>>({});
   const [rating, setRating] = useState(false);
   const [ideas, setIdeas] = useState<SearchIdea[] | null>(null);
@@ -146,6 +153,28 @@ export function JobSearch(p: Props) {
     setFits((prev) => ({ ...prev, ...res.fits }));
   }
 
+  async function findMatches() {
+    setMatching(true);
+    setError(null);
+    setMatchNote(null);
+    const res = await findMatchingJobs(p.coacheeId).catch(() => ({ checked: 0, proposed: [], error: "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen.", known: undefined }));
+    setMatching(false);
+    if (res.error) return setError(res.error);
+    setKnown((prev) => ({ ...prev, ...res.known }));
+    setMatchNote(
+      res.proposed.length
+        ? `${res.proposed.length === 1 ? "1 Stelle" : `${res.proposed.length} Stellen`} ab 80 % an ${p.firstName} vorgeschlagen: ${res.proposed.map((x) => `${x.title}${x.employer ? ` (${x.employer})` : ""} ${x.score} %`).join(", ")}. Sie stehen unter Bewerbungen.`
+        : res.checked
+          ? `${res.checked} neue Stellen geprüft, keine passt zu 80 % oder mehr.`
+          : "Keine neuen Stellen gefunden. Bereits geprüfte, gemerkte und ausgeblendete Stellen werden übersprungen.",
+    );
+  }
+
+  async function toggleAuto(on: boolean) {
+    setAuto(on);
+    await setAutoJobs(p.coacheeId, on);
+  }
+
   async function keep(job: Job) {
     const res = await saveJob(p.coacheeId, job, fits[job.refnr]?.level !== "gering" ? (fits[job.refnr]?.reason ?? "") : "");
     if (res.error) return setError(t(res.error));
@@ -174,7 +203,7 @@ export function JobSearch(p: Props) {
   };
 
   const sorted = [...jobs].sort((a, b) => {
-    const rank = (j: Job) => ({ hoch: 0, mittel: 1, gering: 3 })[fits[j.refnr]?.level ?? "mittel"] ?? 2;
+    const rank = (j: Job) => (fits[j.refnr]?.score != null ? 100 - fits[j.refnr]!.score! : ({ hoch: 15, mittel: 40, gering: 75 })[fits[j.refnr]?.level ?? "mittel"]);
     return Object.keys(fits).length ? rank(a) - rank(b) : 0;
   });
   const unrated = jobs.some((j) => !fits[j.refnr]);
@@ -284,6 +313,21 @@ export function JobSearch(p: Props) {
             </div>
           </form>
         )}
+        {p.ai && p.coach && auto !== null && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line-soft px-3.5 py-2.5">
+            <button type="button" className="btn btn-sm" disabled={matching} onClick={findMatches}>
+              {matching ? "Suchen und prüfen …" : "✦ Passende Stellen finden (ab 80 %)"}
+            </button>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={auto} onChange={(e) => void toggleAuto(e.target.checked)} />
+              Täglich automatisch vorschlagen
+            </label>
+            <p className="basis-full text-xs text-muted">
+              Geht alle gespeicherten Suchen und Wunschberufe durch, die KI schätzt neue Stellen gegen Kompetenzprofil und Lebenslauf ein. Ab 80 % steht die Stelle als dein Vorschlag bei {p.firstName} unter Bewerbungen (höchstens 5 am Tag). Bereits gemerkte, beworbene und ausgeblendete Stellen werden übersprungen.
+            </p>
+            {matchNote && <p className="basis-full text-sm text-ok" role="status">{matchNote}</p>}
+          </div>
+        )}
         {error && <p className="rounded-xl bg-[#f8e6e3] px-3.5 py-2.5 text-sm text-danger" role="alert">{error}</p>}
       </section>
 
@@ -324,7 +368,7 @@ export function JobSearch(p: Props) {
           )}
           <ul className="space-y-2">
             {sorted.map((j) => {
-              const status = known[j.refnr];
+              const status = known[j.refnr] ?? p.knownKeys[jobKey(j)];
               const fit = fits[j.refnr];
               return (
                 <li key={j.refnr} className="card !p-4">
@@ -335,7 +379,7 @@ export function JobSearch(p: Props) {
                       <p className="text-xs text-muted">{[j.source && j.source !== "ba" ? t("über {quelle}", { quelle: SOURCE_LABEL[j.source] }) : "", j.beruf && j.beruf !== j.title ? j.beruf : "", j.published && t("veröffentlicht {wann}", { wann: ago(j.published, t) }), j.start && t("ab {datum}", { datum: new Date(j.start).toLocaleDateString("de-DE") })].filter(Boolean).join(" · ")}</p>
                       {fit && (
                         <p className="mt-1.5 text-sm">
-                          <span className={`badge mr-2 ${FIT_TONE[fit.level]}`}>{t(FIT_LABEL[fit.level])}</span>
+                          <span className={`badge mr-2 ${FIT_TONE[fit.level]}`}>{fit.score != null ? `${fit.score} %` : t(FIT_LABEL[fit.level])}</span>
                           <span className="text-muted">{fit.reason}</span>
                         </p>
                       )}

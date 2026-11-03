@@ -1,9 +1,9 @@
 import type { Coachee } from "@/lib/access";
 import { aiEnabled } from "@/lib/ai";
 import type { User } from "@/lib/auth";
-import { query } from "@/lib/db";
+import { one, query } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
-import type { Status } from "@/lib/jobs/shared";
+import { jobKey, type Status } from "@/lib/jobs/shared";
 import { defaultQuery, listApplications, listSearches } from "@/lib/jobs/store";
 import { activeSources } from "@/lib/jobs/sources";
 import { JobSearch } from "./JobSearch";
@@ -15,8 +15,9 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
   const [searches, initialQuery, known] = await Promise.all([
     listSearches(c.id),
     defaultQuery(c),
-    query<{ refnr: string; status: Status }>("SELECT refnr, status FROM applications WHERE coachee_id = $1 AND refnr IS NOT NULL", [c.id]),
+    query<{ refnr: string | null; title: string; employer: string; status: Status }>("SELECT refnr, title, employer, status FROM applications WHERE coachee_id = $1 ORDER BY updated_at", [c.id]),
   ]);
+  const auto = user.role === "coach" ? await one<{ auto_jobs: boolean }>("SELECT auto_jobs FROM coachees WHERE id = $1", [c.id]) : null;
   return (
     <JobSearch
       coacheeId={c.id}
@@ -25,7 +26,9 @@ export async function StellenPanel({ user, coachee: c, links }: { user: User; co
       firstName={c.first_name}
       searches={searches}
       initialQuery={initialQuery}
-      known={Object.fromEntries(known.map((k) => [k.refnr, k.status]))}
+      known={Object.fromEntries(known.flatMap((k) => (k.refnr ? [[k.refnr, k.status]] : [])))}
+      knownKeys={Object.fromEntries(known.map((k) => [jobKey(k), k.status]))}
+      autoJobs={auto ? auto.auto_jobs : null}
       trackerHref={links.tracker}
       sources={activeSources()}
       sourcesTr={activeSources("tr")}
