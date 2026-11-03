@@ -5,7 +5,7 @@ import { one, query } from "../db";
 import { cleanWas, JobSearchError } from "./ba";
 import { searchAll } from "./sources";
 import { normalizeQuery } from "./store";
-import { today, type Job, type JobQuery } from "./shared";
+import { jobKey, today, type Job, type JobQuery } from "./shared";
 
 /*
  * Stellenempfehlungen für die Startseite im Jobcoaching. Ohne KI: Suchbegriffe kommen der Reihe nach aus den
@@ -83,7 +83,10 @@ export async function jobTips(c: Coachee, limit = 5): Promise<TipsResult> {
   const signature = signatureOf(queries);
   const [cached, known] = await Promise.all([
     one<{ jobs: Tip[] }>("SELECT jobs FROM job_tips WHERE coachee_id = $1 AND day = $2 AND signature = $3", [c.id, day, signature]),
-    query<{ refnr: string }>("SELECT refnr FROM applications WHERE coachee_id = $1 AND refnr IS NOT NULL UNION SELECT refnr FROM job_hidden WHERE coachee_id = $1", [c.id]),
+    query<{ refnr: string | null; title: string; employer: string }>(
+      "SELECT refnr, title, employer FROM applications WHERE coachee_id = $1 UNION ALL SELECT refnr, '' AS title, '' AS employer FROM job_hidden WHERE coachee_id = $1",
+      [c.id],
+    ),
   ]);
   let all = cached?.jobs;
   if (!all) {
@@ -105,6 +108,7 @@ export async function jobTips(c: Coachee, limit = 5): Promise<TipsResult> {
       await query("DELETE FROM job_tips WHERE coachee_id = $1 AND day < $2", [c.id, day]);
     }
   }
-  const skip = new Set(known.map((k) => k.refnr));
-  return { tips: all.filter((j) => !skip.has(j.refnr)).slice(0, limit), queries };
+  // Gemerkt oder beworben zählt auch, wenn die Stelle aus einer anderen Börse kam oder von Hand eingetragen wurde
+  const skip = new Set([...known.flatMap((k) => (k.refnr ? [k.refnr] : [])), ...known.filter((k) => k.title).map(jobKey)]);
+  return { tips: all.filter((j) => !skip.has(j.refnr) && !skip.has(jobKey(j))).slice(0, limit), queries };
 }

@@ -6,6 +6,7 @@ import { audit, requireUser, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { JobSearchError } from "@/lib/jobs/ba";
 import { searchAll, type SourceInfo } from "@/lib/jobs/sources";
+import { findMatches, scoreJobs, type MatchResult } from "@/lib/jobs/passung";
 import { CHANNELS, SALUTATIONS, STATUSES, publicRefnr, today, type Application, type Fit, type Job, type JobQuery, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import { getApplication, hiddenRefs, normalizeQuery, profileForAi, storeJob } from "@/lib/jobs/store";
 import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
@@ -254,24 +255,7 @@ Regeln:
   }
 }
 
-const FIT_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["bewertungen"],
-  properties: {
-    bewertungen: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["nr", "passung", "grund"],
-        properties: { nr: { type: "integer" }, passung: { type: "string", enum: ["hoch", "mittel", "gering"] }, grund: { type: "string" } },
-      },
-    },
-  },
-};
-
-/** KI schätzt ein, wie gut die Treffer zum Profil passen. An die KI gehen nur Titel, Beruf, Arbeitgeber und Ort der Anzeigen. */
+/** KI schätzt ein, wie gut die Treffer zum Profil passen (in Prozent). An die KI gehen nur Titel, Beruf, Arbeitgeber und Ort der Anzeigen. */
 export async function rateJobs(coacheeId: string, jobs: Pick<Job, "refnr" | "title" | "beruf" | "employer" | "location">[]): Promise<{ fits?: Record<string, Fit>; error?: string }> {
   const user = await requireUser();
   const c = await jobCoachee(user, coacheeId);
@@ -279,29 +263,8 @@ export async function rateJobs(coacheeId: string, jobs: Pick<Job, "refnr" | "tit
   if (!list.length) return { fits: {} };
   try {
     await assertAiAllowed(user, { coachOnly: true });
-    const profile = await profileForAi(c);
-    if (profile.empty) return { error: "Für die Einschätzung braucht es ein Kompetenzprofil oder einen Lebenslauf." };
-    const anzeigen = list.map((j, i) => `${i + 1}. ${clip(j.title, 160)}${j.beruf ? ` (Beruf: ${clip(j.beruf, 100)})` : ""} – ${clip(j.employer, 120)}, ${clip(j.location, 80)}`).join("\n");
-    const out = await jsonResponse<{ bewertungen: { nr: number; passung: Fit["level"]; grund: string }[] }>({
-      coacheeId: c.id,
-      userId: user.id,
-      purpose: "stellen_passung",
-      schemaName: "passung",
-      schema: FIT_SCHEMA,
-      maxTokens: 4000,
-      instructions: `Du schätzt im Jobcoaching ein, wie gut Stellenanzeigen zu einer Person passen. Du kennst nur Titel, Beruf, Arbeitgeber und Ort der Anzeige, nicht den Anzeigentext.
-
-Regeln:
-- Bewerte jede Anzeige genau einmal mit ihrer Nummer: "hoch" (Erfahrung und Wunsch passen), "mittel" (machbar, mit Lücken oder als Quereinstieg), "gering" (passt fachlich nicht oder widerspricht einem Ausschlussgrund).
-- "grund": ein kurzer Satz (höchstens 18 Wörter), konkret mit Bezug auf das Profil. Bei "gering" sagen, was fehlt oder stört.
-- Sei ehrlich, nicht höflich. Namen sind durch [Name] ersetzt.`,
-      input: `${profile.text}\n\nStellenanzeigen:\n${anzeigen}`,
-    });
-    const fits: Record<string, Fit> = {};
-    for (const b of out.bewertungen) {
-      const j = list[b.nr - 1];
-      if (j) fits[j.refnr] = { level: b.passung, reason: b.grund.replaceAll("[Name]", c.first_name).slice(0, 240) };
-    }
+    const fits = await scoreJobs(c, user.id, list);
+    if (!fits) return { error: "Für die Einschätzung braucht es ein Kompetenzprofil oder einen Lebenslauf." };
     await audit(user.id, "jobs_ai_rated", c.id, { count: list.length });
     return { fits };
   } catch (e) {
@@ -309,3 +272,27 @@ Regeln:
     return { error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
   }
 }
+
+/** Alle Suchen durchgehen und Stellen ab 80 % Passung gleich vorschlagen (nur Coach) */
+export async function findMatchingJobs(coacheeId: string): Promise<MatchResult & { known?: Record<string, Status> }> {
+  const user = await requireUser("coach");
+  const c = await jobCoachee(user, coacheeId);
+  try {
+    await assertAiAllowed(user, { coachOnly: true });
+    const r = await findMatches(c, user);
+    return { ...r, known: Object.fromEntries(r.proposed.map((p) => [p.refnr, "vorschlag" as Status])) };
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("Passende Stellen", e);
+    return { checked: 0, proposed: [], error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
+  }
+}
+
+/** Täglich passende Stellen vorschlagen: an oder aus je Coachee */
+export async function setAutoJobs(coacheeId: string, on: boolean) {
+  const user = await requireUser("coach");
+  const c = await jobCoachee(user, coacheeId);
+  await query("UPDATE coachees SET auto_jobs = $2 WHERE id = $1", [c.id, Boolean(on)]);
+  await audit(user.id, on ? "auto_jobs_on" : "auto_jobs_off", c.id);
+  return { ok: true };
+}
+

@@ -57,7 +57,18 @@ export function boardLinks(q: Pick<JobQuery, "was" | "wo" | "umkreis"> & { land?
   ];
 }
 
-export type Fit = { level: "hoch" | "mittel" | "gering"; reason: string };
+/** Passung laut KI; score in Prozent (ältere Einschätzungen haben keinen) */
+export type Fit = { level: "hoch" | "mittel" | "gering"; reason: string; score?: number };
+/** Ab hier schlägt das Portal eine Stelle von selbst vor */
+export const AUTO_SCORE = 80;
+export const levelOf = (score: number): Fit["level"] => (score >= AUTO_SCORE ? "hoch" : score >= 50 ? "mittel" : "gering");
+
+/** Gleiche Stelle erkennen, auch aus einer anderen Börse oder von Hand eingetragen: Titel ohne „(m/w/d)“ + Arbeitgeber ohne Rechtsform */
+export const jobKey = (j: { title: string; employer: string }) =>
+  `${j.title.toLowerCase().replace(/\((?:m|w|d|f|x|gn|all genders?)(?:\s*[/|,]\s*(?:m|w|d|f|x|gn))*\)|\*in\b/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim()}|${j.employer
+    .toLowerCase()
+    .replace(/\b(gmbh|ag|kg|se|e\.?v\.?|co\.?|mbh|ug|ohg|ltd\.?|&)\b/g, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "")}`;
 
 export const STATUSES = [
   { key: "vorschlag", label: "Vorschlag", hint: "Vom Coach vorgeschlagen" },
