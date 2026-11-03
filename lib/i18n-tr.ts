@@ -1871,4 +1871,10 @@ export const TR: Record<string, string> = {
   "Für die Türkei ist noch keine Jobbörse eingerichtet. Unten öffnen die Links Kariyer.net, Indeed und weitere mit deiner Suche.": "Türkiye için henüz bir iş sitesi bağlı değil. Aşağıdaki linkler Kariyer.net, Indeed ve diğerlerini senin aramanla açar.",
   "Diesen Ort kennt Careerjet nicht oder er ist mehrdeutig. Bitte eine Stadt in der Türkei eingeben, z. B. İstanbul oder Ankara.": "Careerjet bu yeri tanımıyor ya da birden fazla yer çıkıyor. Türkiye'den bir şehir yaz, ör. İstanbul ya da Ankara.",
   "Careerjet antwortet gerade nicht.": "Careerjet şu an cevap vermiyor.",
+  "Sortieren:": "Sırala:",
+  "Nach Stand": "Duruma göre",
+  "Neueste zuerst": "En yeniler önce",
+  "Fällig zuerst": "Zamanı gelenler önce",
+  "Firma A–Z": "Firma A–Z",
+  "Geänderte Stellen neu einsortieren": "Değişen ilanları yeniden sırala",
 };

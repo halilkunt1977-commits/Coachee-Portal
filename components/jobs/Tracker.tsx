@@ -10,16 +10,68 @@ import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, pu
 type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean };
 
 const ACTIVE: Status[] = ["vorschlag", "gemerkt", "beworben", "gespraech"];
+type Filter = "aktiv" | "alle" | Status;
+type SortKey = "stand" | "neu" | "faellig" | "firma";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "stand", label: "Nach Stand" },
+  { key: "neu", label: "Neueste zuerst" },
+  { key: "faellig", label: "Fällig zuerst" },
+  { key: "firma", label: "Firma A–Z" },
+];
+const SORT_STORE = "bewerbungen-sortierung";
+// Reihenfolge der Stände: was jetzt zu tun ist, oben
+const RANK: Record<Status, number> = { vorschlag: 0, gespraech: 1, beworben: 2, gemerkt: 3, zusage: 4, absage: 5, verworfen: 6 };
+/** Datum, an dem die Stelle dazukam bzw. die Bewerbung rausging. Bewusst nicht „zuletzt geändert“, sonst springt eine Stelle bei jeder Bearbeitung. */
+const since = (a: Application) => a.applied_on ?? String(a.created_at).slice(0, 10);
+const newestFirst = (a: Application, b: Application) => since(b).localeCompare(since(a)) || String(b.created_at).localeCompare(String(a.created_at));
+const COMPARE: Record<SortKey, (a: Application, b: Application) => number> = {
+  stand: (a, b) => RANK[a.status] - RANK[b.status] || newestFirst(a, b),
+  neu: newestFirst,
+  faellig: (a, b) => (a.next_on ?? "9999").localeCompare(b.next_on ?? "9999") || RANK[a.status] - RANK[b.status] || newestFirst(a, b),
+  firma: (a, b) => (a.employer || a.title).localeCompare(b.employer || b.title, "de", { sensitivity: "base" }) || newestFirst(a, b),
+};
+const inFilter = (a: Application, f: Filter) => (f === "alle" ? true : f === "aktiv" ? ACTIVE.includes(a.status) : a.status === f);
+/** Reihenfolge der angezeigten Stellen (Ids) für Auswahl und Sortierung */
+const arrange = (apps: Application[], f: Filter, s: SortKey) => apps.filter((a) => inFilter(a, f)).sort(COMPARE[s]).map((a) => a.id);
+
 const fmt = (d: string | null) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "");
 
 export function Tracker(p: Props) {
   const t = useT();
   const [apps, setApps] = useState(p.initial);
   // Aus dem Posteingang kommend: diese Stelle aufgeklappt zeigen, auch wenn sie nicht mehr „laufend“ ist
-  const [filter, setFilter] = useState<"aktiv" | "alle" | Status>(() => {
+  const [filter, setFilterState] = useState<Filter>(() => {
     const f = p.focus ? p.initial.find((a) => a.id === p.focus) : null;
     return f && !ACTIVE.includes(f.status) ? "alle" : "aktiv";
   });
+  const [sort, setSortState] = useState<SortKey>("stand");
+  // Die Reihenfolge wird nur beim Öffnen, beim Wechsel von Auswahl oder Sortierung und auf Knopfdruck neu gebildet.
+  // Wer eine Stelle bearbeitet (Stand, Datum, Notiz), behält sie an ihrem Platz.
+  const [order, setOrder] = useState<string[]>(() => arrange(p.initial, filter, "stand"));
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(SORT_STORE);
+    } catch {}
+    if (!saved || saved === "stand" || !SORTS.some((s) => s.key === saved)) return;
+    const timer = window.setTimeout(() => {
+      setSortState(saved as SortKey);
+      setOrder(arrange(p.initial, filter, saved as SortKey));
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const setFilter = (f: Filter) => {
+    setFilterState(f);
+    setOrder(arrange(apps, f, sort));
+  };
+  const setSort = (s: SortKey) => {
+    setSortState(s);
+    setOrder(arrange(apps, filter, s));
+    try {
+      localStorage.setItem(SORT_STORE, s);
+    } catch {}
+  };
   const [open, setOpen] = useState<string | null>(p.focus ?? null);
   useEffect(() => {
     if (p.focus) document.getElementById(`stelle-${p.focus}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -31,7 +83,10 @@ export function Tracker(p: Props) {
   const counts = useMemo(() => Object.fromEntries(STATUSES.map((s) => [s.key, apps.filter((a) => a.status === s.key).length])) as Record<Status, number>, [apps]);
   const applied = apps.filter((a) => APPLIED.includes(a.status)).length;
   const due = apps.filter((a) => a.next_on && a.next_on <= now && ACTIVE.includes(a.status));
-  const list = apps.filter((a) => (filter === "alle" ? true : filter === "aktiv" ? ACTIVE.includes(a.status) : a.status === filter));
+  const byId = new Map(apps.map((a) => [a.id, a]));
+  const list = order.flatMap((id) => byId.get(id) ?? []);
+  const fresh = arrange(apps, filter, sort);
+  const outdated = fresh.length !== order.length || fresh.some((id, i) => id !== order[i]);
 
   const replace = (a: Application) => setApps((prev) => prev.map((x) => (x.id === a.id ? a : x)));
 
@@ -45,6 +100,7 @@ export function Tracker(p: Props) {
 
   async function remove(id: string) {
     setApps((prev) => prev.filter((x) => x.id !== id));
+    setOrder((prev) => prev.filter((x) => x !== id));
     await deleteApplication(p.coacheeId, id);
   }
 
@@ -53,6 +109,7 @@ export function Tracker(p: Props) {
     const res = await addApplication(p.coacheeId, Object.fromEntries(form) as Partial<Application>);
     if (res.error) return setError(t(res.error));
     setApps((prev) => [res.application!, ...prev]);
+    setOrder((prev) => [res.application!.id, ...prev]);
     setAdding(false);
     setOpen(res.application!.id);
   }
@@ -83,6 +140,20 @@ export function Tracker(p: Props) {
           )}
           <button type="button" className="btn btn-sm tap" onClick={() => setAdding(!adding)}>{adding ? t("Abbrechen") : `+ ${t("Bewerbung eintragen")}`}</button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+        <label className="flex items-center gap-2 text-muted">
+          {t("Sortieren:")}
+          <select className="input !w-auto !py-1.5 text-sm" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            {SORTS.map((s) => <option key={s.key} value={s.key}>{t(s.label)}</option>)}
+          </select>
+        </label>
+        {outdated && (
+          <button type="button" className="link text-sm" onClick={() => setOrder(fresh)}>
+            {t("Geänderte Stellen neu einsortieren")}
+          </button>
+        )}
       </div>
 
       {error && <p className="rounded-xl bg-[#f8e6e3] px-3.5 py-2.5 text-sm text-danger" role="alert">{error}</p>}
