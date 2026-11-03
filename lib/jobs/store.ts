@@ -15,7 +15,7 @@ export const APP_COLUMNS = `a.id, a.refnr, a.title, a.employer, a.location, a.ur
 export const listApplications = (coacheeId: string) =>
   query<Application>(
     `SELECT ${APP_COLUMNS} FROM applications a LEFT JOIN users p ON p.id = a.proposed_by WHERE a.coachee_id = $1
-      ORDER BY CASE a.status WHEN 'vorschlag' THEN 0 WHEN 'gespraech' THEN 1 WHEN 'beworben' THEN 2 WHEN 'gemerkt' THEN 3 WHEN 'zusage' THEN 4 ELSE 5 END, a.next_on NULLS LAST, a.updated_at DESC`,
+      ORDER BY CASE a.status WHEN 'vorschlag' THEN 0 WHEN 'gespraech' THEN 1 WHEN 'beworben' THEN 2 WHEN 'gemerkt' THEN 3 WHEN 'zusage' THEN 4 WHEN 'absage' THEN 5 ELSE 6 END, COALESCE(a.applied_on, a.created_at::date) DESC, a.created_at DESC`,
     [coacheeId],
   );
 
