@@ -3,7 +3,7 @@ import { Icon } from "@/components/shell/icons";
 import { Empty } from "@/components/ui";
 import type { Coachee } from "@/lib/access";
 import type { User } from "@/lib/auth";
-import { KINDS, msUntil, relativeDay, todayBerlin } from "@/lib/calendar/dates";
+import { invitedLabel, KINDS, msUntil, relativeDay, todayBerlin } from "@/lib/calendar/dates";
 import { graphEnabled } from "@/lib/calendar/graph";
 import { appointmentFor, appointmentsOfCoachee, type Appointment } from "@/lib/calendar/store";
 import { AppointmentDetail } from "./AppointmentDetail";
@@ -82,7 +82,7 @@ function Rows({ items, base, selected, muted }: { items: Appointment[]; base: st
             <span className={`size-2.5 shrink-0 rounded-full ${KINDS[a.kind].dot}`} />
             <span className="min-w-0 flex-1">
               <span className={`block truncate font-semibold ${a.status === "abgesagt" ? "text-muted line-through" : muted ? "text-ink/80" : ""}`}>{a.title}</span>
-              <span className="block text-xs text-muted">{relativeDay(a.day, today)} · {a.start}–{a.end} · {KINDS[a.kind].short}{a.invited_at ? " · eingeladen" : ""}</span>
+              <span className="block text-xs text-muted">{relativeDay(a.day, today)} · {a.start}–{a.end} · {KINDS[a.kind].short}{a.invited_at ? ` · ${invitedLabel(a.invited_at)}` : ""}</span>
             </span>
             {a.join_url && a.status === "geplant" && !muted && <span className="rounded-full bg-[#5b5fc7] px-2 py-0.5 text-[10px] font-bold text-white">Teams</span>}
           </Link>

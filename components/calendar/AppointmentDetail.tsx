@@ -3,7 +3,7 @@ import { cancelAppointment, deleteAppointment, duplicateAppointment } from "@/ap
 import { Avatar } from "@/components/shell/AppShell";
 import { Icon } from "@/components/shell/icons";
 import { Notice } from "@/components/ui";
-import { dayLong, KINDS, msUntil } from "@/lib/calendar/dates";
+import { dayLong, invitedLabel, KINDS, msUntil } from "@/lib/calendar/dates";
 import { placeOf, SYNC_TEXT, type SyncResult } from "@/lib/calendar/notify";
 import type { Appointment } from "@/lib/calendar/store";
 import { getT, serverLang } from "@/lib/i18n-server";
@@ -37,7 +37,7 @@ export async function AppointmentDetail({ a, coach, ret, editHref, closeHref, hi
         {coach && a.coachee_name && (
           <div className="flex items-center gap-3">
             <dt><Avatar name={a.coachee_name} size="size-[18px]" className="!text-[7px]" /></dt>
-            <dd><Link href={`/coach/coachees/${a.coachee_id}?tab=termine`} className="link">{a.coachee_name}</Link>{a.invited_at && <span className="text-muted"> · eingeladen</span>}</dd>
+            <dd><Link href={`/coach/coachees/${a.coachee_id}?tab=termine`} className="link">{a.coachee_name}</Link>{a.invited_at && <span className="text-muted"> · {invitedLabel(a.invited_at)}</span>}</dd>
           </div>
         )}
         {!coach && <div className="flex items-center gap-3"><dt><Avatar name={a.coach_name} size="size-[18px]" className="!text-[7px]" /></dt><dd>{t("mit {name}", { name: a.coach_name })}</dd></div>}
