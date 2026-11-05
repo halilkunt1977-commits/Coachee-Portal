@@ -75,3 +75,7 @@ export const minutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.s
 
 /** Millisekunden bis zu einem Zeitpunkt (negativ = vorbei) */
 export const msUntil = (iso: string) => new Date(iso).getTime() - Date.now();
+
+/** „eingeladen am 03.11.2026, 14:20“ (Berliner Zeit) */
+export const invitedLabel = (iso: string) =>
+  `eingeladen am ${new Date(iso).toLocaleString("de-DE", { timeZone: "Europe/Berlin", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} Uhr`;
