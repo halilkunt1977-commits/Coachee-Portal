@@ -1,5 +1,6 @@
 import "server-only";
 import ExcelJS from "exceljs";
+import { kapitaldienst, schuldenSumme, tilgungsplan, vermoegenSumme, type BankInfo } from "./bank";
 import { MONTHS, calculate, hasLiving, investmentDepreciation, livingTotal, monthLabel, staffCost, yearRange, type FinanceInput } from "./finance";
 
 /*
@@ -33,7 +34,7 @@ const monthDate = (start: string, i: number) => {
 };
 const round = (n: number) => Math.round(n * 1e6) / 1e6;
 
-type Opts = { results?: boolean };
+type Opts = { results?: boolean; bank?: BankInfo };
 
 export async function financeWorkbook(f: FinanceInput, meta: { name: string; title: string }, opts: Opts = {}) {
   const r = calculate(f);
@@ -393,6 +394,78 @@ export async function financeWorkbook(f: FinanceInput, meta: { name: string; tit
     band(lh, lSum, 2, GREEN);
     lh.getRow(lSum + 1).values = ["Private Entnahme Jahr 1", F(`Annahmen!B${A.private}`, f.privateDraw[0])];
     fmt(lh, lSum + 1, 2, 2, EUR);
+  }
+
+  // ---------- Bankfassung: Kapitaldienst, Tilgungsplan, Vermögen ----------
+  if (opts.bank) {
+    const b = opts.bank;
+    const kd = kapitaldienst(f, r);
+    const ks = wb.addWorksheet("Kapitaldienst", { views: [grid] });
+    ks.columns = [{ width: 42 }, { width: 18 }, { width: 18 }, { width: 18 }];
+    title(ks, "Kapitaldienstfähigkeit", 4);
+    head(ks, 3, ["Position", "Jahr 1", "Jahr 2", "Jahr 3"]);
+    const kRows: [string, (k: (typeof kd)[number]) => number][] = [
+      ["Ergebnis vor Steuern", (k) => k.profit],
+      ["+ Abschreibungen", (k) => k.afa],
+      ["+ Zinsaufwand", (k) => k.zins],
+      ["− Steuern (Rücklage)", (k) => -k.steuer],
+      ["− Private Entnahmen", (k) => -k.entnahme],
+      ["+ Zuschüsse zum Lebensunterhalt", (k) => k.zuschuss],
+      ["= Verfügbar für den Kapitaldienst", (k) => k.verfuegbar],
+      ["Kapitaldienst (Zins und Tilgung)", (k) => k.dienst],
+      ["Über- bzw. Unterdeckung", (k) => k.ueberdeckung],
+    ];
+    kRows.forEach(([label, fn], i) => {
+      ks.getRow(4 + i).values = [label, ...kd.map((k) => round(fn(k)))];
+      fmt(ks, 4 + i, 2, 4, EUR);
+    });
+    band(ks, 10, 4, GREY);
+    band(ks, 12, 4, GREEN);
+    ks.getRow(13).values = ["Deckungsgrad (mind. 1,2 erwartet)", ...kd.map((k) => (k.deckung === null ? "–" : Math.round(k.deckung * 100) / 100))];
+
+    const loans = f.financing.filter((x) => x.kind === "darlehen" && x.amount > 0);
+    if (loans.length) {
+      const ts = wb.addWorksheet("Tilgungsplan", { views: [grid] });
+      ts.columns = [{ width: 30 }, { width: 18 }, { width: 18 }, { width: 22 }];
+      title(ts, "Tilgungsplan der Darlehen", 4);
+      let row = 3;
+      for (const l of loans) {
+        ts.getCell(`A${row}`).value = `${l.label || "Darlehen"}: ${l.amount.toLocaleString("de-DE")} €, ${l.rate.toLocaleString("de-DE")} % Zins, ${l.years} Jahre, ${l.grace} Monate tilgungsfrei`;
+        ts.getCell(`A${row}`).font = { bold: true, color: { argb: NAVY } };
+        head(ts, row + 1, ["Planjahr", "Zinsen", "Tilgung", "Restschuld Jahresende"]);
+        const plan = tilgungsplan(l);
+        plan.forEach((y, i) => {
+          ts.getRow(row + 2 + i).values = [`Jahr ${y.jahr}`, round(y.zins), round(y.tilgung), round(y.rest)];
+          fmt(ts, row + 2 + i, 2, 4, EUR);
+        });
+        row += plan.length + 4;
+      }
+    }
+
+    if (b.vermoegen.length || b.verbindlichkeiten.length) {
+      const vs = wb.addWorksheet("Vermögensübersicht", { views: [grid] });
+      vs.columns = [{ width: 40 }, { width: 18 }, { width: 18 }];
+      title(vs, "Private Vermögensübersicht", 3);
+      head(vs, 3, ["Vermögen", "Betrag", ""]);
+      b.vermoegen.forEach((x, i) => {
+        vs.getRow(4 + i).values = [x.label, x.betrag];
+        fmt(vs, 4 + i, 2, 2, EUR);
+      });
+      let row = 4 + b.vermoegen.length;
+      vs.getRow(row).values = ["Summe Vermögen", vermoegenSumme(b)];
+      fmt(vs, row, 2, 2, EUR);
+      band(vs, row, 3, GREEN);
+      row += 2;
+      head(vs, row, ["Verbindlichkeiten", "Restschuld", "Rate im Monat"]);
+      b.verbindlichkeiten.forEach((x, i) => {
+        vs.getRow(row + 1 + i).values = [x.label, x.betrag, x.rate];
+        fmt(vs, row + 1 + i, 2, 3, EUR);
+      });
+      row += 1 + b.verbindlichkeiten.length;
+      vs.getRow(row).values = ["Summe Verbindlichkeiten", schuldenSumme(b), b.verbindlichkeiten.reduce((s, x) => s + x.rate, 0)];
+      fmt(vs, row, 2, 3, EUR);
+      band(vs, row, 3, GREEN);
+    }
   }
 
   for (const ws of wb.worksheets) ws.pageSetup = { orientation: ws.columnCount > 8 ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };

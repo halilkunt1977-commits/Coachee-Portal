@@ -1,5 +1,6 @@
 import "server-only";
 import { htmlToPdf } from "../cv/pdf";
+import type { BankInfo } from "./bank";
 import { financeIsEmpty, type FinanceInput } from "./finance";
 import { renderPlanHtml, tocTargets } from "./render";
 import type { GlanceItem, Sections } from "./sections";
@@ -29,12 +30,12 @@ async function findPages(pdf: Uint8Array, targets: { key: string; heading: strin
  * Businessplan als PDF mit Seitenzahlen im Inhaltsverzeichnis: erst ohne Zahlen erzeugen, die Seiten der Überschriften
  * auslesen, dann mit Zahlen noch einmal. Die Zahlen nehmen keinen zusätzlichen Platz ein, die Seiten bleiben gleich.
  */
-export async function planPdf(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string) {
-  const first = await htmlToPdf(renderPlanHtml(sections, glance, finance, meta, fontCss));
-  const pages = await findPages(first, tocTargets(!financeIsEmpty(finance))).catch((e) => {
+export async function planPdf(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string, opts: { bank?: BankInfo } = {}) {
+  const first = await htmlToPdf(renderPlanHtml(sections, glance, finance, meta, fontCss, {}, opts));
+  const pages = await findPages(first, tocTargets(!financeIsEmpty(finance), Boolean(opts.bank))).catch((e) => {
     console.error("Seitenzahlen für das Inhaltsverzeichnis", e);
     return null;
   });
   if (!pages || !Object.keys(pages).length) return first;
-  return htmlToPdf(renderPlanHtml(sections, glance, finance, meta, fontCss, pages));
+  return htmlToPdf(renderPlanHtml(sections, glance, finance, meta, fontCss, pages, opts));
 }

@@ -2,6 +2,7 @@ import "server-only";
 import { fullName, type Coachee } from "../access";
 import { one, query } from "../db";
 import type { FinanceItem } from "../profile";
+import { normalizeBank, type BankInfo } from "./bank";
 import { emptyFinance, normalizeFinance, type FinanceInput, type Year3 } from "./finance";
 import { defaultGlance, normalizeGlance, normalizeSections, type GlanceItem, type Sections } from "./sections";
 
@@ -19,6 +20,8 @@ export type PlanRow = {
   finance_updated_by_name: string | null;
   imports: { plan?: ImportInfo; finance?: ImportInfo };
   prefilled: boolean;
+  /** Angaben für die Bankfassung */
+  bank: BankInfo;
 };
 
 /** Businessplan laden; beim ersten Öffnen anlegen und den Finanzplan mit den Zahlen aus den Gesprächen vorbelegen. */
@@ -42,7 +45,7 @@ export async function planFor(c: Coachee): Promise<PlanRow> {
 }
 
 async function loadPlan(coacheeId: string): Promise<PlanRow | null> {
-  const row = await one<{ coachee_id: string; title: string; branche: string | null; sections: unknown; glance: unknown; finance: unknown; finance_version: number; updated_at: string; finance_updated_by_name: string | null; imports: PlanRow["imports"] }>(
+  const row = await one<{ coachee_id: string; title: string; branche: string | null; sections: unknown; glance: unknown; finance: unknown; finance_version: number; updated_at: string; finance_updated_by_name: string | null; imports: PlanRow["imports"]; bank: unknown }>(
     "SELECT bp.*, u.name AS finance_updated_by_name FROM business_plans bp LEFT JOIN users u ON u.id = bp.finance_updated_by WHERE bp.coachee_id = $1",
     [coacheeId],
   );
@@ -59,6 +62,7 @@ async function loadPlan(coacheeId: string): Promise<PlanRow | null> {
     finance_updated_by_name: row.finance_updated_by_name,
     imports: row.imports ?? {},
     prefilled: false,
+    bank: normalizeBank(row.bank),
   };
 }
 
