@@ -8,13 +8,14 @@ import { loadChats } from "@/lib/bp/context";
 import { CHAT_KEY, recentRuns } from "@/lib/bp/gesamt-ki";
 import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
+import { guessLand } from "@/lib/bp/foerderung";
 import { FinanceEditor } from "./FinanceEditor";
 import { PlanEditor } from "./PlanEditor";
 import { ShareButton } from "../teilen/ShareButton";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
 
-const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, word: `/api/businessplan/${id}/word`, excel: `/api/businessplan/${id}/excel`, schreibhilfe: `/api/businessplan/${id}/schreibhilfe`, gesamt: `/api/businessplan/${id}/gesamt` });
+const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, word: `/api/businessplan/${id}/word`, excel: `/api/businessplan/${id}/excel`, schreibhilfe: `/api/businessplan/${id}/schreibhilfe`, gesamt: `/api/businessplan/${id}/gesamt`, bank: `/api/businessplan/${id}/bank`, abgabe: `/api/businessplan/${id}/abgabe` });
 
 export async function PlanPanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
   const plan = await planFor(c);
@@ -54,6 +55,11 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       gesamtHref={files(c.id).gesamt}
       projectNotes={notes.vorhaben}
       schreibhilfeHref={files(c.id).schreibhilfe}
+      bank={plan.bank}
+      cityLand={guessLand(c.city)}
+      bankHref={files(c.id).bank}
+      abgabeHref={files(c.id).abgabe}
+      excelHref={files(c.id).excel}
       filled={!planIsEmpty(plan.sections, plan.glance) || (financeTouched(plan) && !financeIsEmpty(plan.finance))}
       share={<ShareButton kind="businessplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title={plan.title || "Businessplan"} className="btn-ghost" />}
     />
@@ -79,6 +85,7 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
       filled={financeTouched(plan) && !financeIsEmpty(plan.finance)}
       branche={plan.branche}
       gesamtHref={aiEnabled() && coach ? files(c.id).gesamt : null}
+      land={plan.bank.land || guessLand(c.city)}
       share={<ShareButton kind="finanzplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title="Finanzplan" />}
     />
   );

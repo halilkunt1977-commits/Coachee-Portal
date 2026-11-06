@@ -1,4 +1,6 @@
 import { MONTHS, calculate, eur, financeIsEmpty, keyFigures, liquidityRows, livingTotal, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange, type FinanceInput } from "./finance";
+import { eigenmittel, ersteRate, kapitaldienst, schuldenSumme, tilgungsplan, vermoegenSumme, type BankInfo } from "./bank";
+import { landOf } from "./foerderung";
 import { parseInline, parseMarkdown, type Run } from "./markdown";
 import { SECTIONS, sourceList, type GlanceItem, type Sections } from "./sections";
 
@@ -42,9 +44,10 @@ const plainTable = (rows: string[][], cls = "tbl") =>
 type Meta = { title: string; name: string; email: string; phone: string | null; coach: string; date: string };
 
 /** Ziele im Inhaltsverzeichnis: Schlüssel und Überschrift, wie sie im PDF steht (zum Suchen der Seitenzahl) */
-export function tocTargets(hasFinance: boolean) {
+export function tocTargets(hasFinance: boolean, bank = false) {
   return [
     { key: "blick", label: "Auf einen Blick", heading: "Auf einen Blick" },
+    ...(bank && hasFinance ? [{ key: "finanzierung", label: "Finanzierung und Kapitaldienst", heading: "Finanzierung und Kapitaldienst" }] : []),
     ...SECTIONS.map((s, i) => ({ key: s.key, label: `${i + 1}. ${s.title}`, heading: `${i + 1}. ${s.title}` })),
     ...(hasFinance ? [{ key: "anhang", label: "Anhang: Finanzplan", heading: "Anhang: Finanzplan" }] : []),
   ];
@@ -53,12 +56,14 @@ export function tocTargets(hasFinance: boolean) {
 const cssString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
 
 /** pages: Seitenzahlen fürs Inhaltsverzeichnis (aus einem ersten Durchgang), sonst ohne Zahlen */
-export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string, pages: Record<string, number> = {}) {
+/** opts.bank: Bankfassung für Kreditantrag und Förderkredit (Finanzierungsübersicht, Kapitaldienst, Tilgungsplan, Vermögen) */
+export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string, pages: Record<string, number> = {}, opts: { bank?: BankInfo } = {}) {
+  const bank = opts.bank ?? null;
   const r = calculate(finance);
   const hasFinance = !financeIsEmpty(finance);
   const figures = hasFinance ? plainTable(keyFigures(finance, r), "tbl figures") : "";
 
-  const toc = tocTargets(hasFinance).map((x) => `<li${x.key === "blick" || x.key === "anhang" ? ' class="plain"' : ""}><span class="t">${esc(x.label)}</span><span class="dots"></span><span class="p">${pages[x.key] ?? ""}</span></li>`).join("");
+  const toc = tocTargets(hasFinance, Boolean(bank)).map((x) => `<li${x.key === "blick" || x.key === "anhang" || x.key === "finanzierung" ? ' class="plain"' : ""}><span class="t">${esc(x.label)}</span><span class="dots"></span><span class="p">${pages[x.key] ?? ""}</span></li>`).join("");
   const running = cssString(`Businessplan · ${meta.name}${meta.title ? ` · ${meta.title}` : ""}`.slice(0, 110));
   const glanceHtml = glance
     .filter((g) => g.label.trim() && g.value.trim())
@@ -145,7 +150,7 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
 <div class="cover">
   <div class="card">
     <div class="navy"><span>Businessplan</span></div>
-    <div class="who">${esc(meta.name)}${meta.title ? `<small>${esc(meta.title)}</small>` : ""}</div>
+    <div class="who">${esc(meta.name)}${meta.title ? `<small>${esc(meta.title)}</small>` : ""}${bank ? `<small>Unterlage zum Finanzierungsantrag</small>` : ""}</div>
     <div class="bar"></div>
     <div class="date">Stand ${esc(meta.date)}</div>
   </div>
@@ -153,6 +158,7 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
 <div class="front">
   <h1 class="t1">BUSINESSPLAN – ${esc(meta.name)}</h1>
   ${meta.title ? `<h1>${esc(meta.title)}</h1>` : ""}
+  ${bank ? `<p class="lead" style="margin-top:3mm">Unterlage zum Finanzierungsantrag${bank.hausbank ? ` bei der ${esc(bank.hausbank)}` : ""}</p>` : ""}
   <h1 class="t3">Inhaltsverzeichnis</h1>
   <ol class="toc">${toc}</ol>
 </div>
@@ -161,14 +167,59 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
   ${glanceHtml || `<p class="missing">Noch keine Angaben.</p>`}
   ${figures}
 </div>
+${bank && hasFinance ? bankOverview(finance, r, bank) : ""}
 ${chapters}
-${hasFinance ? financeAnnex(finance, r) : ""}
+${hasFinance ? financeAnnex(finance, r, bank) : ""}
 </body></html>`;
 }
 
 // ---------- Anhang Finanzplan ----------
 
-function financeAnnex(f: FinanceInput, r: ReturnType<typeof calculate>) {
+const money = (v: number) => `<td class="n${v < -0.005 ? " neg" : ""}">${esc(Math.abs(v) < 0.005 ? "–" : eur(v))}</td>`;
+
+/** Finanzierung und Kapitaldienst: die Seite, die Bank und Förderbank zuerst lesen */
+function bankOverview(f: FinanceInput, r: ReturnType<typeof calculate>, b: BankInfo) {
+  const loans = f.financing.filter((x) => x.kind === "darlehen" && x.amount > 0);
+  const zuschuesse = f.financing.filter((x) => x.kind === "zuschuss" && x.amount > 0);
+  const eigen = eigenmittel(f);
+  const total = r.capitalNeed.total;
+  const kd = kapitaldienst(f, r);
+  const land = landOf(b.land);
+  const bedarf = `<table class="fin"><thead><tr><th>Kapitalbedarf</th><th class="n">Betrag</th></tr></thead><tbody>
+    ${f.investments.map((i) => `<tr><td>${esc(i.label)}</td>${money(i.amount)}</tr>`).join("")}
+    ${r.capitalNeed.reserve ? `<tr><td>Liquiditätsreserve / Anlaufkosten</td>${money(r.capitalNeed.reserve)}</tr>` : ""}
+    <tr class="sum"><td>Kapitalbedarf gesamt</td>${money(total)}</tr></tbody></table>`;
+  const finanzierung = `<table class="fin"><thead><tr><th>Finanzierung</th><th>Bedingungen</th><th class="n">Betrag</th></tr></thead><tbody>
+    <tr><td>Eigenmittel</td><td>${esc(b.eigenmittel || "Anfangsliquidität und eingebrachtes Eigenkapital")}</td>${money(eigen)}</tr>
+    ${loans.map((l) => `<tr><td>${esc(l.label || "Darlehen")}</td><td>${l.rate.toLocaleString("de-DE")} % Zins, ${l.years} Jahre Laufzeit, ${l.grace} Monate tilgungsfrei, danach ca. ${esc(eur(ersteRate(l)))} im Monat; Auszahlung ${monthLabel(f.start, l.month)}</td>${money(l.amount)}</tr>`).join("")}
+    ${zuschuesse.map((z) => `<tr><td>${esc(z.label || "Zuschuss")}</td><td>Zuschuss, ${monthLabel(f.start, z.month)}</td>${money(z.amount)}</tr>`).join("")}
+    <tr class="sum"><td>Finanzierung gesamt</td><td>${total > 0 ? `Eigenmittelanteil ${pct((eigen / total) * 100)}` : ""}</td>${money(r.financingTotal)}</tr>
+    ${r.gap < 0 ? `<tr><td colspan="2">Noch nicht gedeckt</td>${money(r.gap)}</tr>` : ""}
+  </tbody></table>`;
+  const head = `<tr><th></th>${kd.map((k) => `<th class="n">Jahr ${k.jahr}</th>`).join("")}</tr>`;
+  const row = (label: string, fn: (k: (typeof kd)[number]) => number, cls = "") => `<tr class="${cls}"><td>${label}</td>${kd.map((k) => money(fn(k))).join("")}</tr>`;
+  const dienst = `<table class="fin"><thead>${head}</thead><tbody>
+    ${row("Ergebnis vor Steuern", (k) => k.profit)}
+    ${row("+ Abschreibungen", (k) => k.afa)}
+    ${row("+ Zinsaufwand", (k) => k.zins)}
+    ${row("− Steuern (Rücklage)", (k) => -k.steuer)}
+    ${row("− Private Entnahmen", (k) => -k.entnahme)}
+    ${kd.some((k) => k.zuschuss) ? row("+ Zuschüsse zum Lebensunterhalt", (k) => k.zuschuss) : ""}
+    ${row("= Verfügbar für den Kapitaldienst", (k) => k.verfuegbar, "sub")}
+    ${row("Kapitaldienst (Zins und Tilgung)", (k) => k.dienst)}
+    ${row("Über- bzw. Unterdeckung", (k) => k.ueberdeckung, "sum")}
+    <tr><td>Deckungsgrad</td>${kd.map((k) => `<td class="n">${k.deckung === null ? "–" : `${k.deckung.toLocaleString("de-DE", { maximumFractionDigits: 2 })}`}</td>`).join("")}</tr>
+  </tbody></table>
+  <p class="lead">Deckungsgrad = verfügbarer Betrag geteilt durch Zins und Tilgung. Banken erwarten mindestens 1,2, also 20 % Puffer.</p>`;
+  return `<section class="chapter"><h2>Finanzierung und Kapitaldienst</h2>
+    ${bedarf}${finanzierung}
+    ${b.hausbank || b.sicherheiten ? `<h4>Hausbank und Sicherheiten</h4>${b.hausbank ? `<p>Hausbank: ${esc(b.hausbank)}</p>` : ""}${b.sicherheiten ? `<p>${mark(esc(b.sicherheiten)).replace(/\n/g, "<br>")}</p>` : ""}` : ""}
+    ${land ? `<p class="lead">Sitz im Bundesland ${esc(land.name)}; Förderbank: ${esc(land.bank)}, Bürgschaften: ${esc(land.buergschaft)}.</p>` : ""}
+    <h4>Kapitaldienstfähigkeit</h4>${dienst}
+  </section>`;
+}
+
+function financeAnnex(f: FinanceInput, r: ReturnType<typeof calculate>, bank: BankInfo | null = null) {
   const n = (v: number) => `<td class="n${v < -0.005 ? " neg" : ""}">${esc(Math.abs(v) < 0.005 ? "–" : eur(v))}</td>`;
   const yearsHead = `<tr><th></th>${[0, 1, 2].map((y) => `<th class="n">Jahr ${y + 1}</th>`).join("")}</tr>`;
   const over = `<table class="fin"><thead>${yearsHead}</thead><tbody>${overviewRows(f).map((row) => `<tr class="${row.tone ?? ""}"><td>${esc(row.label)}</td>${r.years.map((y) => n(row.value(y))).join("")}</tr>`).join("")}</tbody></table>`;
@@ -226,8 +277,26 @@ function financeAnnex(f: FinanceInput, r: ReturnType<typeof calculate>) {
   <p class="lead">Alle Beträge netto in Euro. Planungszeitraum ${yearRange(f.start, 0).split("–")[0]} bis ${monthLabel(f.start, MONTHS - 1)}, Betrachtung über 36 Monate.</p>
   <h3>Annahmen</h3>${assumptions}
   <h3>Rentabilität Übersicht</h3>${over}
-  ${revenue}${costs}${inv}${staff}${fin}${living}
+  ${revenue}${costs}${inv}${staff}${fin}${living}${bank ? bankAnnex(f, bank) : ""}
 </section>
 <section class="wide">${yearTables("Rentabilitätsvorschau", renta, false)}</section>
 <section class="wide">${yearTables("Liquiditätsplanung", liquidityRows(f), true)}</section>`;
+}
+
+/** Tilgungsplan je Darlehen und private Vermögensübersicht (Selbstauskunft in Kurzform) */
+function bankAnnex(f: FinanceInput, b: BankInfo) {
+  const loans = f.financing.filter((x) => x.kind === "darlehen" && x.amount > 0);
+  const plans = loans
+    .map((l) => {
+      const t = tilgungsplan(l);
+      return `<h3>Tilgungsplan: ${esc(l.label || "Darlehen")} (${esc(eur(l.amount))}, ${l.rate.toLocaleString("de-DE")} %)</h3><table class="fin"><thead><tr><th>Planjahr</th><th class="n">Zinsen</th><th class="n">Tilgung</th><th class="n">Restschuld Jahresende</th></tr></thead><tbody>${t
+        .map((y) => `<tr><td>Jahr ${y.jahr}</td>${money(y.zins)}${money(y.tilgung)}${money(y.rest)}</tr>`)
+        .join("")}<tr class="sum"><td>Summe</td>${money(t.reduce((s, y) => s + y.zins, 0))}${money(t.reduce((s, y) => s + y.tilgung, 0))}<td></td></tr></tbody></table>`;
+    })
+    .join("");
+  const vermoegen = b.vermoegen.length || b.verbindlichkeiten.length
+    ? `<h3>Private Vermögensübersicht</h3><table class="fin"><thead><tr><th>Vermögen</th><th class="n">Betrag</th></tr></thead><tbody>${b.vermoegen.map((x) => `<tr><td>${esc(x.label)}</td>${money(x.betrag)}</tr>`).join("")}<tr class="sum"><td>Summe Vermögen</td>${money(vermoegenSumme(b))}</tr></tbody></table>
+      <table class="fin"><thead><tr><th>Verbindlichkeiten</th><th class="n">Restschuld</th><th class="n">Rate im Monat</th></tr></thead><tbody>${b.verbindlichkeiten.map((x) => `<tr><td>${esc(x.label)}</td>${money(x.betrag)}${money(x.rate)}</tr>`).join("") || `<tr><td>Keine</td><td></td><td></td></tr>`}<tr class="sum"><td>Summe Verbindlichkeiten</td>${money(schuldenSumme(b))}${money(b.verbindlichkeiten.reduce((s, x) => s + x.rate, 0))}</tr></tbody></table>`
+    : "";
+  return plans + vermoegen;
 }

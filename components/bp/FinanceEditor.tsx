@@ -9,6 +9,7 @@ import {
 } from "@/lib/bp/finance";
 import { brancheOf, type Branche } from "@/lib/bp/branchen";
 import { fehlendePosten, pruefeFinanzplan } from "@/lib/bp/finanz-pruefung";
+import { BUNDESWEIT, FOERDER_STAND, landOf } from "@/lib/bp/foerderung";
 import { Num, Pick, QtyInput, Rows, Text } from "./fields";
 import { FinanzFassungen } from "./FinanzFassungen";
 import { FinanzKi } from "./FinanzKi";
@@ -36,6 +37,8 @@ type Props = {
   branche: string;
   /** Businessplan-KI: Kapitel an die Zahlen anpassen (nur Coach mit KI) */
   gesamtHref: string | null;
+  /** Bundesland (Förderprogramme) */
+  land: string;
 };
 
 // Die Reiter entsprechen den Arbeitsblättern der Excel-Vorlage
@@ -331,10 +334,14 @@ export function FinanceEditor(p: Props) {
           <Rows
             rows={f.financing}
             onChange={(financing) => set({ financing })}
-            make={(label = ""): Financing => ({ label, kind: /darlehen|kredit|kfw/i.test(label) ? "darlehen" : "eigen", amount: 0, month: 0, rate: /darlehen|kredit|kfw/i.test(label) ? 5 : 0, years: 5, grace: /darlehen|kredit|kfw/i.test(label) ? 6 : 0 })}
+            make={(label = ""): Financing => {
+              const preset = FINANZ_PRESETS.find((x) => x.label === label);
+              if (preset) return { label, kind: "darlehen", amount: 0, month: 0, rate: preset.rate, years: preset.years, grace: preset.grace };
+              return { label, kind: /darlehen|kredit|kfw/i.test(label) ? "darlehen" : "eigen", amount: 0, month: 0, rate: /darlehen|kredit|kfw/i.test(label) ? 5 : 0, years: 5, grace: /darlehen|kredit|kfw/i.test(label) ? 6 : 0 };
+            }}
             addLabel="Finanzierung"
             empty="Noch keine Finanzierung, z. B. Mikrokredit, KfW-Startgeld."
-            presets={["Darlehen Hausbank", "KfW-Startgeld"]}
+            presets={["Darlehen Hausbank", ...FINANZ_PRESETS.map((x) => x.label)]}
             render={(x, s) => (
               <>
                 <Text className="col-span-2 sm:flex-1 sm:basis-48" label="Bezeichnung" value={x.label} onChange={(v) => s({ label: v })} />
@@ -351,6 +358,7 @@ export function FinanceEditor(p: Props) {
               </>
             )}
           />
+          <FoerderHinweis land={p.land} />
           <Sub title={t("Laufende Zuschüsse zum Lebensunterhalt")}>
             <Rows
               rows={f.grants}
@@ -694,5 +702,27 @@ function Liquidity({ f, r }: { f: FinanceInput; r: FinanceResult }) {
       <p className="text-xs text-muted">{t("Kontostand am Monatsende über 36 Monate. Anfangsbestand Jahr {n}:", { n: year + 1 })} <b>{eur(ms[0].opening)}</b>{t(", Ende:")} <b>{eur(ms[11].balance)}</b>.</p>
       <MonthTable f={f} rows={liquidityRows(f)} ms={ms} offset={year * 12} />
     </section>
+  );
+}
+
+const FINANZ_PRESETS = BUNDESWEIT.flatMap((x) => (x.preset ? [x.preset] : []));
+
+/** Förderkredite mit aktuellem Zins und die Programme im Bundesland, als Hinweis unter der Finanzierung */
+function FoerderHinweis({ land: key }: { land: string }) {
+  const t = useT();
+  const land = landOf(key);
+  const kredite = [...BUNDESWEIT.filter((x) => x.art === "Kredit" && x.zins), ...(land?.programme.filter((x) => x.art === "Kredit" && x.zins) ?? [])];
+  return (
+    <div className="space-y-1 rounded-xl bg-tint/60 p-3 text-xs">
+      <p className="font-semibold">{t("Aktuelle Förderkredite (Stand {stand})", { stand: FOERDER_STAND })}</p>
+      <ul className="space-y-0.5">
+        {kredite.map((k) => <li key={k.name}><span className="font-medium">{k.name}:</span> <span className="text-muted">{k.zins}</span></li>)}
+      </ul>
+      <p className="text-muted">
+        {land
+          ? t("Weitere Programme in {land} ({bank}) und bundesweit stehen im Businessplan unter „Bank und Förderung“.", { land: land.name, bank: land.bank })
+          : t("Bundesland im Businessplan unter „Bank und Förderung“ wählen, dann erscheinen dort die Programme des Landes.")}
+      </p>
+    </div>
   );
 }

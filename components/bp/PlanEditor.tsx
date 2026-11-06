@@ -11,6 +11,8 @@ import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
 import { GesamtKi, type Decide } from "./GesamtKi";
 import { Leitfaden } from "./Leitfaden";
+import { AbgabeCard, BankCard } from "./BankAbgabe";
+import type { BankInfo } from "@/lib/bp/bank";
 import { DiffLegend, DiffView } from "./DiffView";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
@@ -42,6 +44,12 @@ type Props = {
   gesamtHref: string;
   runs: RunView[];
   chat: ChatTurn[];
+  /** Abgabe und Angaben für Bank und Förderung */
+  bank: BankInfo;
+  cityLand: string;
+  bankHref: string;
+  abgabeHref: string;
+  excelHref: string;
 };
 
 type Sec = { text: string; sources: string; saved: string; version: number; updatedAt: string | null; updatedBy: string | null; conflict?: { text: string; sources: string; version: number; by: string | null } };
@@ -217,6 +225,9 @@ export function PlanEditor(p: Props) {
       </div>
 
       {p.coach && <Leitfaden key={branche} href={p.gesamtHref.replace(/\/gesamt$/, "/leitfaden")} branche={branche} ai={p.ai} />}
+
+      <AbgabeCard href={p.abgabeHref} coach={p.coach} />
+      <BankCard href={p.bankHref} coacheeId={p.coacheeId} initial={p.bank} cityLand={p.cityLand} ai={p.ai} pdfHref={p.pdfHref} excelHref={p.excelHref} />
 
       {p.ai && (
         <GesamtKi
