@@ -1,65 +1,79 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { RunView } from "@/lib/bp/gesamt-ki";
+import type { ChapterReview, RunChange, RunView } from "@/lib/bp/gesamt-ki";
 import type { ChatTurn } from "@/lib/bp/notes";
-import { Markdown } from "../assistant/Markdown";
 import { SECTIONS, type GlanceItem, type Sections } from "@/lib/bp/sections";
+import { Markdown } from "../assistant/Markdown";
+import { Recorder } from "../akte/Recorder";
+import { DiffLegend, DiffView, useDiffStats } from "./DiffView";
 
 /*
- * Eine KI für den ganzen Businessplan (nur Coach): neue Angaben, Zahlen oder Wünsche eingeben (oder leer lassen),
- * die KI prüft alle Kapitel gegen Finanzplan, Notizen und Gespräche und passt jedes betroffene Kapitel direkt an.
- * Der Durchgang läuft auf dem Server weiter, auch wenn die Seite zu ist; „Rückgängig“ holt den Stand davor zurück.
+ * Ein Chat mit der KI für den ganzen Businessplan (nur Coach): Fragen stellen, neue Angaben, Zahlen und Fakten
+ * schreiben oder einsprechen, Dateien mitgeben. Die KI antwortet oder ändert den Plan direkt. Jede Änderung ist
+ * farbig markiert und lässt sich je Kapitel übernehmen oder verwerfen. Dazu bewertet sie jedes Kapitel und fragt
+ * nach, was fehlt. Ein Durchgang läuft auf dem Server weiter, auch wenn die Seite zu ist.
  */
+
+export type Decide = (runId: string, key: string | null, decision: "uebernommen" | "verworfen") => Promise<string | null>;
 
 type Props = {
   href: string;
-  initial: RunView | null;
-  /** Chat zum ganzen Plan (Fragen, Analyse, Bewertung) */
+  coacheeId: string;
+  runs: RunView[];
+  /** alter Verlauf aus „Fragen & Bewertung“ */
   chat: ChatTurn[];
-  /** vor dem Start: offene Änderungen im Editor speichern */
+  onRun: (run: RunView) => void;
+  onCleared: () => void;
+  decide: Decide;
+  /** vor dem Senden: offene Änderungen im Editor speichern */
   beforeStart: () => Promise<void>;
   onRunning: (running: boolean) => void;
   onUpdate: (sections: Sections, glance: GlanceItem[]) => void;
   onOpen: (key: string) => void;
 };
 
-const EXAMPLES = ["Gleiche alles mit dem aktuellen Finanzplan ab", "Start ist jetzt der 01.04.2027", "Stundensatz ist 65 € statt 55 €", "Zielgruppe zusätzlich Hausverwaltungen"];
-const ACTION = { neu: "neu geschrieben", anpassen: "angepasst", lassen: "unverändert" } as const;
-const title = (key: string) => {
+const EXAMPLES = [
+  "Bewerte den Plan Kapitel für Kapitel. Was fehlt noch?",
+  "Gleiche alles mit dem aktuellen Finanzplan ab",
+  "Start ist jetzt der 01.04.2027",
+  "Stundensatz ist 65 € statt 55 €",
+  "Würde die fachkundige Stelle den Plan so akzeptieren?",
+];
+export const chapterTitle = (key: string) => {
+  if (key === "blick") return "Auf einen Blick";
   const i = SECTIONS.findIndex((s) => s.key === key);
   return i < 0 ? key : `${i + 1}. ${SECTIONS[i].title}`;
 };
-
-const QUESTIONS = ["Wie bewertest du den Plan insgesamt?", "Würde die fachkundige Stelle den Plan so akzeptieren?", "Sind Umsatz und Preise realistisch?", "Wo widersprechen sich Kapitel und Finanzplan?", "Was fehlt noch?"];
+const RATING = { gut: { label: "gut", dot: "bg-ok" }, ausbaufaehig: { label: "ausbaufähig", dot: "bg-gold" }, fehlt: { label: "fehlt viel", dot: "bg-danger" } } as const;
+const post = (href: string, body: unknown) =>
+  fetch(href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." }));
 
 export function GesamtKi(p: Props) {
-  const [tab, setTab] = useState<"anpassen" | "fragen">("anpassen");
-  const [turns, setTurns] = useState<ChatTurn[]>(p.chat);
-  const [question, setQuestion] = useState("");
-  const [asking, setAsking] = useState(false);
-  const chatList = useRef<HTMLDivElement>(null);
+  const [legacy, setLegacy] = useState<ChatTurn[]>(p.chat);
   const [message, setMessage] = useState("");
   const [files, setFiles] = useState<{ id: string; name: string; image: boolean }[]>([]);
   const [uploading, setUploading] = useState(0);
-  const [run, setRun] = useState<RunView | null>(p.initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [details, setDetails] = useState(false);
-  const running = run?.status === "laeuft";
+  const list = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const last = p.runs[p.runs.length - 1] ?? null;
+  const running = last?.status === "laeuft";
   const cb = useRef(p);
   useEffect(() => {
     cb.current = p;
   });
 
+  // Laufenden Durchgang abfragen, bis er fertig ist
   useEffect(() => {
     cb.current.onRunning(running);
-    if (!running || !run) return;
+    if (!running || !last) return;
     let stop = false;
     const tick = async () => {
       if (stop) return;
-      const res = await fetch(`${p.href}?run=${run.id}`).then((r) => r.json()).catch(() => null) as { run?: RunView; sections?: Sections; glance?: GlanceItem[] } | null;
+      const res = (await fetch(`${p.href}?run=${last.id}`).then((r) => r.json()).catch(() => null)) as { run?: RunView; sections?: Sections; glance?: GlanceItem[] } | null;
       if (stop) return;
-      if (res?.run) setRun(res.run);
+      if (res?.run) cb.current.onRun(res.run);
       if (res?.run && res.run.status !== "laeuft" && res.sections && res.glance) cb.current.onUpdate(res.sections, res.glance);
       if (!res?.run || res.run.status === "laeuft") timer = setTimeout(tick, 2500);
     };
@@ -68,239 +82,266 @@ export function GesamtKi(p: Props) {
       stop = true;
       clearTimeout(timer);
     };
-  }, [running, run?.id, p.href]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [running, last?.id, p.href]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // neue Nachricht oder Antwort: ans Ende des Chats
+  const lastStatus = last ? `${last.id}${last.status}` : "";
   useEffect(() => {
-    const el = chatList.current;
-    if (!el) return;
-    // neue Antwort: an ihren Anfang springen, sonst ans Ende
-    const last = el.lastElementChild as HTMLElement | null;
-    el.scrollTop = last && !asking ? last.offsetTop - 4 : el.scrollHeight;
-  }, [turns.length, asking, tab]);
+    const el = list.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [p.runs.length, lastStatus]);
 
-  async function upload(list: FileList | null) {
-    if (!list?.length) return;
+  async function upload(chosen: FileList | null) {
+    if (!chosen?.length) return;
     setError(null);
-    for (const f of [...list].slice(0, 10)) {
+    for (const f of [...chosen].slice(0, 10)) {
       setUploading((n) => n + 1);
       const fd = new FormData();
       fd.append("file", f);
-      const res = await fetch(`${p.href}/datei`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte noch einmal versuchen." })) as { id?: string; name?: string; image?: boolean; error?: string };
+      const res = (await fetch(`${p.href}/datei`, { method: "POST", body: fd }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte noch einmal versuchen." }))) as { id?: string; name?: string; image?: boolean; error?: string };
       setUploading((n) => n - 1);
       if (res.id) setFiles((x) => [...x, { id: res.id!, name: res.name ?? f.name, image: Boolean(res.image) }]);
       else setError(`${f.name}: ${res.error ?? "ließ sich nicht hochladen."}`);
     }
   }
 
-  const attach = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <label className={`btn-ghost btn-sm cursor-pointer ${uploading ? "pointer-events-none opacity-60" : ""}`}>
-        📎 {uploading ? "Wird gelesen …" : "Datei oder Foto"}
-        <input type="file" multiple accept=".pdf,.docx,.xlsx,.txt,image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
-      </label>
-      {files.map((f) => (
-        <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs">
-          <span className="truncate">{f.image ? "🖼" : "📄"} {f.name}</span>
-          <button type="button" className="text-muted hover:text-danger" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>×</button>
-        </span>
-      ))}
-    </div>
-  );
-  const sendFiles = () => ({ files: files.map((f) => f.id), fileNames: files.map((f) => f.name) });
-
-  async function ask(text = question) {
-    if ((!text.trim() && !files.length) || asking || uploading) return;
-    setAsking(true);
-    setError(null);
-    setTurns((t) => [...t, { id: `neu-${t.length}`, role: "coach", text: `${text}${files.length ? `\n📎 ${files.map((f) => f.name).join(", ")}` : ""}`.trim(), at: new Date().toISOString() }]);
-    setQuestion("");
-    const extra = sendFiles();
-    setFiles([]);
-    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ask: text, ...extra }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { turns?: ChatTurn[]; error?: string };
-    setAsking(false);
-    if (res.turns) setTurns(res.turns);
-    if (res.error) setError(res.error);
-  }
-
-  async function clearChat() {
-    setTurns([]);
-    await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }) }).catch(() => null);
-  }
-
-  async function start(text = message) {
+  async function send(text = message) {
     if (busy || running || uploading) return;
     setBusy(true);
     setError(null);
     await p.beforeStart();
-    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, ...sendFiles() }) }).then((r) => r.json()).catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." })) as { run?: RunView; error?: string };
+    const res = (await post(p.href, { message: text, files: files.map((f) => f.id), fileNames: files.map((f) => f.name) })) as { run?: RunView; error?: string };
     setBusy(false);
     if (res.error || !res.run) return setError(res.error ?? "Das hat gerade nicht geklappt.");
-    setRun(res.run);
+    p.onRun(res.run);
     setMessage("");
     setFiles([]);
-    setDetails(false);
-    setTab("anpassen");
   }
 
-  async function undo() {
-    if (!run || busy) return;
-    setBusy(true);
-    const res = await fetch(p.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ undo: run.id }) }).then((r) => r.json()).catch(() => null) as { ok?: boolean; run?: RunView; sections?: Sections; glance?: GlanceItem[] } | null;
-    setBusy(false);
-    if (!res?.ok || !res.sections || !res.glance) return setError("Rückgängig hat nicht geklappt.");
-    if (res.run) setRun(res.run);
-    p.onUpdate(res.sections, res.glance);
+  async function clear() {
+    if (running) return;
+    await post(p.href, { clear: true });
+    setLegacy([]);
+    p.onCleared();
   }
 
-  const chapters = run?.progress.chapters ?? [];
-  const work = chapters.filter((x) => x.action !== "lassen");
-  const doneCount = work.filter((x) => x.status === "fertig" || x.status === "fehler").length;
-  const failed = work.filter((x) => x.status === "fehler");
+  /** Rückfrage beantworten: Frage ins Eingabefeld, Antwort dahinter schreiben oder einsprechen */
+  function answer(key: string, q: string) {
+    setMessage(`${chapterTitle(key)}, deine Frage: ${q}\nAntwort: `);
+    requestAnimationFrame(() => {
+      const el = field.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  }
+
+  const empty = !legacy.length && !p.runs.length;
+  const reviewRun = [...p.runs].reverse().find((r) => r.status === "fertig" && r.result?.review?.length);
 
   return (
-    <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-3 sm:p-4" aria-label="KI für den ganzen Businessplan">
+    <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-3 sm:p-4" aria-label="KI für den Businessplan">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold"><span className="text-gold">✦</span> KI für den ganzen Businessplan</p>
-          <p className="text-xs text-muted">{tab === "anpassen" ? "Neue Zahlen, Notizen oder Angaben hineinschreiben, oder leer lassen. Die KI prüft den ganzen Plan gegen Finanzplan, Notizen und Gespräche und passt alle betroffenen Kapitel direkt an." : "Frag die KI nach Analyse und Bewertung des ganzen Plans. Hier wird nichts geändert; Empfehlungen kannst du mit einem Klick einarbeiten lassen."} Nur für dich sichtbar.</p>
+          <p className="text-sm font-semibold"><span className="text-gold">✦</span> KI für den Businessplan</p>
+          <p className="text-xs text-muted">Frag nach einer Bewertung, gib neue Angaben, Zahlen oder Fakten ein (auch per Sprache oder Datei), oder lass den ganzen Plan prüfen. Was die KI ändert, siehst du farbig markiert und kannst es je Kapitel übernehmen oder verwerfen. Nur für dich sichtbar.</p>
         </div>
-        <div className="flex shrink-0 rounded-lg border border-line-soft bg-surface p-0.5 text-sm" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "anpassen"} className={`rounded-md px-3 py-1.5 ${tab === "anpassen" ? "bg-accent font-semibold text-white" : "text-muted"}`} onClick={() => setTab("anpassen")}>Anpassen{running ? " …" : ""}</button>
-          <button type="button" role="tab" aria-selected={tab === "fragen"} className={`rounded-md px-3 py-1.5 ${tab === "fragen" ? "bg-accent font-semibold text-white" : "text-muted"}`} onClick={() => setTab("fragen")}>Fragen & Bewertung</button>
-        </div>
+        {!empty && <button type="button" className="link shrink-0 text-xs" disabled={running} onClick={() => void clear()}>Chat leeren</button>}
       </div>
 
-      {tab === "fragen" && (
-        <div className="space-y-3">
-          {turns.length > 0 && (
-            <div ref={chatList} className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
-              {turns.map((t, i) =>
-                t.role === "coach" ? (
-                  <p key={t.id || i} className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-tint px-3.5 py-2 text-sm">{t.text}</p>
-                ) : (
-                  <div key={t.id || i} className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-sm">
-                    <div className="bp-text"><Markdown text={t.text} /></div>
-                    <button type="button" className="link text-xs" disabled={busy || running} onClick={() => void start(`Setze diese Empfehlungen aus der Bewertung im ganzen Plan um, soweit das Material sie trägt:\n${t.text.slice(0, 6000)}`)}>✦ Diese Empfehlungen in den Plan einarbeiten</button>
-                  </div>
-                ),
-              )}
-            </div>
+      {!empty && (
+        <div ref={list} className="max-h-[36rem] space-y-3 overflow-y-auto pr-1">
+          {legacy.map((t, i) =>
+            t.role === "coach" ? <Bubble key={t.id || `l${i}`} text={t.text} /> : <div key={t.id || `l${i}`} className="max-w-[94%] rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-sm"><div className="bp-text"><Markdown text={t.text} /></div></div>,
           )}
-          {asking && <p className="text-sm text-muted" role="status"><span className="animate-pulse text-gold">✦</span> Liest den ganzen Plan und denkt nach …</p>}
-          {turns.length === 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {QUESTIONS.map((q) => (
-                <button key={q} type="button" className="rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => void ask(q)}>{q}</button>
-              ))}
+          {p.runs.map((r) => (
+            <div key={r.id} className="space-y-2">
+              <Bubble text={r.message.trim() || "Ganzen Plan prüfen und verbessern"} />
+              <RunCard run={r} decide={p.decide} onOpen={p.onOpen} review={r.id === reviewRun?.id} onAnswer={answer} onEstimate={(key, q) => void send(`${chapterTitle(key)}: Bitte ergänze dazu realistische Annahmen und kennzeichne sie im Text als Annahme: ${q}`)} disabled={busy || running} />
             </div>
-          )}
-          <textarea
-            aria-label="Frage zum Businessplan"
-            className="input min-h-16 text-sm"
-            rows={2}
-            value={question}
-            maxLength={4000}
-            placeholder="z. B. Ist die Kundengewinnung überzeugend? Reicht das Geld für den Lebensunterhalt?"
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void ask();
-            }}
-          />
-          {attach}
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-sm" disabled={asking || uploading > 0 || (!question.trim() && !files.length)} onClick={() => void ask()}>Fragen</button>
-            {turns.length > 0 && <button type="button" className="btn-ghost btn-sm" disabled={asking} onClick={() => void clearChat()}>Gespräch leeren</button>}
-          </div>
+          ))}
         </div>
       )}
 
-      {tab === "anpassen" && !running && (
-        <>
-          <textarea
-            aria-label="Neue Angaben für den Businessplan"
-            className="input min-h-20 text-sm"
-            rows={3}
-            value={message}
-            maxLength={8000}
-            placeholder="z. B. Start verschiebt sich auf April, Preis pro Stunde jetzt 65 €, Werkstatt in Fürth statt Nürnberg …"
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void start();
-            }}
-          />
-          {!message && (
-            <div className="flex flex-wrap gap-1.5">
-              {EXAMPLES.map((e) => (
-                <button key={e} type="button" className="rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => setMessage(e)}>{e}</button>
-              ))}
-            </div>
-          )}
-          {attach}
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-sm" disabled={busy || uploading > 0} onClick={() => void start()}>✦ {message.trim() || files.length ? "Angaben einarbeiten und alles anpassen" : "Ganzen Plan prüfen und anpassen"}</button>
-            <span className="text-xs text-muted">Der Stand davor wird gesichert und lässt sich zurückholen.</span>
-          </div>
-        </>
+      {empty && (
+        <div className="flex flex-wrap gap-1.5">
+          {EXAMPLES.map((e) => (
+            <button key={e} type="button" className="rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs text-muted hover:border-accent hover:text-accent" onClick={() => setMessage(e)}>{e}</button>
+          ))}
+        </div>
       )}
 
       {error && <p className="rounded-lg bg-[#f8e6e3] px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
 
-      {tab === "anpassen" && run && running && (
-        <div className="space-y-2" role="status">
-          {run.message && <p className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-tint px-3.5 py-2 text-sm">{run.message}</p>}
-          <p className="text-sm font-semibold">
-            <span className="animate-pulse text-gold">✦</span>{" "}
-            {run.progress.phase === "pruefen" ? "Prüft den ganzen Plan …" : run.progress.phase === "blick" ? "Passt „Auf einen Blick“ an …" : `Passt Kapitel an: ${doneCount} von ${work.length} fertig`}
-          </p>
-          {work.length > 0 && <div className="h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(doneCount / work.length) * 100}%` }} /></div>}
-          <ul className="space-y-0.5 text-xs">
-            {work.map((x) => (
-              <li key={x.key} className="flex gap-2">
-                <span className={x.status === "fertig" ? "text-ok" : x.status === "fehler" ? "text-danger" : x.status === "schreibt" ? "animate-pulse text-gold" : "text-muted"}>{x.status === "fertig" ? "✓" : x.status === "fehler" ? "!" : x.status === "schreibt" ? "✦" : "○"}</span>
-                <span>{title(x.key)}</span>
-              </li>
+      <div className="space-y-2">
+        <textarea
+          ref={field}
+          aria-label="Nachricht an die KI"
+          className="input min-h-20 text-sm"
+          rows={3}
+          value={message}
+          maxLength={8000}
+          disabled={running}
+          placeholder={running ? "Die KI arbeitet gerade, gleich geht es weiter …" : "z. B. Wie bewertest du Kapitel 6? · Start verschiebt sich auf April · Preis pro Stunde jetzt 65 € · Werkstatt in Fürth statt Nürnberg"}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void send();
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn btn-sm" disabled={busy || running || uploading > 0} onClick={() => void send()}>✦ {message.trim() || files.length ? "Senden" : "Ganzen Plan prüfen"}</button>
+          <Recorder compact coacheeId={p.coacheeId} onText={(t) => setMessage((m) => (m.trim() ? `${m.trimEnd()} ${t}` : t))} />
+          <label className={`btn-ghost btn-sm cursor-pointer ${uploading || running ? "pointer-events-none opacity-60" : ""}`}>
+            📎 {uploading ? "Wird gelesen …" : "Datei oder Foto"}
+            <input type="file" multiple accept=".pdf,.docx,.xlsx,.txt,image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+          </label>
+          {files.map((f) => (
+            <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs">
+              <span className="truncate">{f.image ? "🖼" : "📄"} {f.name}</span>
+              <button type="button" className="text-muted hover:text-danger" aria-label={`${f.name} entfernen`} onClick={() => setFiles((x) => x.filter((y) => y.id !== f.id))}>×</button>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Bubble({ text }: { text: string }) {
+  return <p className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-tint px-3.5 py-2 text-sm">{text}</p>;
+}
+
+function RunCard({ run, decide, onOpen, review, onAnswer, onEstimate, disabled }: { run: RunView; decide: Decide; onOpen: (key: string) => void; review: boolean; onAnswer: (key: string, q: string) => void; onEstimate: (key: string, q: string) => void; disabled: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const work = run.progress.chapters.filter((x) => x.action !== "lassen");
+  const doneCount = work.filter((x) => x.status === "fertig" || x.status === "fehler").length;
+  const failed = work.filter((x) => x.status === "fehler");
+  const open = run.changes.filter((x) => x.decision === "offen");
+
+  async function act(key: string | null, decision: "uebernommen" | "verworfen") {
+    setBusy(true);
+    setError(await decide(run.id, key, decision));
+    setBusy(false);
+  }
+
+  if (run.status === "laeuft")
+    return (
+      <div className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-sm" role="status">
+        <p className="font-semibold">
+          <span className="animate-pulse text-gold">✦</span>{" "}
+          {run.progress.phase === "pruefen" ? "Liest den ganzen Plan und denkt nach …" : run.progress.phase === "blick" ? "Passt „Auf einen Blick“ an …" : `Ändert Kapitel: ${doneCount} von ${work.length} fertig`}
+        </p>
+        {work.length > 0 && <div className="h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(doneCount / work.length) * 100}%` }} /></div>}
+        <ul className="space-y-0.5 text-xs">
+          {work.map((x) => (
+            <li key={x.key} className="flex gap-2">
+              <span className={x.status === "fertig" ? "text-ok" : x.status === "fehler" ? "text-danger" : x.status === "schreibt" ? "animate-pulse text-gold" : "text-muted"}>{x.status === "fertig" ? "✓" : x.status === "fehler" ? "!" : x.status === "schreibt" ? "✦" : "○"}</span>
+              <span>{chapterTitle(x.key)}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-muted">Du kannst die Seite schließen, die KI arbeitet weiter. Kapitel lassen sich so lange nicht bearbeiten.</p>
+      </div>
+    );
+
+  if (run.status === "fehler")
+    return (
+      <div className="max-w-[94%] space-y-2 rounded-2xl rounded-bl-md bg-[#f8e6e3] px-3.5 py-2.5 text-sm text-danger">
+        <p>{run.error ?? "Das hat nicht geklappt."}</p>
+        {open.length > 0 && <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void act(null, "verworfen")}>Schon geänderte Kapitel zurücksetzen</button>}
+      </div>
+    );
+
+  return (
+    <div className="max-w-[94%] space-y-3 rounded-2xl rounded-bl-md bg-surface px-3.5 py-2.5 text-sm">
+      {run.result?.note && <div className="bp-text"><Markdown text={run.result.note} /></div>}
+      {!run.result?.note && run.kind === "aendern" && <p>{run.changes.length ? "Angepasst." : "Alles stimmig, nichts geändert."}</p>}
+
+      {run.changes.length > 0 && (
+        <div className="space-y-1.5 border-t border-line-soft pt-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Geändert: {run.changes.length} {run.changes.length === 1 ? "Teil" : "Teile"}{open.length ? `, ${open.length} offen` : ""}</p>
+            {open.length > 1 && (
+              <span className="flex gap-1.5">
+                <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void act(null, "uebernommen")}>✓ Alle übernehmen</button>
+                <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void act(null, "verworfen")}>Alle verwerfen</button>
+              </span>
+            )}
+          </div>
+          <ul className="divide-y divide-line-soft">
+            {run.changes.map((x) => (
+              <ChangeRow key={x.key} change={x} reason={run.progress.chapters.find((c) => c.key === x.key)?.reason ?? ""} busy={busy} onOpen={onOpen} act={act} />
             ))}
           </ul>
-          <p className="text-xs text-muted">Du kannst die Seite schließen, die Anpassung läuft weiter. Kapitel lassen sich so lange nicht bearbeiten.</p>
         </div>
       )}
+      {failed.length > 0 && <p className="text-danger">Nicht geschafft: {failed.map((x) => chapterTitle(x.key)).join(", ")}. Schreib einfach „noch einmal“.</p>}
+      {error && <p className="text-danger" role="alert">{error}</p>}
+      {review && run.result?.review && <Review items={run.result.review} onOpen={onOpen} onAnswer={onAnswer} onEstimate={onEstimate} disabled={disabled} />}
+    </div>
+  );
+}
 
-      {tab === "anpassen" && run && !running && run.status === "fertig" && (
-        <div className="space-y-2 rounded-xl bg-surface p-3 text-sm">
-          <p className="text-xs text-muted">{new Date(run.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}{run.message ? ` · „${run.message.length > 90 ? `${run.message.slice(0, 90)} …` : run.message}“` : " · ganzer Plan abgeglichen"}</p>
-          {run.undone ? (
-            <p className="text-muted">Rückgängig gemacht, der Stand davor ist wieder da.</p>
-          ) : (
-            <>
-              <p><span className="text-gold">✦</span> {run.result?.note || (work.length ? "Angepasst." : "Alles stimmig, nichts geändert.")}</p>
-              {work.length > 0 && (
-                <p>
-                  {work.filter((x) => x.status === "fertig").length} Kapitel angepasst{run.result?.glance ? `, „Auf einen Blick“ mit ${run.result.glance} Angaben` : ""}.{" "}
-                  <button type="button" className="link" onClick={() => setDetails(!details)}>{details ? "Weniger" : "Was wurde geändert?"}</button>
-                </p>
-              )}
-              {failed.length > 0 && <p className="text-danger">Nicht geschafft: {failed.map((x) => title(x.key)).join(", ")}. Einfach noch einmal starten.</p>}
-              {details && (
-                <ul className="divide-y divide-line-soft">
-                  {chapters.map((x) => (
-                    <li key={x.key} className="py-1.5">
-                      <button type="button" className="link font-medium" onClick={() => p.onOpen(x.key)}>{title(x.key)}</button>
-                      <span className="text-xs text-muted"> · {ACTION[x.action]}</span>
-                      {x.reason && <p className="text-xs text-muted">{x.reason}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {work.length > 0 && <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void undo()}>Rückgängig</button>}
-            </>
-          )}
+function ChangeRow({ change: x, reason, busy, onOpen, act }: { change: RunChange; reason: string; busy: boolean; onOpen: (key: string) => void; act: (key: string, d: "uebernommen" | "verworfen") => Promise<void> }) {
+  const [show, setShow] = useState(false);
+  const stats = useDiffStats(x.before, x.after);
+  return (
+    <li className="space-y-1.5 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <button type="button" className="link font-medium" onClick={() => onOpen(x.key)}>{chapterTitle(x.key)}</button>
+        <span className="text-xs text-muted">{x.before.trim() ? <><span className="text-[#1d5a2c]">+{stats.added}</span> / <span className="text-[#8a2a1d]">−{stats.removed}</span> Wörter</> : "neu geschrieben"}</span>
+        {x.decision === "uebernommen" && <span className="rounded-full bg-[#d9eedd] px-2 py-0.5 text-xs text-[#1d5a2c]">übernommen</span>}
+        {x.decision === "verworfen" && <span className="rounded-full bg-line-soft px-2 py-0.5 text-xs text-muted">verworfen</span>}
+        <span className="ml-auto flex flex-wrap gap-1.5">
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setShow(!show)}>{show ? "Zuklappen" : "Änderungen ansehen"}</button>
+          {x.decision !== "uebernommen" && <button type="button" className="btn-ghost btn-sm text-ok" disabled={busy} onClick={() => void act(x.key, "uebernommen")}>✓ Übernehmen</button>}
+          {x.decision !== "verworfen" && <button type="button" className="btn-ghost btn-sm text-danger" disabled={busy} onClick={() => void act(x.key, "verworfen")}>✕ Verwerfen</button>}
+        </span>
+      </div>
+      {reason && <p className="text-xs text-muted">{reason}</p>}
+      {show && (
+        <div className="space-y-2 rounded-lg border border-line-soft bg-bg p-3">
+          <DiffLegend />
+          <DiffView before={x.before} after={x.after} />
         </div>
       )}
-      {tab === "anpassen" && run && !running && run.status === "fehler" && (
-        <div className="space-y-2 rounded-lg bg-[#f8e6e3] px-3 py-2 text-sm text-danger">
-          <p>{run.error ?? "Das hat nicht geklappt."}</p>
-          {!run.undone && work.some((x) => x.status === "fertig") && <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void undo()}>Schon geänderte Kapitel zurücksetzen</button>}
-        </div>
+    </li>
+  );
+}
+
+function Review({ items, onOpen, onAnswer, onEstimate, disabled }: { items: ChapterReview[]; onOpen: (key: string) => void; onAnswer: (key: string, q: string) => void; onEstimate: (key: string, q: string) => void; disabled: boolean }) {
+  const asks = items.reduce((n, x) => n + x.questions.length, 0);
+  const [open, setOpen] = useState(asks > 0);
+  const weak = items.filter((x) => x.rating !== "gut").length;
+  return (
+    <div className="space-y-2 border-t border-line-soft pt-2.5">
+      <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Bewertung je Kapitel</span>
+        <span className="text-xs text-muted">{items.length - weak} gut, {weak} ausbaufähig{asks ? `, ${asks} Rückfragen` : ""} · {open ? "zuklappen" : "aufklappen"}</span>
+      </button>
+      {open && (
+        <ul className="space-y-2">
+          {items.map((x) => (
+            <li key={x.key} className="space-y-1">
+              <p className="flex items-start gap-2">
+                <span className={`mt-1.5 size-2 shrink-0 rounded-full ${RATING[x.rating].dot}`} title={RATING[x.rating].label} />
+                <span className="min-w-0">
+                  <button type="button" className="link font-medium" onClick={() => onOpen(x.key)}>{chapterTitle(x.key)}</button>
+                  <span className="text-xs text-muted"> · {RATING[x.rating].label}</span>
+                  {x.text && <span className="block text-xs text-muted">{x.text}</span>}
+                </span>
+              </p>
+              {x.questions.map((q) => (
+                <div key={q} className="ml-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-[#fdfaf3] px-2.5 py-1.5 text-xs">
+                  <span className="min-w-0 flex-1 basis-60">❓ {q}</span>
+                  <button type="button" className="link" disabled={disabled} onClick={() => onAnswer(x.key, q)}>Beantworten</button>
+                  <button type="button" className="link" disabled={disabled} onClick={() => onEstimate(x.key, q)}>KI schätzen lassen</button>
+                </div>
+              ))}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

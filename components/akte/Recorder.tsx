@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 
 /** Aufnahme im Browser, Umwandlung in Text auf dem Server. Die Aufnahme selbst wird nirgends gespeichert. */
-export function Recorder({ coacheeId, onText }: { coacheeId: string; onText: (text: string) => void }) {
+/** compact: nur ein Mikrofon-Knopf zum Einsprechen (z. B. im Chat), ohne Hinweis auf Gesprächsaufnahmen */
+export function Recorder({ coacheeId, onText, compact = false }: { coacheeId: string; onText: (text: string) => void; compact?: boolean }) {
   const [state, setState] = useState<"idle" | "recording" | "working">("idle");
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -58,6 +59,15 @@ export function Recorder({ coacheeId, onText }: { coacheeId: string; onText: (te
   }
 
   const mm = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  if (compact)
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2 text-sm">
+        {state === "idle" && <button type="button" onClick={start} className="btn-ghost btn-sm" title="Nachricht einsprechen">🎤 Einsprechen</button>}
+        {state === "recording" && <button type="button" onClick={stop} className="btn btn-sm bg-danger hover:bg-danger"><span className="size-2.5 animate-pulse rounded-sm bg-white" /> Fertig · {mm}</button>}
+        {state === "working" && <span className="text-xs text-muted">Wird in Text umgewandelt …</span>}
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </span>
+    );
   return (
     <div className="flex flex-wrap items-center gap-3 text-sm">
       {state === "idle" && (

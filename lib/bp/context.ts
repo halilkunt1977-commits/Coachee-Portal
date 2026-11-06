@@ -88,7 +88,7 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
     loadChats(c.id),
   ]);
 
-  const b = new Budget(all ? 70000 : 48000);
+  const b = new Budget(all ? 80000 : 75000);
 
   // 1. Notizen des Coachs
   b.block("Notizen des Coachs zum ganzen Vorhaben", notes.vorhaben, 6000);
@@ -137,7 +137,8 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
       .map(([k, v]) => `${k}: ${(v as string[]).join(", ")}`);
     b.block("Erfahrungsbogen (Selbstauskunft)", withoutHealth(lines.join("\n")), 2500);
   }
-  if (def.finance || all || ["marketing", "organisation", "standort", "risiken"].includes(key)) b.block("Finanzplan", financeSummary(plan.finance), 6000);
+  // Zahlen gehören in jedes Kapitel, damit der Plan konkret und stimmig wird
+  b.block(def.finance || all ? "Finanzplan" : "Finanzplan (zur Abstimmung, Zahlen nur nutzen, wo sie zum Kapitel passen)", financeSummary(plan.finance), 8000);
 
   // 3. Gespräche
   const meetingText = meetings
@@ -158,7 +159,7 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
   b.block("Unterlagen aus der Akte", docText, all ? 6000 : 12000);
 
   // 5. Andere Kapitel (für die Summary schon oben vollständig)
-  if (!all) b.block("Andere Kapitel des Businessplans (gekürzt)", others.map((s) => `## ${s.title}\n${plan.sections[s.key].text.trim().slice(0, 700)}`).join("\n\n"), 9000);
+  if (!all) b.block("Andere Kapitel des Businessplans (gekürzt, für gleiche Zahlen und Begriffe)", others.map((s) => `## ${s.title}\n${plan.sections[s.key].text.trim().slice(0, 2500)}`).join("\n\n"), 24000);
 
   // Zuletzt, aber immer dabei: der bisherige Text, offener Vorschlag und die aktuelle Anweisung
   const current = plan.sections[key];

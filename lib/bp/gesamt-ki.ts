@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { fullName, type Coachee } from "../access";
 import { AiError, jsonResponse, pseudonymize } from "../ai";
 import type { User } from "../auth";
@@ -7,7 +6,7 @@ import { one, query } from "../db";
 import { categoryLabel } from "../profile";
 import { Budget, chapterContext, loadChats, withoutHealth } from "./context";
 import { financeSummary } from "./finance";
-import { DRAFT_SCHEMA, appendTurns, instructions, proposeGlance } from "./schreibhilfe";
+import { DRAFT_SCHEMA, instructions, proposeGlance } from "./schreibhilfe";
 import { SECTIONS, chapterProgress, normalizeGlance, normalizeSections, type GlanceItem, type SectionState } from "./sections";
 import { planFor } from "./store";
 
@@ -24,52 +23,73 @@ import { planFor } from "./store";
 export type RunAction = "neu" | "anpassen" | "lassen";
 export type RunChapter = { key: string; action: RunAction; reason: string; status: "wartet" | "schreibt" | "fertig" | "fehler" };
 export type RunProgress = { phase: "pruefen" | "schreiben" | "blick" | "fertig"; chapters: RunChapter[] };
-export type RunResult = { note: string; glance: number };
+/** Bewertung eines Kapitels mit Rückfragen, wenn etwas fehlt */
+export type ChapterReview = { key: string; rating: "gut" | "ausbaufaehig" | "fehlt"; text: string; questions: string[] };
+export type RunResult = { note: string; glance: number; review?: ChapterReview[] };
+export type Decision = "offen" | "uebernommen" | "verworfen";
+/** Eine Änderung der KI: Kapitel (oder „blick“ für Auf einen Blick) vorher und nachher */
+export type RunChange = { key: string; before: string; after: string; decision: Decision };
+export const BLICK_KEY = "blick";
 export type RunView = {
   id: string;
   status: "laeuft" | "fertig" | "fehler";
+  kind: "aendern" | "frage";
   message: string;
   progress: RunProgress;
   result: RunResult | null;
   error: string | null;
   undone: boolean;
+  changes: RunChange[];
   at: string;
 };
 
 const CHECK_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["note", "chapters", "glance"],
+  required: ["answer", "chapters", "glance"],
   properties: {
-    note: { type: "string" },
+    answer: { type: "string" },
     glance: { type: "boolean" },
     chapters: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["key", "action", "todo"],
-        properties: { key: { type: "string", enum: SECTIONS.map((s) => s.key) }, action: { type: "string", enum: ["neu", "anpassen", "lassen"] }, todo: { type: "string" } },
+        required: ["key", "action", "todo", "rating", "assessment", "questions"],
+        properties: {
+          key: { type: "string", enum: SECTIONS.map((s) => s.key) },
+          action: { type: "string", enum: ["neu", "anpassen", "lassen"] },
+          todo: { type: "string" },
+          rating: { type: "string", enum: ["gut", "ausbaufaehig", "fehlt"] },
+          assessment: { type: "string" },
+          questions: { type: "array", items: { type: "string" } },
+        },
       },
     },
   },
 };
 
-const CHECK_INSTRUCTIONS = `Du betreust den kompletten Businessplan einer Gründung in Deutschland (Vorlage des Gründungscoachs, 14 Kapitel, eingereicht bei der fachkundigen Stelle und Banken). Der Coach gibt dir neue Angaben, Zahlen, Notizen oder Wünsche, oder er möchte einfach, dass du alles mit dem aktuellen Stand abgleichst.
+const CHECK_INSTRUCTIONS = `Du bist erfahrene Gründungsberaterin und betreust zusammen mit dem Gründungscoach den kompletten Businessplan einer Gründung in Deutschland (Vorlage des Coachs, 14 Kapitel, eingereicht bei der fachkundigen Stelle für den Gründungszuschuss und bei Banken). Ihr arbeitet in einem Chat: Der Coach schreibt oder spricht dir Nachrichten. Das können Fragen sein (Analyse, Bewertung, Plausibilität, „was fehlt?“), neue Angaben, Zahlen, Daten und Fakten, Antworten auf deine Rückfragen, oder Aufträge („schreib Kapitel 5 neu“, „gleiche alles mit dem Finanzplan ab“, „schätze realistische Zahlen“).
 
-Deine Aufgabe in diesem Schritt: Prüfe den ganzen Plan Kapitel für Kapitel gegen das Material und entscheide für JEDES der 14 Kapitel:
-- "neu": Das Kapitel ist leer oder so dünn bzw. veraltet, dass es neu geschrieben werden muss.
-- "anpassen": Das Kapitel passt im Kern, aber etwas stimmt nicht mehr oder fehlt (neue Zahlen aus dem Finanzplan, neue Angaben oder Notizen des Coachs, Widerspruch zu anderen Kapiteln, Platzhalter in eckigen Klammern, die das Material inzwischen beantwortet, deutlich zu kurz).
-- "lassen": Das Kapitel ist stimmig, vollständig und passt zu allen Zahlen und Angaben.
-Im Feld todo schreibst du für "neu" und "anpassen" einen konkreten Auftrag (was genau zu ändern oder zu ergänzen ist, welche Zahlen gelten), bei "lassen" einen kurzen Grund.
+Entscheide zuerst, was der Coach will:
+- Eine reine Frage oder Bitte um Bewertung: Beantworte sie im Feld answer und setze alle Kapitel auf "lassen". Ändere den Plan nur, wenn der Coach es will.
+- Neue Angaben, Antworten auf Rückfragen, Zahlen, Fakten oder ein Auftrag: Prüfe den ganzen Plan und entscheide für JEDES der 14 Kapitel, ob es geändert wird. Neue Angaben gelten für alle Kapitel, die sie direkt oder indirekt berühren (z. B. neuer Preis betrifft Leistungen, Marketing, Finanzen und Summary).
+- Eine leere Nachricht heißt: alles mit dem aktuellen Material abgleichen und verbessern.
+
+Für jedes Kapitel:
+- action: "neu" (leer, sehr dünn oder veraltet), "anpassen" (im Kern gut, aber etwas stimmt nicht mehr, fehlt, widerspricht dem Finanzplan oder anderen Kapiteln, oder das Material beantwortet inzwischen einen Platzhalter in eckigen Klammern), "lassen" (stimmig oder keine Änderung gewünscht).
+- todo: bei "neu"/"anpassen" ein konkreter Schreibauftrag (was genau, welche Zahlen und Fakten gelten, was ergänzt wird), sonst ein kurzer Grund.
+- rating und assessment: deine ehrliche Bewertung des Kapitels in seinem Stand NACH deinen Änderungen, wie die fachkundige Stelle es sehen würde: "gut", "ausbaufaehig" oder "fehlt"; assessment in einem Satz.
+- questions: Was im Kapitel noch fehlt und nur der Coach oder die gründende Person beantworten kann, als konkrete, kurze Rückfragen (höchstens drei, z. B. „Wie viele Malerbetriebe gibt es im Landkreis Fürth und woher stammt die Zahl?“). Keine Fragen, deren Antwort schon im Material steht. Bei einem guten Kapitel eine leere Liste.
 
 Regeln:
-- Die neuen Angaben des Coachs gelten immer und für alle Kapitel, die sie berühren. Prüfe auch, welche Kapitel indirekt betroffen sind (z. B. neuer Preis betrifft Leistungen, Marketing, Finanzen, Summary).
-- Zahlen im Plan müssen mit dem Finanzplan übereinstimmen. Weicht ein Kapitel davon ab, ist es "anpassen".
-- Die Executive Summary (summary) ist "anpassen" oder "neu", sobald irgendein anderes Kapitel geändert wird.
+- Zahlen im Plan müssen mit dem Finanzplan übereinstimmen. Weicht ein Kapitel ab, ist es "anpassen".
+- Die Executive Summary (summary) wird angepasst, sobald ein anderes Kapitel geändert wird.
 - glance = true, wenn sich Angaben für „Auf einen Blick“ ändern (Start, Standort, Rechtsform, Investitionen, Finanzierung, Personal …).
 - Ändere nichts ohne Grund: Ein stimmiges Kapitel bleibt.
-- Im Feld note sagst du dem Coach in zwei bis drei kurzen Sätzen (per du), was du anpasst und welche Angaben im ganzen Plan noch fehlen.
+- Bittet der Coach ausdrücklich darum, Zahlen, Daten oder Fakten zu schätzen oder zu ergänzen, darfst du realistische Annahmen vorschlagen; sag im todo, dass sie im Text als Annahme gekennzeichnet werden. Sonst erfindest du nichts.
+- answer: Antwort an den Coach, per du, auf Deutsch, ohne Floskeln. Bei einer Frage ausführlich und konkret mit Bezug auf Kapitel (mit Nummer) und Zahlen aus dem Finanzplan; gliedere mit kurzen Absätzen, „- “-Listen und **fett**. Bei Änderungen zwei bis drei Sätze: was du änderst und was noch fehlt. Die Rückfragen stehen schon bei den Kapiteln, wiederhole sie nicht einzeln.
+- Beziehe dich auf das bisherige Gespräch, wenn der Coach etwa „mach das so“ schreibt.
 - Namen sind durch [Name] ersetzt. Keine Angaben zur Gesundheit.`;
 
 const MAX_PARALLEL = 4;
@@ -120,9 +140,24 @@ async function planMaterial(c: Coachee, earlier: string[], attached: Attached[] 
   return b.out;
 }
 
-async function checkInput(c: Coachee, message: string, earlier: string[], attached: Attached[]) {
-  const tail = message.trim() ? `Neue Angaben des Coachs: ${message.trim()}` : "Neue Angaben des Coachs: keine. Gleiche den ganzen Plan mit dem aktuellen Material und Finanzplan ab.";
-  return pseudonymize([...(await planMaterial(c, earlier, attached)), tail].join("\n\n"), [c.first_name, c.last_name]);
+/** Bisheriges Gespräch im Chat: frühere Nachrichten des Coachs und deine Antworten (älteste zuerst) */
+async function dialogue(coacheeId: string, runId: string) {
+  const rows = await query<{ message: string; result: RunResult | null }>(
+    "SELECT message, result FROM bp_runs WHERE coachee_id = $1 AND id <> $2 AND NOT hidden AND status = 'fertig' ORDER BY created_at DESC LIMIT 8",
+    [coacheeId, runId],
+  );
+  const legacy = (await loadChats(coacheeId)).chats[CHAT_KEY] ?? [];
+  const lines = [
+    ...legacy.slice(-6).map((t) => `${t.role === "coach" ? "Coach" : "Du"}: ${t.text.slice(0, 2500)}`),
+    ...rows.reverse().flatMap((r) => [r.message.trim() ? `Coach: ${r.message.slice(0, 2500)}` : "Coach: (ganzen Plan abgleichen)", r.result?.note ? `Du: ${r.result.note.slice(0, 2500)}` : ""]),
+  ].filter(Boolean);
+  return lines.join("\n\n");
+}
+
+async function checkInput(c: Coachee, runId: string, message: string, earlier: string[], attached: Attached[]) {
+  const talk = await dialogue(c.id, runId);
+  const tail = message.trim() ? `Neue Nachricht des Coachs: ${message.trim()}` : "Neue Nachricht des Coachs: (leer) Gleiche den ganzen Plan mit dem aktuellen Material und Finanzplan ab und verbessere ihn.";
+  return pseudonymize([...(await planMaterial(c, earlier, attached)), talk ? `== Bisheriges Gespräch im Chat ==\n${talk}` : "", tail].filter(Boolean).join("\n\n"), [c.first_name, c.last_name]);
 }
 
 async function saveProgress(id: string, progress: RunProgress) {
@@ -139,38 +174,61 @@ async function writeSection(coacheeId: string, key: string, userId: string, text
   );
 }
 
+/** Neuen Stand eines Kapitels (oder von „Auf einen Blick“) im Durchgang festhalten, für die markierten Änderungen */
+async function saveAfter(runId: string, key: string, value: unknown) {
+  await query("UPDATE bp_runs SET after = after || jsonb_build_object($2::text, $3::jsonb) WHERE id = $1", [runId, key, JSON.stringify(value)]);
+}
+
+const RATINGS = new Set(["gut", "ausbaufaehig", "fehlt"]);
+
 /** Läuft im Hintergrund; Fehler landen im Durchgang, nicht beim Aufrufer */
 export async function executeRun(runId: string, user: User, c: Coachee, message: string) {
   const name = fullName(c);
   const fill = (s: string) => s.replaceAll("[Name]", name).trim();
   const progress: RunProgress = { phase: "pruefen", chapters: [] };
   try {
-    const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND id <> $2 AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id, runId])).map((r) => r.message);
+    const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND id <> $2 AND kind = 'aendern' AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id, runId])).map((r) => r.message);
     const files = (await one<{ files: string[] }>("SELECT files FROM bp_runs WHERE id = $1", [runId]))?.files ?? [];
     const attached = await attachedDocs(c.id, files);
-    const check = await jsonResponse<{ note: string; glance: boolean; chapters: { key: string; action: RunAction; todo: string }[] }>({
+    const check = await jsonResponse<{ answer: string; glance: boolean; chapters: { key: string; action: RunAction; todo: string; rating: string; assessment: string; questions: string[] }[] }>({
       coacheeId: c.id,
       userId: user.id,
       purpose: "businessplan",
       schemaName: "bp_pruefung",
       schema: CHECK_SCHEMA,
-      maxTokens: 6000,
+      maxTokens: 12000,
       instructions: CHECK_INSTRUCTIONS,
-      input: await checkInput(c, message, earlier, attached),
+      input: await checkInput(c, runId, message, earlier, attached),
     });
     const byKey = new Map(check.chapters.map((x) => [x.key, x]));
+    const review: ChapterReview[] = SECTIONS.flatMap((s) => {
+      const x = byKey.get(s.key);
+      if (!x) return [];
+      return [{ key: s.key, rating: (RATINGS.has(x.rating) ? x.rating : "ausbaufaehig") as ChapterReview["rating"], text: fill(x.assessment ?? "").slice(0, 600), questions: (x.questions ?? []).map(fill).filter(Boolean).slice(0, 3).map((q) => q.slice(0, 400)) }];
+    });
     progress.chapters = SECTIONS.map((s) => {
       const x = byKey.get(s.key);
       const action: RunAction = x?.action ?? "lassen";
       return { key: s.key, action, reason: fill(x?.todo ?? ""), status: action === "lassen" ? "fertig" : "wartet" };
     });
+    const note = fill(check.answer).slice(0, 20000);
+    const changing = progress.chapters.some((x) => x.action !== "lassen");
+
+    // Nur eine Frage: antworten, nichts ändern
+    if (!changing && !check.glance) {
+      progress.phase = "fertig";
+      const result: RunResult = { note, glance: 0, review };
+      await query("UPDATE bp_runs SET status = 'fertig', kind = 'frage', progress = $2, result = $3, finished_at = now() WHERE id = $1", [runId, JSON.stringify(progress), JSON.stringify(result)]);
+      return;
+    }
+
     // Wird irgendein Kapitel geändert, kommt die Summary immer mit
     const summary = progress.chapters.find((x) => x.key === "summary")!;
-    if (summary.action === "lassen" && progress.chapters.some((x) => x.action !== "lassen")) Object.assign(summary, { action: "anpassen", status: "wartet", reason: "An die geänderten Kapitel angleichen." });
+    if (summary.action === "lassen" && changing) Object.assign(summary, { action: "anpassen", status: "wartet", reason: "An die geänderten Kapitel angleichen." });
     progress.phase = "schreiben";
     await saveProgress(runId, progress);
 
-    // Stand vorher für „Rückgängig“
+    // Stand vorher für „Verwerfen“ und die markierten Änderungen
     const plan = await planFor(c);
     const before: { sections: Record<string, SectionState>; glance: GlanceItem[] } = { sections: {}, glance: plan.glance };
     for (const x of progress.chapters) if (x.action !== "lassen") before.sections[x.key] = plan.sections[x.key];
@@ -179,7 +237,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     const rewrite = async (x: RunChapter) => {
       x.status = "schreibt";
       await saveProgress(runId, progress);
-      const order = `${x.action === "neu" ? "Schreib dieses Kapitel neu." : "Pass dieses Kapitel an und behalte, was weiter stimmt."} Auftrag aus der Prüfung des ganzen Plans: ${x.reason || "mit dem aktuellen Material abgleichen"}${message.trim() ? ` Neue Angaben des Coachs (gelten für den ganzen Plan): ${message.trim()}` : ""}${attached.length ? `\nMitgegebene Dateien und Fotos des Coachs (nutze, was zu diesem Kapitel passt):\n${attachedBlock(attached, 12000)}` : ""}`;
+      const order = `${x.action === "neu" ? "Schreib dieses Kapitel neu." : "Überarbeite dieses Kapitel und behalte, was weiter stimmt."} Auftrag aus der Prüfung des ganzen Plans: ${x.reason || "mit dem aktuellen Material abgleichen und konkreter machen"}${message.trim() ? `\nNeue Nachricht des Coachs (gilt für den ganzen Plan): ${message.trim()}` : ""}${attached.length ? `\nMitgegebene Dateien und Fotos des Coachs (nutze, was zu diesem Kapitel passt):\n${attachedBlock(attached, 12000)}` : ""}`;
       try {
         const out = await jsonResponse<{ text: string; sources: string[]; note: string }>({
           coacheeId: c.id,
@@ -187,7 +245,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
           purpose: "businessplan",
           schemaName: "kapitel",
           schema: DRAFT_SCHEMA,
-          maxTokens: 8000,
+          maxTokens: 10000,
           instructions: instructions(x.key),
           input: await chapterContext(c, x.key, order),
         });
@@ -196,6 +254,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
         const old = before.sections[x.key];
         const sources = out.sources.map(fill).filter(Boolean).join("\n") || old?.sources || "";
         await writeSection(c.id, x.key, user.id, text, sources);
+        await saveAfter(runId, x.key, text.slice(0, 60000));
         x.status = "fertig";
       } catch (e) {
         if (!(e instanceof AiError)) console.error("Businessplan-KI Kapitel", x.key, e);
@@ -224,6 +283,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
           const map = new Map(items.map((g) => [g.label, g.value]));
           const next = [...now.map((g) => (map.has(g.label) ? { ...g, value: map.get(g.label)! } : g)), ...items.filter((g) => !now.some((n) => n.label === g.label))];
           await query("UPDATE business_plans SET glance = $2, updated_at = now() WHERE coachee_id = $1", [c.id, JSON.stringify(next)]);
+          await saveAfter(runId, BLICK_KEY, next);
           glance = items.length;
         }
       } catch (e) {
@@ -232,7 +292,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     }
 
     progress.phase = "fertig";
-    const result: RunResult = { note: fill(check.note).slice(0, 2000), glance };
+    const result: RunResult = { note, glance, review };
     await query("UPDATE bp_runs SET status = 'fertig', progress = $2, result = $3, finished_at = now() WHERE id = $1", [runId, JSON.stringify(progress), JSON.stringify(result)]);
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Businessplan-KI", e);
@@ -255,82 +315,94 @@ export async function createRun(user: User, c: Coachee, message: string, files: 
   return { id: row!.id, fresh: true, message: text };
 }
 
-const view = (r: { id: string; status: RunView["status"]; message: string; progress: unknown; result: unknown; error: string | null; undone_at: Date | null; created_at: Date }): RunView => ({
-  id: r.id,
-  status: r.status,
-  message: r.message,
-  progress: { phase: "pruefen", chapters: [], ...(r.progress as Partial<RunProgress>) },
-  result: (r.result as RunResult | null) ?? null,
-  error: r.error,
-  undone: Boolean(r.undone_at),
-  at: new Date(r.created_at).toISOString(),
-});
+type RunRow = { id: string; status: RunView["status"]; kind: RunView["kind"]; message: string; progress: unknown; result: unknown; error: string | null; undone_at: Date | null; created_at: Date; before: unknown; after: unknown; decisions: unknown };
+const RUN_COLS = "id, status, kind, message, progress, result, error, undone_at, created_at, before, after, decisions";
+const glanceText = (raw: unknown) => normalizeGlance(Array.isArray(raw) ? raw : []).filter((g) => g.value.trim()).map((g) => `${g.label}: ${g.value.replace(/\n/g, ", ")}`).join("\n\n");
+
+const view = (r: RunRow): RunView => {
+  const before = (r.before ?? {}) as { sections?: Record<string, { text?: string }>; glance?: unknown };
+  const after = (r.after ?? {}) as Record<string, unknown>;
+  const decisions = (r.decisions ?? {}) as Record<string, Decision>;
+  const fallback: Decision = r.undone_at ? "verworfen" : "offen";
+  const changes: RunChange[] = [
+    ...SECTIONS.filter((s) => typeof after[s.key] === "string").map((s) => ({ key: s.key, before: String(before.sections?.[s.key]?.text ?? ""), after: String(after[s.key]), decision: decisions[s.key] ?? fallback })),
+    ...(Array.isArray(after[BLICK_KEY]) ? [{ key: BLICK_KEY, before: glanceText(before.glance), after: glanceText(after[BLICK_KEY]), decision: decisions[BLICK_KEY] ?? fallback }] : []),
+  ].filter((x) => x.before.trim() !== x.after.trim());
+  return {
+    id: r.id,
+    status: r.status,
+    kind: r.kind ?? "aendern",
+    message: r.message,
+    progress: { phase: "pruefen", chapters: [], ...(r.progress as Partial<RunProgress>) },
+    result: (r.result as RunResult | null) ?? null,
+    error: r.error,
+    undone: Boolean(r.undone_at),
+    changes,
+    at: new Date(r.created_at).toISOString(),
+  };
+};
+
+const expire = (coacheeId: string) =>
+  query("UPDATE bp_runs SET status = 'fehler', error = 'Abgebrochen (der Server wurde neu gestartet). Bitte noch einmal starten.', finished_at = now() WHERE coachee_id = $1 AND status = 'laeuft' AND created_at <= now() - interval '20 minutes'", [coacheeId]);
 
 export async function getRun(coacheeId: string, id?: string): Promise<RunView | null> {
-  if (id && !/^[0-9a-f-]{36}$/i.test(id)) return null;
-  await query("UPDATE bp_runs SET status = 'fehler', error = 'Abgebrochen (der Server wurde neu gestartet). Bitte noch einmal starten.', finished_at = now() WHERE coachee_id = $1 AND status = 'laeuft' AND created_at <= now() - interval '20 minutes'", [coacheeId]);
-  const r = await one<Parameters<typeof view>[0]>(
-    `SELECT id, status, message, progress, result, error, undone_at, created_at FROM bp_runs WHERE coachee_id = $1 ${id ? "AND id = $2" : ""} ORDER BY created_at DESC LIMIT 1`,
-    id ? [coacheeId, id] : [coacheeId],
-  );
+  if (id && !UUID.test(id)) return null;
+  await expire(coacheeId);
+  const r = await one<RunRow>(`SELECT ${RUN_COLS} FROM bp_runs WHERE coachee_id = $1 ${id ? "AND id = $2" : ""} ORDER BY created_at DESC LIMIT 1`, id ? [coacheeId, id] : [coacheeId]);
   return r ? view(r) : null;
 }
 
-/** Die letzten Angaben des Coachs an die KI, neueste zuerst */
-export async function recentRuns(coacheeId: string) {
-  const rows = await query<Parameters<typeof view>[0]>("SELECT id, status, message, progress, result, error, undone_at, created_at FROM bp_runs WHERE coachee_id = $1 ORDER BY created_at DESC LIMIT 8", [coacheeId]);
-  return rows.map(view);
+/** Der Chat: die letzten Nachrichten an die KI mit Antworten und Änderungen, älteste zuerst */
+export async function recentRuns(coacheeId: string, limit = 12) {
+  await expire(coacheeId);
+  const rows = await query<RunRow>(`SELECT ${RUN_COLS} FROM bp_runs WHERE coachee_id = $1 AND NOT hidden ORDER BY created_at DESC LIMIT $2`, [coacheeId, limit]);
+  return rows.reverse().map(view);
 }
 
-/** Stand vor dem Durchgang wiederherstellen */
-export async function undoRun(user: User, coacheeId: string, id: string) {
-  const r = await one<{ before: unknown; undone_at: Date | null; status: string }>("SELECT before, undone_at, status FROM bp_runs WHERE id = $1 AND coachee_id = $2", [id, coacheeId]);
-  if (!r || r.undone_at || r.status === "laeuft") return false;
-  const before = r.before as { sections?: unknown; glance?: unknown };
-  const sections = normalizeSections(before.sections ?? {});
-  for (const key of Object.keys((before.sections as object) ?? {})) if (SECTIONS.some((s) => s.key === key)) await writeSection(coacheeId, key, user.id, sections[key].text, sections[key].sources);
-  if (Array.isArray(before.glance)) await query("UPDATE business_plans SET glance = $2 WHERE coachee_id = $1", [coacheeId, JSON.stringify(normalizeGlance(before.glance))]);
-  await query("UPDATE bp_runs SET undone_at = now() WHERE id = $1", [id]);
+/** Chat leeren: Durchgänge ausblenden (Änderungen am Plan bleiben), alten Fragen-Verlauf löschen */
+export async function clearChat(coacheeId: string) {
+  await query("UPDATE bp_runs SET hidden = true WHERE coachee_id = $1 AND status <> 'laeuft'", [coacheeId]);
+  await query("DELETE FROM bp_notes WHERE coachee_id = $1 AND section = $2", [coacheeId, CHAT_KEY]);
+}
+
+/**
+ * Entscheidung des Coachs zu einer Änderung (key) oder zu allen offenen (key leer).
+ * „verworfen“ holt den Stand vor dem Durchgang zurück, „uebernommen“ behält ihn und nimmt die Markierung weg.
+ */
+export async function decide(user: User, coacheeId: string, id: string, key: string | null, decision: "uebernommen" | "verworfen") {
+  if (!UUID.test(id)) return false;
+  const r = await one<RunRow>(`SELECT ${RUN_COLS} FROM bp_runs WHERE id = $1 AND coachee_id = $2`, [id, coacheeId]);
+  if (!r || r.status === "laeuft") return false;
+  const v = view(r);
+  const targets = v.changes.filter((x) => (key ? x.key === key : x.decision === "offen"));
+  if (!targets.length) return false;
+  const before = (r.before ?? {}) as { sections?: unknown; glance?: unknown };
+  const decisions = { ...((r.decisions ?? {}) as Record<string, Decision>) };
+  if (decision === "verworfen") {
+    const sections = normalizeSections(before.sections ?? {});
+    for (const x of targets) {
+      if (x.decision === "verworfen") continue;
+      if (x.key === BLICK_KEY) {
+        if (Array.isArray(before.glance)) await query("UPDATE business_plans SET glance = $2, updated_at = now() WHERE coachee_id = $1", [coacheeId, JSON.stringify(normalizeGlance(before.glance))]);
+      } else await writeSection(coacheeId, x.key, user.id, sections[x.key].text, sections[x.key].sources);
+    }
+  } else {
+    // Übernehmen nach Verwerfen: den Text der KI wieder einsetzen
+    const after = (r.after ?? {}) as Record<string, unknown>;
+    for (const x of targets) {
+      if (x.decision !== "verworfen") continue;
+      if (x.key === BLICK_KEY) await query("UPDATE business_plans SET glance = $2, updated_at = now() WHERE coachee_id = $1", [coacheeId, JSON.stringify(normalizeGlance(after[BLICK_KEY]))]);
+      else {
+        const cur = await one<{ sources: string | null }>("SELECT sections->($2::text)->>'sources' AS sources FROM business_plans WHERE coachee_id = $1", [coacheeId, x.key]);
+        await writeSection(coacheeId, x.key, user.id, x.after, cur?.sources ?? "");
+      }
+    }
+  }
+  for (const x of targets) decisions[x.key] = decision;
+  const allRejected = v.changes.every((x) => decisions[x.key] === "verworfen");
+  await query(`UPDATE bp_runs SET decisions = $2${allRejected ? ", undone_at = COALESCE(undone_at, now())" : ", undone_at = NULL"} WHERE id = $1`, [id, JSON.stringify(decisions)]);
   return true;
 }
 
-// ---------- Chat zum ganzen Plan: Fragen, Analyse, Bewertung (ändert nichts) ----------
-
+// Alter Verlauf aus „Fragen & Bewertung“ (vor dem gemeinsamen Chat); wird im Chat noch angezeigt
 export const CHAT_KEY = "gesamt_chat";
-
-const CHAT_INSTRUCTIONS = `Du bist erfahrene Gründungsberaterin und begutachtest den kompletten Businessplan einer Gründung in Deutschland, so wie ihn die fachkundige Stelle (Gründungszuschuss der Agentur für Arbeit) oder eine Bank prüfen würde. Der Gründungscoach stellt dir Fragen: Analyse, Bewertung, Schwachstellen, Tragfähigkeit, Plausibilität der Zahlen, was fehlt, wie man etwas verbessert.
-
-- Antworte konkret und ehrlich, auch kritisch, per du an den Coach, auf Deutsch. Beziehe dich auf Kapitel (mit Nummer) und auf Zahlen aus dem Finanzplan.
-- Prüfe auf Widersprüche zwischen Kapiteln und Finanzplan, unrealistische Annahmen (Preise, Mengen, Auslastung, Kosten, Lebensunterhalt), fehlende Angaben und Platzhalter.
-- Bei einer Bewertung: kurze Gesamteinschätzung, dann Stärken, Schwächen und konkrete nächste Schritte. Eine Note oder Ampel nur, wenn der Coach danach fragt.
-- Gliedere mit kurzen Absätzen, Aufzählungen mit „- “ und **fett** für das Wichtigste. Keine Floskeln, keine Wiederholung der Frage.
-- Erfinde keine Fakten. Was nicht im Material steht, benennst du als offen.
-- Du änderst den Plan hier nicht. Wenn sich etwas verbessern lässt, formuliere es so, dass der Coach es direkt als Auftrag übernehmen kann.
-- Namen sind durch [Name] ersetzt. Keine Angaben zur Gesundheit.`;
-
-export async function askPlan(user: User, c: Coachee, question: string, files: string[] = [], fileNames: string[] = []) {
-  const attached = await attachedDocs(c.id, files);
-  const text = `${question.trim().slice(0, 4000)}${fileNames.length ? `\n📎 ${fileNames.map((n) => n.slice(0, 120)).join(", ")}` : ""}`;
-  const history = (await loadChats(c.id)).chats[CHAT_KEY] ?? [];
-  const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id])).map((r) => r.message);
-  const talk = history.slice(-10).map((t) => `${t.role === "coach" ? "Coach" : "Du"}: ${t.text.slice(0, 3000)}`).join("\n\n");
-  const input = pseudonymize(
-    [...(await planMaterial(c, earlier, attached)), talk ? `== Bisheriges Gespräch ==\n${talk}` : "", `Neue Frage des Coachs: ${text}`].filter(Boolean).join("\n\n"),
-    [c.first_name, c.last_name],
-  );
-  const now = new Date().toISOString();
-  let turns = await appendTurns(c.id, CHAT_KEY, user.id, [{ id: randomUUID(), role: "coach", text, at: now }]);
-  const out = await jsonResponse<{ answer: string }>({
-    coacheeId: c.id,
-    userId: user.id,
-    purpose: "businessplan",
-    schemaName: "bp_chat",
-    schema: { type: "object", additionalProperties: false, required: ["answer"], properties: { answer: { type: "string" } } },
-    maxTokens: 6000,
-    instructions: CHAT_INSTRUCTIONS,
-    input,
-  });
-  const answer = out.answer.replaceAll("[Name]", fullName(c)).trim();
-  if (answer) turns = await appendTurns(c.id, CHAT_KEY, user.id, [{ id: randomUUID(), role: "ki", text: answer.slice(0, 20000), at: new Date().toISOString() }]);
-  return turns;
-}

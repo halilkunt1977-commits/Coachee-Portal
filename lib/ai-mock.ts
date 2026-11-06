@@ -17,19 +17,23 @@ export function mockJson(schemaName: string, input: string): unknown {
     const nrs = [...input.matchAll(/^(\d+)\. (.+)$/gm)];
     return { bewertungen: nrs.map((m, i) => ({ nr: Number(m[1]), prozent: [92, 84, 65, 40][i % 4], grund: `Testeinschätzung ohne KI für „${m[2].slice(0, 40)}“.` })) };
   }
-  if (schemaName === "bp_chat") {
-    const q = input.match(/^Neue Frage des Coachs: (.+)$/m)?.[1] ?? "";
-    const att = input.includes("gerade mitgegebene Dateien") ? " (mit Anhang gelesen)" : "";
-    return { answer: `**Testantwort ohne KI**${att} zur Frage „${q}“.\n\n- Stärke: Kapitel 3 ist klar.\n- Schwäche: Umsatz in Kapitel 12 fehlt.\n\nNächster Schritt: Zielgruppe schärfen.` };
-  }
   if (schemaName === "bp_pruefung") {
-    const neu = input.match(/^Neue Angaben des Coachs: (.+)$/m)?.[1] ?? "";
+    const neu = input.match(/^Neue Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
+    const frage = neu.trim().endsWith("?");
     const leer = [...input.matchAll(/^## \d+\. .+? \[key: (\w+)\] – 0 Wörter/gm)].map((m) => m[1]);
-    const keys = [...input.matchAll(/\[key: (\w+)\]/g)].map((m) => m[1]);
+    const keys = [...new Set([...input.matchAll(/\[key: (\w+)\]/g)].map((m) => m[1]))];
+    const att = input.includes("gerade mitgegebene Dateien") ? " (mit Anhang gelesen)" : "";
     return {
-      note: `Testprüfung ohne KI. Angaben: ${neu}`,
-      glance: true,
-      chapters: keys.map((key, i) => ({ key, action: leer.includes(key) ? "neu" : i < 3 ? "anpassen" : "lassen", todo: leer.includes(key) ? "Kapitel ist leer." : i < 3 ? `Neue Angaben einarbeiten: ${neu.slice(0, 80)}` : "Stimmig." })),
+      answer: frage ? `**Testantwort ohne KI**${att} zur Frage „${neu}“.\n\n- Stärke: Kapitel 3 ist klar.\n- Schwäche: Umsatz in Kapitel 12 fehlt.` : `Testprüfung ohne KI${att}. Angaben: ${neu}`,
+      glance: !frage,
+      chapters: keys.map((key, i) => ({
+        key,
+        action: frage ? "lassen" : leer.includes(key) ? "neu" : i < 3 ? "anpassen" : "lassen",
+        todo: leer.includes(key) ? "Kapitel ist leer." : i < 3 ? `Neue Angaben einarbeiten: ${neu.slice(0, 80)}` : "Stimmig.",
+        rating: i % 3 === 0 ? "gut" : i % 3 === 1 ? "ausbaufaehig" : "fehlt",
+        assessment: `Testbewertung für ${key}.`,
+        questions: i % 3 === 2 ? [`Wie viele Kunden erwartet [Name] im ersten Jahr für ${key}?`] : [],
+      })),
     };
   }
   if (schemaName === "kapitel") {

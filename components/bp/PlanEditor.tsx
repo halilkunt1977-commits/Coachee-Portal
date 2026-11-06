@@ -7,7 +7,8 @@ import type { ChatTurn } from "@/lib/bp/notes";
 import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sections } from "@/lib/bp/sections";
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
-import { GesamtKi } from "./GesamtKi";
+import { GesamtKi, type Decide } from "./GesamtKi";
+import { DiffLegend, DiffView } from "./DiffView";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
 
@@ -35,7 +36,7 @@ type Props = {
   projectNotes: string;
   schreibhilfeHref: string;
   gesamtHref: string;
-  lastRun: RunView | null;
+  runs: RunView[];
   chat: ChatTurn[];
 };
 
@@ -57,6 +58,10 @@ export function PlanEditor(p: Props) {
   /** Die KI passt gerade den ganzen Plan an: so lange nichts bearbeiten */
   const [aiRunning, setAiRunning] = useState(false);
   const [preview, setPreview] = useState(false);
+  /** Chat mit der KI: Nachrichten, Antworten und markierte Änderungen */
+  const [runs, setRuns] = useState(p.runs);
+  const [showDiff, setShowDiff] = useState(true);
+  const [deciding, setDeciding] = useState(false);
   const latest = useRef(secs);
   const field = useRef<HTMLTextAreaElement>(null);
 
@@ -109,6 +114,24 @@ export function PlanEditor(p: Props) {
     latest.current = next;
     setSecs(next);
     setGlance((g) => ({ items, key: g.key + 1 }));
+  }
+
+  const upsertRun = (r: RunView) => setRuns((xs) => (xs.some((x) => x.id === r.id) ? xs.map((x) => (x.id === r.id ? r : x)) : [...xs, r]));
+
+  /** Änderung der KI übernehmen (Markierung weg) oder verwerfen (alter Stand zurück) */
+  const decide: Decide = async (runId, key, decision) => {
+    await save();
+    const res = (await fetch(p.gesamtHref, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decide: runId, key, decision }) }).then((r) => r.json()).catch(() => null)) as { ok?: boolean; run?: RunView; sections?: Sections; glance?: GlanceItem[] } | null;
+    if (res?.run) upsertRun(res.run);
+    if (res?.sections && res.glance) takeOver(res.sections, res.glance);
+    return res?.ok ? null : "Das hat nicht geklappt. Bitte noch einmal versuchen.";
+  };
+
+  // Offene Änderungen der KI je Kapitel (die jüngste zählt)
+  const pending: Record<string, { runId: string; before: string; after: string }> = {};
+  for (const r of runs) for (const x of r.changes) {
+    if (x.decision === "offen") pending[x.key] = { runId: r.id, before: x.before, after: x.after };
+    else if (pending[x.key]?.runId !== r.id) delete pending[x.key];
   }
 
   async function download(href: string) {
@@ -177,8 +200,12 @@ export function PlanEditor(p: Props) {
       {p.ai && (
         <GesamtKi
           href={p.gesamtHref}
-          initial={p.lastRun}
+          coacheeId={p.coacheeId}
+          runs={runs}
           chat={p.chat}
+          onRun={upsertRun}
+          onCleared={() => setRuns([])}
+          decide={decide}
           beforeStart={async () => void (await save())}
           onRunning={setAiRunning}
           onUpdate={takeOver}
@@ -226,6 +253,7 @@ export function PlanEditor(p: Props) {
                       </span>
                     </span>
                     {sec.conflict && <span className="text-danger" title={t("Konflikt")}>!</span>}
+                    {pending[s.key] && <span className="text-gold" title="Von der KI geändert, noch nicht übernommen">✦</span>}
                   </button>
                 </li>
               );
@@ -288,6 +316,26 @@ export function PlanEditor(p: Props) {
                 schedule();
               }}>{t("Meine Fassung behalten")}</button>
             </div>
+          </div>
+        )}
+
+        {p.ai && pending[active] && !aiRunning && (
+          <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold"><span className="text-gold">✦</span> {pending[active].before.trim() ? "Die KI hat dieses Kapitel geändert." : "Die KI hat dieses Kapitel geschrieben."}</p>
+              <span className="flex flex-wrap gap-1.5">
+                {pending[active].before.trim() && <button type="button" className="btn-ghost btn-sm" onClick={() => setShowDiff(!showDiff)}>{showDiff ? "Markierung ausblenden" : "Änderungen markiert zeigen"}</button>}
+                <button type="button" className="btn btn-sm" disabled={deciding} onClick={async () => { setDeciding(true); await decide(pending[active].runId, active, "uebernommen"); setDeciding(false); }}>✓ Übernehmen</button>
+                <button type="button" className="btn-ghost btn-sm text-danger" disabled={deciding} onClick={async () => { setDeciding(true); await decide(pending[active].runId, active, "verworfen"); setDeciding(false); }}>✕ Verwerfen</button>
+              </span>
+            </div>
+            {showDiff && pending[active].before.trim() && (
+              <div className="space-y-2 rounded-lg border border-line-soft bg-surface p-3">
+                <DiffLegend />
+                <DiffView before={pending[active].before} after={pending[active].after} className="max-h-[32rem] overflow-y-auto pr-1" />
+              </div>
+            )}
+            <p className="text-xs text-muted">Der neue Text steht schon im Kapitel unten. Verwerfen holt den alten Stand zurück.</p>
           </div>
         )}
 

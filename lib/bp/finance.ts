@@ -433,6 +433,10 @@ export function financeSummary(f: FinanceInput) {
   for (const s of f.staff) out.push(`- Personal: ${s.label} ab ${monthLabel(f.start, s.start)}${s.gross ? `, ${eur(s.gross)} brutto + ${pct(s.surcharge)} Arbeitgeberanteil = ${eur(staffCost(s))} im Monat` : ", keine Personalkosten"}`);
   for (const x of f.financing) out.push(`- Finanzierung: ${x.label || FINANCING_KIND[x.kind]} ${eur(x.amount)} (${FINANCING_KIND[x.kind]})`);
   for (const g of f.grants) out.push(`- Zuschuss: ${g.label} ${eur(g.monthly)} im Monat für ${g.months} Monate`);
+  if (r.capitalNeed.total) out.push(`- Kapitalbedarf: ${eur(r.capitalNeed.total)} (Investitionen ${eur(r.capitalNeed.investments)}, Reserve ${eur(r.capitalNeed.reserve)}), Finanzierung inkl. Anfangsliquidität ${eur(r.financingTotal)}, ${r.gap >= 0 ? `Überdeckung ${eur(r.gap)}` : `Lücke ${eur(-r.gap)}`}`);
+  if (r.breakEvenRevenue) out.push(`- Nötiger Monatsumsatz ab Jahr 2 für alle Kosten und Entnahmen (Break-even): ${eur(r.breakEvenRevenue)}`);
+  if (r.firstProfitMonth !== null) out.push(`- Erster Monat mit Überschuss nach Entnahmen: ${monthLabel(f.start, r.firstProfitMonth)}`);
+  if (Number.isFinite(r.minBalance.value)) out.push(`- Niedrigster Kontostand: ${eur(r.minBalance.value)} im ${monthLabel(f.start, r.minBalance.month)}`);
   r.years.forEach((y, i) => out.push(`- Jahr ${i + 1}: Umsatz ${eur(y.revenue)}, Material ${eur(y.material)}, Rohertrag ${eur(y.grossProfit)}, Personal ${eur(y.personnel)}, Gesamtkosten ${eur(y.totalCosts)}, Ergebnis vor Steuern ${eur(y.profit)}, Kontostand am Jahresende ${eur(y.balance)}`));
   return out.join("\n");
 }
