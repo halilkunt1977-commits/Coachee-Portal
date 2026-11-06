@@ -15,7 +15,7 @@ export default async function MyPlan() {
   if (c.coaching_type !== "gruendung") notFound();
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow={t("Meine Gründung")} title={t("Mein Businessplan")} description={t("Abschnitt für Abschnitt, mit Leitfragen zu jedem Kapitel. Dein Coach sieht jede Änderung und arbeitet mit dir daran. Alles wird automatisch gespeichert.")} />
+      <PageHeader eyebrow={t("Meine Gründung")} title={t("Mein Businessplan")} description={t("Dein Coach schreibt deinen Businessplan fürs Amt und für die Bank. Hier kannst du ihn lesen und die Fragen deines Coaches beantworten.")} />
       <PlanPanel user={user} coachee={c} links={{ plan: "/mein-bereich/businessplan", finance: "/mein-bereich/finanzplan", zahlen: null }} />
     </div>
   );

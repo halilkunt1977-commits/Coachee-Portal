@@ -528,7 +528,7 @@ export function PlanEditor(p: Props) {
   }
 }
 
-function FiguresTable({ rows }: { rows: string[][] }) {
+export function FiguresTable({ rows }: { rows: string[][] }) {
   const t = useT();
   return (
     <div className="mt-2 overflow-x-auto">

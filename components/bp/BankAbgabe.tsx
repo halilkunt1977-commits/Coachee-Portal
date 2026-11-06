@@ -23,7 +23,7 @@ const post = (href: string, body: unknown) => fetch(href, { method: "POST", head
 
 /* ---------- Bankangaben: ein Zustand für alle Bereiche ---------- */
 
-export function useBank(href: string, initial: BankInfo, cityLand: string) {
+export function useBank(href: string, initial: BankInfo, cityLand: string, readOnly = false) {
   const [b, setB] = useState<BankInfo>(() => ({ ...initial, land: initial.land || cityLand }));
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,14 +38,14 @@ export function useBank(href: string, initial: BankInfo, cityLand: string) {
   // Bundesland aus dem Wohnort einmal speichern
   const once = useRef(false);
   useEffect(() => {
-    if (!once.current && !initial.land && cityLand) {
+    if (!readOnly && !once.current && !initial.land && cityLand) {
       once.current = true;
       schedule();
     }
-  }, [initial.land, cityLand, schedule]);
+  }, [initial.land, cityLand, schedule, readOnly]);
   const set = (patch: Partial<BankInfo>) => {
     setB((x) => ({ ...x, ...patch }));
-    schedule();
+    if (!readOnly) schedule(); // Coachee liest nur, gespeichert wird nichts
   };
   async function draft(all: boolean) {
     setDrafting(true);
@@ -56,7 +56,7 @@ export function useBank(href: string, initial: BankInfo, cityLand: string) {
     if (out.bank) setB(out.bank);
     if (out.error) setError(out.error);
   }
-  return { b, set, state, draft, drafting, error, href };
+  return { b, set, state, draft, drafting, error, href, readOnly };
 }
 export type BankState = ReturnType<typeof useBank>;
 

@@ -11,9 +11,9 @@ import { htmlToPdf } from "@/lib/cv/pdf";
 
 /*
  * Angaben für Bank und Förderung.
- * GET ?pdf=1: Leitfaden „Bank und Förderung“ als PDF (Coach und Coachee).
+ * GET ?pdf=1: Leitfaden „Bank und Förderung“ als PDF (Coach).
  * POST { copy: true, all? } übernimmt Kapitel aus dem Plan fürs Amt, POST { plan: true, all? } schreibt die Bankfassung mit der KI (Coach).
- * POST { save: BankInfo } speichert die Angaben (Coach und Coachee), POST { draft: true, all? } entwirft die Antworten fürs Bankgespräch (Coach, KI).
+ * POST { save: BankInfo } speichert die Angaben (Coach), POST { draft: true, all? } entwirft die Antworten fürs Bankgespräch (Coach, KI).
  */
 
 async function who(ctx: RouteContext<"/api/businessplan/[id]/bank">) {
@@ -41,7 +41,8 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/busines
 
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/businessplan/[id]/bank">) {
   const w = await who(ctx);
-  if (!w) return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
+  // Bearbeiten nur der Coach
+  if (!w?.coach) return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
   const body = (await request.json().catch(() => null)) as { save?: unknown; draft?: unknown; all?: unknown; copy?: unknown; plan?: unknown } | null;
   try {
     // Kapitel der Bankfassung aus dem Plan fürs Amt übernehmen (alle) oder von der KI schreiben lassen (Coach)
