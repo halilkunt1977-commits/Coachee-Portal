@@ -11,6 +11,7 @@ import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { loadFile, storeFile } from "@/lib/files";
 import { documentFile, importAnyFile, importTarget, type ImportResult } from "@/lib/bp/apply-import";
 import { normalizeFinance, type FinanceInput } from "@/lib/bp/finance";
+import { BRANCHEN } from "@/lib/bp/branchen";
 import { MAX_NOTE, VORHABEN, type ChatTurn } from "@/lib/bp/notes";
 import { appendTurns, setTurnStatus } from "@/lib/bp/schreibhilfe";
 import { SECTIONS, normalizeGlance, normalizeSections, type GlanceItem } from "@/lib/bp/sections";
@@ -66,6 +67,15 @@ export async function saveTitle(coacheeId: string, title: string) {
   const user = await requireUser();
   const c = await gruendungCoachee(user, coacheeId);
   await query("UPDATE business_plans SET title = $2, updated_at = now() WHERE coachee_id = $1", [c.id, String(title ?? "").trim().slice(0, 120)]);
+  return { ok: true };
+}
+
+/** Branche des Vorhabens (nur Coach): ergänzt Pflichtangaben und Anweisungen an die KI */
+export async function saveBranche(coacheeId: string, branche: string) {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const key = BRANCHEN.some((b) => b.key === branche) ? branche : "";
+  await query("UPDATE business_plans SET branche = $2, updated_at = now() WHERE coachee_id = $1", [c.id, key]);
   return { ok: true };
 }
 

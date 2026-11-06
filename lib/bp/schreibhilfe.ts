@@ -44,7 +44,9 @@ Material und Vorrang:
 - Die Notizen und Nachrichten des Coachs sind seine eigenen Angaben aus dem Coaching und haben Vorrang vor allem anderen Material. Übernimm ihre Fakten vollständig und mach aus Stichpunkten zusammenhängenden Text.
 - Die neue Nachricht des Coachs ist entweder weiteres Material oder eine Anweisung (z. B. „kürzer“, „mehr zum Standort“). Eine Anweisung setzt du am letzten Vorschlag um, sonst am bisherigen Text. Alles, was der Coach nicht ändern wollte, bleibt erhalten.
 - Bausteine, Protokolle der Gespräche, Unterlagen und andere Kapitel sind Arbeitsmaterial: Übernimm nur, was zu diesem Kapitel passt, und widersprich den anderen Kapiteln nicht.
-- Beantworte diese Leitfragen, soweit das Material es hergibt: ${def.questions.join(" ")}
+- Pflichtangaben dieses Kapitels (Standard des Coachs, müssen enthalten sein; fehlt etwas im Material, setze einen Platzhalter in eckigen Klammern): ${def.must.join("; ")}.
+- Steht im Material ein Branchenprofil, gehören dessen Angaben für dieses Kapitel ebenfalls hinein.
+- Beantworte außerdem diese Leitfragen, soweit das Material es hergibt: ${def.questions.join(" ")}
 ${summary ? "- Die Executive Summary fasst den ganzen Plan auf einer Seite zusammen: Wer gründet was, ab wann und wo, Leistungen und Kunden, Kundengewinnung, die wichtigsten Zahlen für Jahr 1 bis 3 und erfüllte Voraussetzungen. Schreib sie nur aus den Kapiteln, dem Finanzplan und den Notizen, nichts Neues.\n" : ""}- Nutze nur Fakten aus dem Material. Erfinde keine Zahlen, Namen, Kunden, Statistiken oder Abschlüsse. Wo etwas fehlt, setze einen kurzen Platzhalter in eckigen Klammern, z. B. [Anzahl Betriebe der Branche im Landkreis mit Quelle].
 - Ausnahme: Bittet der Coach ausdrücklich darum, Zahlen oder Fakten zu schätzen oder zu ergänzen, setzt du realistische Annahmen ein und kennzeichnest sie im Text als Annahme (z. B. „rund 40 Aufträge im ersten Jahr (Annahme)“). Statistiken und Quellen erfindest du auch dann nicht.
 - Zahlen aus dem Finanzplan übernimmst du genau so, wie sie im Material stehen.

@@ -2,7 +2,7 @@
 // "from" verweist auf die Bausteine aus den Gesprächen (lib/profile.ts), aus denen der Entwurf entsteht.
 // "words" ist der Umfang, den die Kapitel in der Vorlage ungefähr haben.
 
-export type SectionDef = { key: string; title: string; hint: string; questions: string[]; from: string[]; words: [number, number]; finance?: boolean };
+export type SectionDef = { key: string; title: string; hint: string; questions: string[]; from: string[]; words: [number, number]; finance?: boolean; /** Pflichtangaben: was die fachkundige Stelle und Banken in diesem Kapitel erwarten */ must: string[] };
 
 export const SECTIONS: SectionDef[] = [
   {
@@ -12,6 +12,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Wer gründet was, ab wann und wo (Rechtsform, Startdatum)?", "Welche Leistungen stehen im Mittelpunkt, für welche Kunden?", "Wie werden die ersten Kunden gewonnen?", "Was sagen die Zahlen (Umsatz, Ergebnis, Personal in Jahr 1 bis 3)?", "Welche Voraussetzungen (Zulassung, Qualifikation) sind erfüllt oder noch offen?"],
     from: [],
     words: [300, 450],
+    must: ["Wer gründet was, ab wann, wo und in welcher Rechtsform", "Leistungen und Kundengruppen", "Wie die ersten Kunden gewonnen werden", "Umsatz und Ergebnis Jahr 1 bis 3", "Kapitalbedarf und Finanzierung", "Erfüllte Voraussetzungen (Qualifikation, Zulassung)"],
     finance: true,
   },
   {
@@ -21,6 +22,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Welche Ausbildung, Abschlüsse und Berufserfahrung passen zur Gründung?", "Welche praktischen Erfahrungen gibt es außerhalb des Lebenslaufs?", "Welche fachlichen oder rechtlichen Nachweise (z. B. Handwerksrolle, Meister, Zulassung) liegen vor?", "Welche kaufmännischen Kenntnisse gibt es, welche werden noch erworben?"],
     from: ["gruender"],
     words: [350, 500],
+    must: ["Ausbildung und Abschlüsse", "Berufsjahre in der Branche mit Stationen", "Fachliche oder rechtliche Nachweise (Meister, Zulassung, Sachkunde)", "Kaufmännische Kenntnisse und wie Lücken geschlossen werden"],
   },
   {
     key: "idee",
@@ -29,6 +31,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Welche Produkte oder Leistungen gibt es?", "Woraus entsteht der Bedarf bei den Kunden?", "Wie läuft ein typischer Auftrag ab, von der Anfrage bis zur Rechnung?", "Was ist anders oder besser als bei anderen?"],
     from: ["idee", "preise"],
     words: [300, 450],
+    must: ["Leistungen bzw. Produkte mit Preisen", "Bedarf der Kunden", "Ablauf eines Auftrags von der Anfrage bis zur Rechnung", "Was das Angebot von anderen unterscheidet"],
   },
   {
     key: "zielgruppe",
@@ -37,6 +40,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Welche Kundengruppen gibt es (privat, gewerblich, öffentlich)?", "Was brauchen die einzelnen Gruppen, und wie entscheiden sie?", "Wie wird eine Abhängigkeit von einzelnen Kunden vermieden?", "In welchem Gebiet werden Kunden angesprochen?"],
     from: ["zielgruppe"],
     words: [200, 350],
+    must: ["Kundengruppen mit ungefährem Anteil am Umsatz", "Bedürfnisse und Kaufentscheidung je Gruppe", "Einzugsgebiet", "Wie Abhängigkeit von einzelnen Kunden vermieden wird"],
   },
   {
     key: "markt",
@@ -45,6 +49,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Wie groß ist der Markt im Einzugsgebiet (Zahlen mit Quelle)?", "Wie entwickelt sich die Branche, welche Trends helfen?", "Welche Engpässe oder Chancen gibt es (z. B. Fachkräftemangel, Sanierungsbedarf, Digitalisierung)?"],
     from: ["markt"],
     words: [350, 550],
+    must: ["Marktgröße im Einzugsgebiet mit Quelle", "Entwicklung der Branche", "Trends, Engpässe und Chancen"],
   },
   {
     key: "wettbewerb",
@@ -53,6 +58,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Welche Mitbewerber gibt es im Einzugsgebiet, wie viele etwa?", "Was bieten sie, wo sind sie stark, wo nicht?", "Wodurch hebt sich das Unternehmen ab (Leistung, Erreichbarkeit, Preis, Spezialisierung)?"],
     from: ["markt"],
     words: [250, 350],
+    must: ["Anzahl und Namen wichtiger Mitbewerber", "Vergleich der Mitbewerber (Angebot, Preis, Stärken, Schwächen), am besten als Tabelle", "Abgrenzung des eigenen Angebots"],
   },
   {
     key: "marketing",
@@ -61,6 +67,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Über welche Wege werden Kunden gewonnen (Empfehlung, Direktansprache, Plattformen, Website, Social Media)?", "Wie sehen die Preise aus, und wie wurden sie kalkuliert?", "Was kostet das Marketing im Monat?", "Wie sieht der Plan für die ersten Monate aus?"],
     from: ["marketing", "preise"],
     words: [300, 450],
+    must: ["Vertriebswege mit Kosten im Monat", "Preiskalkulation", "Plan für die ersten drei bis sechs Monate"],
   },
   {
     key: "digital",
@@ -69,6 +76,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Wie ist das Unternehmen online sichtbar (Website, Google-Unternehmensprofil, Plattformen)?", "Welche Software wird für Angebote, Rechnungen, Termine und Buchhaltung genutzt?", "Wie wird mit Kundendaten und Datenschutz umgegangen?"],
     from: ["marketing", "organisation"],
     words: [200, 300],
+    must: ["Website, Google-Unternehmensprofil, Plattformen", "Software für Angebote, Rechnungen und Buchhaltung", "Datenschutz"],
   },
   {
     key: "standort",
@@ -77,6 +85,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Wo ist der Firmensitz, gibt es Büro, Lager oder Werkstatt?", "In welchem Gebiet wird gearbeitet, wie weit wird gefahren?", "Was kosten die Räume, und warum passt der Standort zur Zielgruppe?"],
     from: ["standort"],
     words: [200, 300],
+    must: ["Firmensitz und Räume mit Miete", "Einsatzgebiet und Fahrwege", "Begründung des Standorts"],
   },
   {
     key: "organisation",
@@ -85,6 +94,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Welche Rechtsform, und warum?", "Wer übernimmt welche Aufgaben (Kunden, Ausführung, Buchhaltung)?", "Ab wann und zu welchen Kosten sind Mitarbeitende geplant?", "Welche Partner, Lieferanten, Versicherungen und Genehmigungen gibt es?"],
     from: ["organisation"],
     words: [300, 400],
+    must: ["Rechtsform mit Begründung", "Aufgabenverteilung", "Personal mit Start und Kosten", "Partner, Lieferanten, Versicherungen und Genehmigungen"],
   },
   {
     key: "risiken",
@@ -93,6 +103,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Was kann schiefgehen (Auftragslage, Krankheit, Zulassung, Preise, Fachkräfte)?", "Wie wahrscheinlich ist das, und was wird jeweils dagegen getan?", "Welche Absicherungen gibt es (Versicherungen, Rücklagen, Plan B)?"],
     from: ["chancen", "offen"],
     words: [300, 450],
+    must: ["Mindestens fünf Risiken mit Gegenmaßnahme, am besten als Tabelle", "Absicherungen (Versicherungen, Rücklagen)", "Plan B"],
   },
   {
     key: "finanzen",
@@ -101,6 +112,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Ab wann und über welchen Zeitraum wird geplant?", "Wie entstehen Umsatz und Materialquote?", "Welche laufenden Kosten, Investitionen und Abschreibungen sind angesetzt?", "Wie entwickeln sich Personal, Ergebnis und Liquidität in Jahr 1 bis 3?"],
     from: [],
     words: [600, 850],
+    must: ["Planungszeitraum", "Umsatzherleitung (Preis × Menge)", "Laufende Kosten, Investitionen und Abschreibungen", "Ergebnis, Liquidität und Break-even", "Kapitalbedarf und Finanzierung"],
     finance: true,
   },
   {
@@ -110,6 +122,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Was passiert in den ersten Monaten nach dem Start?", "Wovon lebt die gründende Person in der Anlaufphase (Rücklagen, Gründungszuschuss, Partner)?", "Ab wann trägt das Unternehmen den Lebensunterhalt?"],
     from: ["chancen", "offen"],
     words: [300, 450],
+    must: ["Ablauf der ersten Monate", "Private Entnahme und wovon sie gedeckt ist (Rücklagen, Gründungszuschuss, Partner)", "Ab wann das Unternehmen den Lebensunterhalt trägt"],
     finance: true,
   },
   {
@@ -119,6 +132,7 @@ export const SECTIONS: SectionDef[] = [
     questions: ["Wie soll das Unternehmen in drei bis fünf Jahren aussehen?", "Welche neuen Leistungen, Kunden oder Mitarbeitende sind denkbar?", "Welche Entwicklungen im Markt stützen diesen Weg?"],
     from: ["idee", "chancen"],
     words: [300, 450],
+    must: ["Bild des Unternehmens in drei bis fünf Jahren", "Neue Leistungen, Kunden oder Mitarbeitende", "Markttrends, die diesen Weg stützen"],
     finance: true,
   },
 ];

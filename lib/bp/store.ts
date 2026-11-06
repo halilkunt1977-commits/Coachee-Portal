@@ -9,6 +9,8 @@ export type ImportInfo = { document: string | null; name: string; at: string };
 export type PlanRow = {
   coachee_id: string;
   title: string;
+  /** Schlüssel des Branchenprofils, leer = keins */
+  branche: string;
   sections: Sections;
   glance: GlanceItem[];
   finance: FinanceInput;
@@ -40,7 +42,7 @@ export async function planFor(c: Coachee): Promise<PlanRow> {
 }
 
 async function loadPlan(coacheeId: string): Promise<PlanRow | null> {
-  const row = await one<{ coachee_id: string; title: string; sections: unknown; glance: unknown; finance: unknown; finance_version: number; updated_at: string; finance_updated_by_name: string | null; imports: PlanRow["imports"] }>(
+  const row = await one<{ coachee_id: string; title: string; branche: string | null; sections: unknown; glance: unknown; finance: unknown; finance_version: number; updated_at: string; finance_updated_by_name: string | null; imports: PlanRow["imports"] }>(
     "SELECT bp.*, u.name AS finance_updated_by_name FROM business_plans bp LEFT JOIN users u ON u.id = bp.finance_updated_by WHERE bp.coachee_id = $1",
     [coacheeId],
   );
@@ -48,6 +50,7 @@ async function loadPlan(coacheeId: string): Promise<PlanRow | null> {
   return {
     coachee_id: row.coachee_id,
     title: row.title,
+    branche: row.branche ?? "",
     sections: normalizeSections(row.sections),
     glance: normalizeGlance(row.glance),
     finance: normalizeFinance(row.finance),

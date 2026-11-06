@@ -5,6 +5,7 @@ import type { User } from "../auth";
 import { one, query } from "../db";
 import { categoryLabel } from "../profile";
 import { Budget, chapterContext, loadChats, withoutHealth } from "./context";
+import { brancheOf, brancheText } from "./branchen";
 import { financeSummary } from "./finance";
 import { DRAFT_SCHEMA, instructions, proposeGlance } from "./schreibhilfe";
 import { SECTIONS, chapterProgress, normalizeGlance, normalizeSections, type GlanceItem, type SectionState } from "./sections";
@@ -79,8 +80,8 @@ Entscheide zuerst, was der Coach will:
 Für jedes Kapitel:
 - action: "neu" (leer, sehr dünn oder veraltet), "anpassen" (im Kern gut, aber etwas stimmt nicht mehr, fehlt, widerspricht dem Finanzplan oder anderen Kapiteln, oder das Material beantwortet inzwischen einen Platzhalter in eckigen Klammern), "lassen" (stimmig oder keine Änderung gewünscht).
 - todo: bei "neu"/"anpassen" ein konkreter Schreibauftrag (was genau, welche Zahlen und Fakten gelten, was ergänzt wird), sonst ein kurzer Grund.
-- rating und assessment: deine ehrliche Bewertung des Kapitels in seinem Stand NACH deinen Änderungen, wie die fachkundige Stelle es sehen würde: "gut", "ausbaufaehig" oder "fehlt"; assessment in einem Satz.
-- questions: Was im Kapitel noch fehlt und nur der Coach oder die gründende Person beantworten kann, als konkrete, kurze Rückfragen (höchstens drei, z. B. „Wie viele Malerbetriebe gibt es im Landkreis Fürth und woher stammt die Zahl?“). Keine Fragen, deren Antwort schon im Material steht. Bei einem guten Kapitel eine leere Liste.
+- rating und assessment: deine ehrliche Bewertung des Kapitels in seinem Stand NACH deinen Änderungen, gemessen an den Pflichtangaben des Standards und des Branchenprofils und daran, wie die fachkundige Stelle es sehen würde: "gut" (alle Pflichtangaben konkret erfüllt), "ausbaufaehig" oder "fehlt"; assessment in einem Satz, der die fehlenden Pflichtangaben nennt.
+- questions: Vor allem fehlende Pflichtangaben. Was im Kapitel noch fehlt und nur der Coach oder die gründende Person beantworten kann, als konkrete, kurze Rückfragen (höchstens drei, z. B. „Wie viele Malerbetriebe gibt es im Landkreis Fürth und woher stammt die Zahl?“). Keine Fragen, deren Antwort schon im Material steht. Bei einem guten Kapitel eine leere Liste.
 
 Regeln:
 - Zahlen im Plan müssen mit dem Finanzplan übereinstimmen. Weicht ein Kapitel ab, ist es "anpassen".
@@ -118,6 +119,8 @@ async function planMaterial(c: Coachee, earlier: string[], attached: Attached[] 
   const b = new Budget(110000);
   if (plan.title || c.goal) b.out.push(`Vorhaben: ${plan.title || c.goal}`);
   b.block("Notizen des Coachs zum ganzen Vorhaben", notes.vorhaben, 8000);
+  b.block("Standard des Coachs: Pflichtangaben je Kapitel", SECTIONS.map((s, i) => `${i + 1}. ${s.title} [${s.key}]: ${s.must.join("; ")}`).join("\n"), 5000);
+  b.block("Branchenprofil", brancheText(brancheOf(plan.branche)), 5000);
   b.block("Vom Coach gerade mitgegebene Dateien und Fotos (wichtig, gehören zu seiner Nachricht)", attachedBlock(attached, 24000), 24000);
   b.block("Frühere Angaben des Coachs an dich (älteste zuerst, gelten weiter)", earlier.map((m) => `- ${m}`).join("\n"), 8000);
   b.block("Finanzplan (maßgebliche Zahlen)", financeSummary(plan.finance), 8000);

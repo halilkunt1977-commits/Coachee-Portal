@@ -6,6 +6,7 @@ import { query, one } from "../db";
 import { categoryLabel as docCategoryLabel } from "../documents";
 import { categoryLabel } from "../profile";
 import { normalizeSurvey } from "../survey/types";
+import { brancheOf, brancheText } from "./branchen";
 import { financeSummary } from "./finance";
 import { normalizeTurns, openProposal, VORHABEN, type ChatTurn } from "./notes";
 import { SECTIONS, sourceList } from "./sections";
@@ -90,8 +91,9 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
 
   const b = new Budget(all ? 80000 : 75000);
 
-  // 1. Notizen des Coachs
+  // 1. Notizen des Coachs, Branchenprofil
   b.block("Notizen des Coachs zum ganzen Vorhaben", notes.vorhaben, 6000);
+  b.block("Branchenprofil", brancheText(brancheOf(plan.branche), all ? undefined : key), 4000);
   const turns = notes.chats[key] ?? [];
   const own = coachTurns(turns);
   if (all) {

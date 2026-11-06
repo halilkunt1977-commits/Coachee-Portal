@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
+import { saveBranche, saveGlance, saveProjectNotes, saveSection, saveTitle } from "@/app/actions/businessplan";
+import { BRANCHEN, brancheOf } from "@/lib/bp/branchen";
+import type { ChapterReview } from "@/lib/bp/gesamt-ki";
 import type { RunView } from "@/lib/bp/gesamt-ki";
 import type { ChatTurn } from "@/lib/bp/notes";
 import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sections } from "@/lib/bp/sections";
@@ -18,6 +20,7 @@ type Props = {
   coach: boolean;
   name: string;
   title: string;
+  branche: string;
   sections: Sections;
   glance: GlanceItem[];
   figures: string[][] | null;
@@ -54,6 +57,8 @@ export function PlanEditor(p: Props) {
   );
   const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && chapterProgress(p.sections[s.key].text, s).state !== "fertig")?.key ?? "idee"));
   const [title, setTitle] = useState(p.title);
+  const [branche, setBranche] = useState(p.branche);
+  const profile = brancheOf(branche);
   const [glance, setGlance] = useState({ items: p.glance, key: 0 });
   /** Die KI passt gerade den ganzen Plan an: so lange nichts bearbeiten */
   const [aiRunning, setAiRunning] = useState(false);
@@ -127,6 +132,10 @@ export function PlanEditor(p: Props) {
     return res?.ok ? null : "Das hat nicht geklappt. Bitte noch einmal versuchen.";
   };
 
+  // Letzte Bewertung der KI je Kapitel
+  const reviewRun = [...runs].reverse().find((r) => r.status === "fertig" && r.result?.review?.length);
+  const review: Record<string, ChapterReview> = Object.fromEntries((reviewRun?.result?.review ?? []).map((x) => [x.key, x]));
+
   // Offene Änderungen der KI je Kapitel (die jüngste zählt)
   const pending: Record<string, { runId: string; before: string; after: string }> = {};
   for (const r of runs) for (const x of r.changes) {
@@ -180,6 +189,15 @@ export function PlanEditor(p: Props) {
             />
             <span className="mt-1 block text-xs text-muted">{t("Auf dem Deckblatt steht „BUSINESSPLAN – {name}“ und darunter dieser Untertitel.", { name: p.name })}</span>
           </label>
+          {p.coach && (
+            <label className="min-w-0 basis-56">
+              <span className="label">Branche</span>
+              <select className="input" value={branche} onChange={(e) => { setBranche(e.target.value); void saveBranche(p.coacheeId, e.target.value); }}>
+                <option value="">Keine Branche gewählt</option>
+                {BRANCHEN.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+              </select>
+            </label>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Link href={p.financeHref} className="btn-ghost">{t("Finanzplan")}</Link>
             {p.share}
@@ -254,6 +272,7 @@ export function PlanEditor(p: Props) {
                     </span>
                     {sec.conflict && <span className="text-danger" title={t("Konflikt")}>!</span>}
                     {pending[s.key] && <span className="text-gold" title="Von der KI geändert, noch nicht übernommen">✦</span>}
+                    {p.ai && review[s.key] && <span className={`size-2 shrink-0 rounded-full ${review[s.key].rating === "gut" ? "bg-ok" : review[s.key].rating === "fehlt" ? "bg-danger" : "bg-gold"}`} title={`Bewertung der KI: ${review[s.key].rating === "ausbaufaehig" ? "ausbaufähig" : review[s.key].rating === "fehlt" ? "fehlt viel" : "gut"}`} />}
                   </button>
                 </li>
               );
@@ -296,7 +315,16 @@ export function PlanEditor(p: Props) {
         </div>
 
         <details className="rounded-xl bg-bg px-4 py-3" open={!sec.text.trim()}>
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">{t("Leitfragen")}</summary>
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted">{t("Pflichtangaben und Leitfragen")}</summary>
+          <p className="mt-2 text-xs font-semibold text-muted">{t("Pflichtangaben")}</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{def.must.map((q) => <li key={q}>{t(q)}</li>)}</ul>
+          {p.coach && profile?.chapters[def.key]?.length ? (
+            <>
+              <p className="mt-2 text-xs font-semibold text-muted">{t("Für die Branche zusätzlich")} ({profile.label})</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{profile.chapters[def.key]!.map((q) => <li key={q}>{q}</li>)}</ul>
+            </>
+          ) : null}
+          <p className="mt-2 text-xs font-semibold text-muted">{t("Leitfragen")}</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{def.questions.map((q) => <li key={q}>{t(q)}</li>)}</ul>
           <p className="mt-2 text-xs text-muted">{t("Umfang in der Vorlage: etwa {a} bis {b} Wörter, sachlich in der dritten Person.", { a: def.words[0], b: def.words[1] })}</p>
         </details>
@@ -316,6 +344,14 @@ export function PlanEditor(p: Props) {
                 schedule();
               }}>{t("Meine Fassung behalten")}</button>
             </div>
+          </div>
+        )}
+
+        {p.ai && review[active] && review[active].rating !== "gut" && (
+          <div className="space-y-1 rounded-xl border border-line-soft bg-surface px-4 py-3 text-sm">
+            <p><span className={`mr-1.5 inline-block size-2 rounded-full ${review[active].rating === "fehlt" ? "bg-danger" : "bg-gold"}`} /><span className="font-semibold">Bewertung der KI: {review[active].rating === "fehlt" ? "fehlt viel" : "ausbaufähig"}.</span> {review[active].text}</p>
+            {review[active].questions.length > 0 && <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted">{review[active].questions.map((q) => <li key={q}>{q}</li>)}</ul>}
+            <p className="text-xs text-muted">Antworten oben im Chat der KI geben, dann passt sie das Kapitel an.</p>
           </div>
         )}
 
