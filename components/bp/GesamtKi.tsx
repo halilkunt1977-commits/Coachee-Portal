@@ -125,17 +125,6 @@ export function GesamtKi(p: Props) {
     p.onCleared();
   }
 
-  /** Rückfrage beantworten: Frage ins Eingabefeld, Antwort dahinter schreiben oder einsprechen */
-  function answer(key: string, q: string) {
-    setMessage(`${chapterTitle(key)}, deine Frage: ${q}\nAntwort: `);
-    requestAnimationFrame(() => {
-      const el = field.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    });
-  }
-
   const empty = !legacy.length && !p.runs.length;
   const reviewRun = [...p.runs].reverse().find((r) => r.status === "fertig" && r.result?.review?.length);
 
@@ -157,7 +146,7 @@ export function GesamtKi(p: Props) {
           {p.runs.map((r) => (
             <div key={r.id} className="space-y-2">
               <Bubble text={r.message.trim() || "Ganzen Plan prüfen und verbessern"} />
-              <RunCard run={r} decide={p.decide} onOpen={p.onOpen} review={r.id === reviewRun?.id} onAnswer={answer} onEstimate={(key, q) => void send(`${chapterTitle(key)}: Bitte ergänze dazu realistische Annahmen und kennzeichne sie im Text als Annahme: ${q}`)} disabled={busy || running} />
+              <RunCard run={r} decide={p.decide} onOpen={p.onOpen} review={r.id === reviewRun?.id} coacheeId={p.coacheeId} onSubmit={(text) => send(text)} disabled={busy || running} />
             </div>
           ))}
         </div>
@@ -211,7 +200,7 @@ function Bubble({ text }: { text: string }) {
   return <p className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-tint px-3.5 py-2 text-sm">{text}</p>;
 }
 
-function RunCard({ run, decide, onOpen, review, onAnswer, onEstimate, disabled }: { run: RunView; decide: Decide; onOpen: (key: string) => void; review: boolean; onAnswer: (key: string, q: string) => void; onEstimate: (key: string, q: string) => void; disabled: boolean }) {
+function RunCard({ run, decide, onOpen, review, coacheeId, onSubmit, disabled }: { run: RunView; decide: Decide; onOpen: (key: string) => void; review: boolean; coacheeId: string; onSubmit: (text: string) => Promise<void>; disabled: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const work = run.progress.chapters.filter((x) => x.action !== "lassen");
@@ -278,7 +267,7 @@ function RunCard({ run, decide, onOpen, review, onAnswer, onEstimate, disabled }
       )}
       {failed.length > 0 && <p className="text-danger">Nicht geschafft: {failed.map((x) => chapterTitle(x.key)).join(", ")}. Schreib einfach „noch einmal“.</p>}
       {error && <p className="text-danger" role="alert">{error}</p>}
-      {review && run.result?.review && <Review items={run.result.review} onOpen={onOpen} onAnswer={onAnswer} onEstimate={onEstimate} disabled={disabled} />}
+      {review && run.result?.review && <Review runId={run.id} items={run.result.review} onOpen={onOpen} coacheeId={coacheeId} onSubmit={onSubmit} disabled={disabled} />}
     </div>
   );
 }
@@ -310,16 +299,104 @@ function ChangeRow({ change: x, reason, busy, onOpen, act }: { change: RunChange
   );
 }
 
-function Review({ items, onOpen, onAnswer, onEstimate, disabled }: { items: ChapterReview[]; onOpen: (key: string) => void; onAnswer: (key: string, q: string) => void; onEstimate: (key: string, q: string) => void; disabled: boolean }) {
+/** Antwort auf eine Rückfrage: eigener Text, oder „schätzen“ (die KI setzt eine gekennzeichnete Annahme ein) */
+type Answer = { text: string } | { estimate: true };
+const answerKey = (key: string, q: string) => `${key}|${q}`;
+
+/** Gesammelte Antworten bleiben im Browser, bis sie eingearbeitet sind (falls die Seite zwischendurch neu lädt) */
+function useAnswers(runId: string) {
+  const store = `bp-antworten-${runId}`;
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(store);
+      // einmalig beim Öffnen aus dem Browser laden
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setAnswers(JSON.parse(raw) as Record<string, Answer>);
+    } catch {}
+  }, [store]);
+  const save = (next: Record<string, Answer>) => {
+    setAnswers(next);
+    try {
+      if (Object.keys(next).length) localStorage.setItem(store, JSON.stringify(next));
+      else localStorage.removeItem(store);
+    } catch {}
+  };
+  return [answers, save] as const;
+}
+
+/** Alle Antworten in einer Nachricht: die KI arbeitet sie in einem Durchgang in den ganzen Plan ein */
+function answersMessage(items: ChapterReview[], answers: Record<string, Answer>) {
+  const given: string[] = [];
+  const estimate: string[] = [];
+  for (const x of items)
+    for (const q of x.questions) {
+      const a = answers[answerKey(x.key, q)];
+      if (!a) continue;
+      if ("estimate" in a) estimate.push(`- ${chapterTitle(x.key)}: ${q}`);
+      else if (a.text.trim()) given.push(`- ${chapterTitle(x.key)}: ${q}\n  Antwort: ${a.text.trim()}`);
+    }
+  return [
+    "Antworten auf deine Rückfragen. Arbeite alles in einem Durchgang in den ganzen Plan ein: in das Kapitel, zu dem die Frage gehört, und überall sonst, wo es dazu passt (auch Zahlen und „Auf einen Blick“).",
+    given.length ? `\n${given.join("\n")}` : "",
+    estimate.length ? `\nHierzu bitte realistische Annahmen ergänzen und im Text als Annahme kennzeichnen:\n${estimate.join("\n")}` : "",
+  ].join("\n").trim();
+}
+
+function Review({ runId, items, onOpen, coacheeId, onSubmit, disabled }: { runId: string; items: ChapterReview[]; onOpen: (key: string) => void; coacheeId: string; onSubmit: (text: string) => Promise<void>; disabled: boolean }) {
   const asks = items.reduce((n, x) => n + x.questions.length, 0);
   const [open, setOpen] = useState(asks > 0);
+  const [answers, setAnswers] = useAnswers(runId);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const weak = items.filter((x) => x.rating !== "gut").length;
+  const done = items.reduce((n, x) => n + x.questions.filter((q) => answers[answerKey(x.key, q)]).length, 0);
+
+  const set = (k: string, a: Answer | null) => {
+    const next = { ...answers };
+    if (a) next[k] = a;
+    else delete next[k];
+    setAnswers(next);
+  };
+  const startEdit = (k: string) => {
+    const a = answers[k];
+    setDraft(a && "text" in a ? a.text : "");
+    setEditing(k);
+  };
+  const keep = () => {
+    if (editing) set(editing, draft.trim() ? { text: draft.trim() } : null);
+    setEditing(null);
+  };
+  const estimateRest = () => {
+    const next = { ...answers };
+    for (const x of items) for (const q of x.questions) next[answerKey(x.key, q)] ??= { estimate: true };
+    setAnswers(next);
+  };
+  async function submit() {
+    if (!done || sending) return;
+    setSending(true);
+    await onSubmit(answersMessage(items, answers));
+    setSending(false);
+    setAnswers({});
+  }
+
+  const bar = asks > 0 && (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface px-2.5 py-2 text-xs">
+      <span className="font-medium">{done} von {asks} Rückfragen beantwortet</span>
+      {done < asks && <button type="button" className="link" disabled={disabled} onClick={estimateRest}>Rest von KI schätzen lassen</button>}
+      <button type="button" className="btn btn-sm ml-auto" disabled={disabled || sending || !done} onClick={() => void submit()}>✦ {sending ? "Wird gestartet …" : done < asks ? `${done} Antworten einarbeiten` : "Alle Antworten einarbeiten"}</button>
+    </div>
+  );
+
   return (
     <div className="space-y-2 border-t border-line-soft pt-2.5">
       <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">Bewertung je Kapitel</span>
         <span className="text-xs text-muted">{items.length - weak} gut, {weak} ausbaufähig{asks ? `, ${asks} Rückfragen` : ""} · {open ? "zuklappen" : "aufklappen"}</span>
       </button>
+      {open && asks > 0 && <p className="text-xs text-muted">Beantworte erst alle Fragen, die du beantworten kannst, und lass den Rest schätzen. Dann arbeitet die KI alles auf einmal in den Plan ein.</p>}
+      {open && bar}
       {open && (
         <ul className="space-y-2">
           {items.map((x) => (
@@ -332,17 +409,57 @@ function Review({ items, onOpen, onAnswer, onEstimate, disabled }: { items: Chap
                   {x.text && <span className="block text-xs text-muted">{x.text}</span>}
                 </span>
               </p>
-              {x.questions.map((q) => (
-                <div key={q} className="ml-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-[#fdfaf3] px-2.5 py-1.5 text-xs">
-                  <span className="min-w-0 flex-1 basis-60">❓ {q}</span>
-                  <button type="button" className="link" disabled={disabled} onClick={() => onAnswer(x.key, q)}>Beantworten</button>
-                  <button type="button" className="link" disabled={disabled} onClick={() => onEstimate(x.key, q)}>KI schätzen lassen</button>
-                </div>
-              ))}
+              {x.questions.map((q) => {
+                const k = answerKey(x.key, q);
+                const a = answers[k];
+                return (
+                  <div key={q} className={`ml-4 space-y-1.5 rounded-lg px-2.5 py-1.5 text-xs ${a ? "bg-[#eef6ea]" : "bg-[#fdfaf3]"}`}>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="min-w-0 flex-1 basis-60">{a ? "✓" : "❓"} {q}</span>
+                      {editing !== k && !a && (
+                        <>
+                          <button type="button" className="link" disabled={disabled} onClick={() => startEdit(k)}>Beantworten</button>
+                          <button type="button" className="link" disabled={disabled} onClick={() => set(k, { estimate: true })}>KI schätzen lassen</button>
+                        </>
+                      )}
+                      {editing !== k && a && (
+                        <>
+                          {"text" in a && <button type="button" className="link" disabled={disabled} onClick={() => startEdit(k)}>Ändern</button>}
+                          <button type="button" className="link" disabled={disabled} onClick={() => set(k, null)}>Zurücknehmen</button>
+                        </>
+                      )}
+                    </div>
+                    {editing !== k && a && <p className="whitespace-pre-wrap pl-4 text-muted">{"text" in a ? a.text : "Wird von der KI geschätzt und als Annahme gekennzeichnet."}</p>}
+                    {editing === k && (
+                      <div className="space-y-1.5">
+                        <textarea
+                          aria-label={`Antwort: ${q}`}
+                          className="input min-h-16 text-sm"
+                          rows={2}
+                          autoFocus
+                          value={draft}
+                          maxLength={2000}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) keep();
+                            if (e.key === "Escape") setEditing(null);
+                          }}
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button type="button" className="btn btn-sm" onClick={keep}>Antwort merken</button>
+                          <Recorder compact coacheeId={coacheeId} onText={(t) => setDraft((d) => (d.trim() ? `${d.trimEnd()} ${t}` : t))} />
+                          <button type="button" className="link" onClick={() => setEditing(null)}>Abbrechen</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </li>
           ))}
         </ul>
       )}
+      {open && done > 0 && bar}
     </div>
   );
 }
