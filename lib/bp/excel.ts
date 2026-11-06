@@ -14,7 +14,8 @@ const EUR_OPEN = '_-* #,##0.00\\ "€"_-;\\-* #,##0.00\\ "€"_-;_-* "-"??\\ "�
 const QTY = "0;[Red]\\(0\\);\\-";
 const QTY2 = "#,##0.0#;[Red]\\(#,##0.0#\\);\\-";
 const PCT = "0.0%";
-const NAVY = "FF1F4E78";
+const NAVY = "FF0E2841";
+const GOLD = "FFC9A227";
 const LIGHT = "FFD9EAF7";
 const GREEN = "FFE2F0D9";
 const GREY = "FFE7E6E6";
@@ -51,7 +52,8 @@ export async function financeWorkbook(f: FinanceInput, meta: { name: string; tit
     c.value = text;
     c.font = { bold: true, size, color: { argb: "FFFFFFFF" } };
     c.fill = fill(NAVY);
-    c.alignment = { vertical: "middle" };
+    c.alignment = { vertical: "middle", indent: 1 };
+    c.border = { bottom: { style: "thick", color: { argb: GOLD } } };
     ws.getRow(1).height = 26;
   };
   const head = (ws: ExcelJS.Worksheet, row: number, values: (string | Date)[], argb = NAVY, white = true) => {

@@ -41,12 +41,25 @@ const plainTable = (rows: string[][], cls = "tbl") =>
 
 type Meta = { title: string; name: string; email: string; phone: string | null; coach: string; date: string };
 
-export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string) {
+/** Ziele im Inhaltsverzeichnis: Schlüssel und Überschrift, wie sie im PDF steht (zum Suchen der Seitenzahl) */
+export function tocTargets(hasFinance: boolean) {
+  return [
+    { key: "blick", label: "Auf einen Blick", heading: "Auf einen Blick" },
+    ...SECTIONS.map((s, i) => ({ key: s.key, label: `${i + 1}. ${s.title}`, heading: `${i + 1}. ${s.title}` })),
+    ...(hasFinance ? [{ key: "anhang", label: "Anhang: Finanzplan", heading: "Anhang: Finanzplan" }] : []),
+  ];
+}
+
+const cssString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
+
+/** pages: Seitenzahlen fürs Inhaltsverzeichnis (aus einem ersten Durchgang), sonst ohne Zahlen */
+export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string, pages: Record<string, number> = {}) {
   const r = calculate(finance);
   const hasFinance = !financeIsEmpty(finance);
   const figures = hasFinance ? plainTable(keyFigures(finance, r), "tbl figures") : "";
 
-  const toc = SECTIONS.map((s) => `<li>${esc(s.title)}</li>`).join("");
+  const toc = tocTargets(hasFinance).map((x) => `<li${x.key === "blick" || x.key === "anhang" ? ' class="plain"' : ""}><span class="t">${esc(x.label)}</span><span class="dots"></span><span class="p">${pages[x.key] ?? ""}</span></li>`).join("");
+  const running = cssString(`Businessplan · ${meta.name}${meta.title ? ` · ${meta.title}` : ""}`.slice(0, 110));
   const glanceHtml = glance
     .filter((g) => g.label.trim() && g.value.trim())
     .map((g) => `<p class="glance"><strong>${esc(g.label)}:</strong><br>${mark(esc(g.value)).replace(/\n/g, "<br>")}</p>`)
@@ -64,9 +77,11 @@ export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Businessplan</title><style>
 ${fontCss}
 @page { size: A4; margin: 25mm 25mm 22mm 25mm;
-  @bottom-right { content: counter(page); font: 8.5pt "Source Sans 3", Arial, sans-serif; color: #7a7a7a; } }
-@page :first { margin: 0; @bottom-right { content: none; } }
-@page wide { size: A4 landscape; margin: 14mm 12mm 16mm 12mm; }
+  @top-left { content: ${running}; font: 8.5pt "Source Sans 3", Arial, sans-serif; color: #0e2841; vertical-align: bottom; padding-bottom: 3mm; border-bottom: .6pt solid #c9a227; }
+  @top-right { content: ""; border-bottom: .6pt solid #c9a227; vertical-align: bottom; padding-bottom: 3mm; }
+  @bottom-right { content: "Seite " counter(page) " von " counter(pages); font: 8.5pt "Source Sans 3", Arial, sans-serif; color: #7a7a7a; } }
+@page :first { margin: 0; @top-left { content: none; border: none; } @top-right { content: none; border: none; } @bottom-right { content: none; } }
+@page wide { size: A4 landscape; margin: 16mm 12mm 16mm 12mm; }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; font-family: "Source Sans 3", Aptos, Arial, sans-serif; font-size: 11pt; line-height: 1.32; color: #000; }
@@ -90,10 +105,15 @@ mark { background: #fbeec8; color: inherit; padding: 0 .5mm; }
 .card .date { position: absolute; bottom: 2.5mm; left: 4mm; right: 4mm; font-size: 8.5pt; color: #595959; }
 .front { break-after: page; }
 .front .t1 { margin-bottom: 4mm; }
-.front .t3 { margin: 9mm 0 4mm; }
-.toc { padding-left: 9mm; margin: 0; }
-.toc li { margin: 0 0 2.4mm; padding-left: 2mm; }
+.front .t3 { margin: 9mm 0 5mm; color: #0e2841; }
+.toc { list-style: none; padding: 0; margin: 0; }
+.toc li { display: flex; align-items: baseline; gap: 2mm; margin: 0 0 2.6mm; }
+.toc li.plain { font-weight: 700; color: #0e2841; }
+.toc li.plain:last-child { margin-top: 4mm; }
+.toc .dots { flex: 1; border-bottom: .8pt dotted #9a9a9a; transform: translateY(-1mm); }
+.toc .p { min-width: 7mm; text-align: right; font-variant-numeric: tabular-nums; }
 .blick { break-after: page; }
+.blick h2, .chapter h2, .annex h2 { color: #0e2841; padding-bottom: 1.6mm; border-bottom: .8pt solid #c9a227; }
 .blick h2 { margin-bottom: 8mm; }
 .glance { margin-bottom: 5.5mm; }
 .chapter h2 { margin: 8mm 0 4mm; }
@@ -107,10 +127,10 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
 .figures td:not(:first-child), .figures th:not(:first-child) { text-align: right; }
 .annex { break-before: page; }
 .annex h2 { font-size: 13pt; margin-bottom: 1mm; }
-.annex h3 { font-size: 11pt; margin: 6mm 0 2mm; color: #1f4e78; }
+.annex h3 { font-size: 11pt; margin: 6mm 0 2mm; color: #0e2841; }
 .lead { color: #595959; font-size: 9.5pt; }
 .fin th, .fin td { font-size: 8.6pt; padding: 1.1mm 1.6mm; border-bottom: .5pt solid #d9d9d9; text-align: left; vertical-align: top; }
-.fin th { background: #1f4e78; color: #fff; font-weight: 600; }
+.fin th { background: #0e2841; color: #fff; font-weight: 600; }
 .fin td.n, .fin th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .fin tr.sum td { background: #e2f0d9; font-weight: 700; }
 .fin tr.sub td { background: #e7e6e6; font-weight: 700; }
