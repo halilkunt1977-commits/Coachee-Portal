@@ -1,11 +1,14 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { importFinanceItems, saveFinance } from "@/app/actions/businessplan";
 import {
-  COST_CATEGORIES, FINANCING_KIND, MONTHS, calculate, eur, financeHints, investmentDepreciation, liquidityRows, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange,
+  COST_CATEGORIES, FINANCING_KIND, LIVING_PRESETS, MONTHS, calculate, eur, financeHints, investmentDepreciation, liquidityRows, livingTotal, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange,
   type FinanceInput, type FinanceResult, type Financing, type NoteKey, type Revenue, type Year3,
 } from "@/lib/bp/finance";
+import { brancheOf, type Branche } from "@/lib/bp/branchen";
+import { fehlendePosten, pruefeFinanzplan } from "@/lib/bp/finanz-pruefung";
 import { Num, Pick, QtyInput, Rows, Text } from "./fields";
 import { FinanzFassungen } from "./FinanzFassungen";
 import { FinanzKi } from "./FinanzKi";
@@ -29,6 +32,10 @@ type Props = {
   zahlenHref: string | null;
   imported: { name: string; at: string } | null;
   filled: boolean;
+  /** Branche des Businessplans (Vorschläge und Prüfung) */
+  branche: string;
+  /** Businessplan-KI: Kapitel an die Zahlen anpassen (nur Coach mit KI) */
+  gesamtHref: string | null;
 };
 
 // Die Reiter entsprechen den Arbeitsblättern der Excel-Vorlage
@@ -58,6 +65,24 @@ export function FinanceEditor(p: Props) {
   const [notice, setNotice] = useState<string | null>(p.prefilled ? t("Die {n} Zahlen aus den Gesprächen sind schon eingetragen. Bitte Mengen, Kosten und Laufzeiten prüfen.", { n: p.itemCount }) : null);
   const [confirmImport, setConfirmImport] = useState(false);
   const r = useMemo(() => calculate(f), [f]);
+  const router = useRouter();
+  const branche = brancheOf(p.branche);
+  const [kiRequest, setKiRequest] = useState<{ text: string; n: number } | null>(null);
+  const askKi = (text: string) => setKiRequest((x) => ({ text, n: (x?.n ?? 0) + 1 }));
+  const [planBusy, setPlanBusy] = useState<"" | "laeuft" | "fehler">("");
+
+  async function adjustPlan() {
+    if (!p.gesamtHref || planBusy === "laeuft") return;
+    setPlanBusy("laeuft");
+    await save();
+    const res = await fetch(p.gesamtHref, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Der Finanzplan wurde geändert. Passe die Kapitel „Finanzwirtschaftliche Planung“, „Aufbauphase und Sicherung des Lebensunterhalts“ und „Auf einen Blick“ an die aktuellen Zahlen an, und alle anderen Stellen im Plan, an denen Zahlen genannt werden. Erfinde nichts dazu." }),
+    }).catch(() => null);
+    if (!res?.ok) return setPlanBusy("fehler");
+    router.push(p.planHref);
+  }
 
   const { state, schedule, save, resume } = useAutosave(async () => {
     const res = await saveFinance(p.coacheeId, version.current, f);
@@ -122,10 +147,16 @@ export function FinanceEditor(p: Props) {
         </div>
       )}
 
-      {p.coach && <FinanzKi coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} onApply={(next) => { setF(next); schedule(); }} />}
+      {p.coach && <FinanzKi coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} request={kiRequest} onApply={(next) => { setF(next); schedule(); }} />}
       {p.coach && <FinanzFassungen coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} onApply={(next) => { setF(next); schedule(); }} />}
 
-      <Summary f={f} r={r} />
+      <Summary f={f} r={r} branche={branche} />
+      {p.coach && p.gesamtHref && !!f.revenues.length && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <button type="button" className="btn-ghost btn-sm" disabled={planBusy === "laeuft" || state.kind === "conflict"} onClick={() => void adjustPlan()}>{planBusy === "laeuft" ? t("Startet …") : `✦ ${t("Businessplan an diese Zahlen anpassen")}`}</button>
+          <span className="text-xs text-muted">{planBusy === "fehler" ? t("Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen.") : t("Die Kapitel mit Zahlen werden neu geschrieben, die Änderungen sind im Businessplan markiert.")}</span>
+        </div>
+      )}
 
       <nav className="no-scrollbar sticky top-14 z-10 -mx-1 flex gap-1 overflow-x-auto rounded-xl bg-surface p-1 shadow-sm ring-1 ring-line-soft lg:top-16" role="tablist" aria-label={t("Arbeitsblätter")}>
         {TABS.map((x) => (
@@ -148,6 +179,7 @@ export function FinanceEditor(p: Props) {
           <NoteField f={f} k="period" set={set} />
           <Assumption title={t("Materialquote")} hint="Material und Wareneinsatz in % vom Netto-Umsatz" values={f.materialPct} suffix="%" digits={1} onChange={(materialPct) => set({ materialPct })} note={<NoteField f={f} k="material" set={set} />} />
           <Assumption title={t("Private Entnahmen im Monat")} hint="Was für den Lebensunterhalt aus dem Unternehmen entnommen wird" values={f.privateDraw} suffix="€" onChange={(privateDraw) => set({ privateDraw })} note={<NoteField f={f} k="private" set={set} />} />
+          <Living f={f} set={set} />
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Num label="Anfangsliquidität" suffix="€" value={f.openingCash} onChange={(v) => set({ openingCash: v })} hint="Kontostand bzw. Eigenmittel zum Start" />
@@ -213,7 +245,7 @@ export function FinanceEditor(p: Props) {
             make={(label = "") => ({ label, monthly: [0, 0, 0] as Year3, category: presetCategory(label), note: "", from: 0 })}
             addLabel="Kostenart"
             empty="Noch keine laufenden Kosten, z. B. Telefon, Versicherung, Fahrzeug, Steuerberatung."
-            presets={["Telefon / Internet", "Betriebshaftpflicht / Beiträge", "Kraftstoff", "Marketing", "Steuerberater / Buchhaltung", "Miete"]}
+            presets={branche ? undefined : ["Telefon / Internet", "Betriebshaftpflicht / Beiträge", "Kraftstoff", "Marketing", "Steuerberater / Buchhaltung", "Miete"]}
             render={(x, s) => (
               <>
                 <Text className="col-span-2 sm:flex-1 sm:basis-56" label="Kostenart" value={x.label} onChange={(v) => s({ label: v })} />
@@ -235,6 +267,18 @@ export function FinanceEditor(p: Props) {
         </Block>
       )}
 
+      {tab === "kosten" && p.coach && (
+        <BranchenVorschlag branche={branche} items={fehlendePosten(f, branche).kosten} what="laufende Kosten" ai={!!p.gesamtHref}
+          onAdd={(label) => set({ costs: [...f.costs, { label, monthly: [0, 0, 0], category: presetCategory(label), note: "", from: 0 }] })}
+          onAsk={(items) => askKi(`Ergänze diese laufenden Kosten, die in der Branche ${branche?.label} üblich sind, mit realistischen Monatsbeträgen für eine kleine Gründung in Deutschland: ${items.join(", ")}. Schreibe in die Herleitung jedes neuen Postens „Schätzung, bitte prüfen“ und wie du auf den Betrag kommst. Bestehende Posten bleiben unverändert.`)} />
+      )}
+
+      {tab === "invest" && p.coach && (
+        <BranchenVorschlag branche={branche} items={fehlendePosten(f, branche).investitionen} what="Investitionen" ai={!!p.gesamtHref}
+          onAdd={(label) => set({ investments: [...f.investments, { label, amount: 0, life: 60, month: 0, reason: "", note: "" }] })}
+          onAsk={(items) => askKi(`Ergänze diese Anschaffungen, die in der Branche ${branche?.label} üblich sind, mit realistischen Beträgen und Nutzungsdauern für eine kleine Gründung in Deutschland: ${items.join(", ")}. Schreibe in den Hinweis jedes neuen Postens „Schätzung, bitte prüfen“. Bestehende Posten bleiben unverändert.`)} />
+      )}
+
       {tab === "invest" && (
         <Block title={t("Investitionsplan")} intro="Anschaffungen mit Nutzungsdauer: daraus entsteht die monatliche Abschreibung. Ohne Nutzungsdauer zählt der Betrag im Zahlungsmonat sofort als Aufwand." total={eur(r.capitalNeed.investments)} totalHint={t("Abschreibung {betrag} im Monat", { betrag: eur(sum(f.investments.map(investmentDepreciation)), 2) })}>
           <Rows
@@ -243,7 +287,7 @@ export function FinanceEditor(p: Props) {
             make={(label = "") => ({ label, amount: 0, life: 60, month: 0, reason: "", note: "" })}
             addLabel="Investition"
             empty="Noch keine Investitionen, z. B. Werkzeug, Messgeräte, Computer, Einrichtung, Website."
-            presets={["Werkzeug", "Computer und Software", "Einrichtung", "Website / Erstausstattung"]}
+            presets={branche ? undefined : ["Werkzeug", "Computer und Software", "Einrichtung", "Website / Erstausstattung"]}
             render={(x, s) => (
               <>
                 <Text className="col-span-2 sm:flex-1 sm:basis-56" label="Investition" value={x.label} onChange={(v) => s({ label: v })} />
@@ -336,9 +380,62 @@ export function FinanceEditor(p: Props) {
   );
 }
 
+/** Private Lebenshaltungskosten: Nachweis, dass die Entnahme den Lebensunterhalt deckt */
+function Living({ f, set }: { f: FinanceInput; set: (p: Partial<FinanceInput>) => void }) {
+  const t = useT();
+  const total = livingTotal(f);
+  return (
+    <Sub title={t("Lebenshaltungskosten (privat)")}>
+      <p className="text-xs text-muted">{t("Was der Haushalt im Monat zum Leben braucht. Fachstelle und Bank prüfen, ob die private Entnahme (mit Zuschüssen) das deckt.")}</p>
+      <Rows
+        rows={f.living}
+        onChange={(living) => set({ living })}
+        make={(label = "") => ({ label, monthly: 0 })}
+        addLabel="Posten"
+        empty="Noch keine Lebenshaltungskosten eingetragen."
+        presets={LIVING_PRESETS}
+        render={(x, s) => (
+          <>
+            <Text className="col-span-2 sm:flex-1 sm:basis-56" label="Posten" value={x.label} onChange={(v) => s({ label: v })} />
+            <Num className="col-span-2 sm:w-40" label="Im Monat" suffix="€" value={x.monthly} onChange={(v) => s({ monthly: v })} />
+          </>
+        )}
+      />
+      {total > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span><b>{t("Summe im Monat")}:</b> {eur(total)}</span>
+          {f.privateDraw.some((x) => Math.abs(x - total) > 0.5) && (
+            <button type="button" className="btn-ghost btn-sm" onClick={() => set({ privateDraw: [total, total, total] })}>{t("Als private Entnahme übernehmen")}</button>
+          )}
+        </div>
+      )}
+    </Sub>
+  );
+}
+
+/** Posten, die in der Branche üblich sind und im Plan noch fehlen: einzeln anlegen oder von der KI schätzen lassen */
+function BranchenVorschlag({ branche, items, what, ai, onAdd, onAsk }: { branche: Branche | null; items: string[]; what: string; ai: boolean; onAdd: (label: string) => void; onAsk: (items: string[]) => void }) {
+  const t = useT();
+  if (!branche || !items.length) return null;
+  return (
+    <div className="space-y-2 rounded-xl border border-line-soft bg-tint/40 px-4 py-3 text-sm">
+      <p>{t("Typisch für {branche}, im Plan noch nicht dabei ({was}):", { branche: branche.label, was: t(what) })}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((x) => (
+          <button key={x} type="button" className="rounded-full border border-line-soft bg-surface px-2.5 py-1 text-xs hover:border-accent hover:text-accent" onClick={() => onAdd(x)}>+ {x}</button>
+        ))}
+      </div>
+      {ai && <button type="button" className="btn-ghost btn-sm" onClick={() => onAsk(items)}><span className="text-gold">✦</span> {t("Beträge von der KI schätzen lassen")}</button>}
+    </div>
+  );
+}
+
 /** Zuordnung für eine Vorschlags-Kostenart */
 function presetCategory(label: string) {
-  if (/versicher|beitr/i.test(label)) return "Versicherungen/Beiträge";
+  if (/^kfz/i.test(label)) return "KFZ-Kosten";
+  if (/versicher|beitr|haftpflicht|genossenschaft/i.test(label)) return "Versicherungen/Beiträge";
+  if (/kammer|gebühr|gema|rundfunk/i.test(label) && !/marktplatz/i.test(label)) return "Betriebliche Gebühren";
+  if (/shop|marktplatz|plattform|provision|lieferdienst|zahlungsanbieter/i.test(label)) return "Plattform-/Vermittlungskosten";
   if (/kraftstoff|fahrzeug|kfz|transporter/i.test(label)) return "KFZ-Kosten";
   if (/marketing|werbung/i.test(label)) return "Werbe-/Reisekosten";
   if (/steuerber|buchhalt/i.test(label)) return "Steuerberater/Buchhaltung";
@@ -458,7 +555,7 @@ function Sub({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Summary({ f, r }: { f: FinanceInput; r: FinanceResult }) {
+function Summary({ f, r, branche }: { f: FinanceInput; r: FinanceResult; branche: Branche | null }) {
   const t = useT();
   const tiles = [
     ...[0, 1, 2].map((i) => ({ label: t("Jahr {n}", { n: i + 1 }), value: eur(r.years[i].profit), sub: t("Umsatz {betrag}", { betrag: eur(r.years[i].revenue) }), warn: r.years[i].profit < 0, hint: t("Ergebnis vor Steuern") })),
@@ -466,7 +563,7 @@ function Summary({ f, r }: { f: FinanceInput; r: FinanceResult }) {
     { label: t("Niedrigster Kontostand"), value: eur(r.minBalance.value), sub: monthLabel(f.start, r.minBalance.month), warn: r.minBalance.value < 0, hint: "" },
     { label: t("Investitionen"), value: eur(r.capitalNeed.investments), sub: t("Personal ab {monat}", { monat: f.staff.filter((s) => s.gross > 0).map((s) => monthLabel(f.start, s.start)).join(", ") || "–" }), warn: false, hint: "" },
   ];
-  const hints = financeHints(f, r);
+  const hints = [...financeHints(f, r), ...pruefeFinanzplan(f, r, branche)].sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "warn" ? -1 : 1));
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

@@ -73,8 +73,17 @@ export function mockJson(schemaName: string, input: string): unknown {
   }
   if (schemaName === "finanzplan") {
     const json = input.match(/^Aktueller Finanzplan \(JSON\):\n(.+)$/m)?.[1] ?? "{}";
-    const finance = JSON.parse(json) as { costs?: unknown[] };
+    const finance = JSON.parse(json) as { costs?: unknown[]; investments?: unknown[] };
     const message = input.match(/^Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
+    const wanted = message.match(/Deutschland: (.+?)\. Schreibe/)?.[1]?.split(", ") ?? [];
+    if (wanted.length && message.startsWith("Ergänze diese laufenden Kosten")) {
+      finance.costs = [...(finance.costs ?? []), ...wanted.map((label) => ({ label, monthly: [99, 99, 99], category: "Betriebskosten", note: "Schätzung, bitte prüfen (Test ohne KI)", from: 0 }))];
+      return { note: `Testantwort ohne KI: ${wanted.length} Posten mit je 99 € geschätzt.`, finance };
+    }
+    if (wanted.length && message.startsWith("Ergänze diese Anschaffungen")) {
+      finance.investments = [...(finance.investments ?? []), ...wanted.map((label) => ({ label, amount: 1000, life: 60, month: 0, reason: "", note: "Schätzung, bitte prüfen (Test ohne KI)" }))];
+      return { note: `Testantwort ohne KI: ${wanted.length} Anschaffungen mit je 1.000 € geschätzt.`, finance };
+    }
     finance.costs = [...(finance.costs ?? []), { label: "Miete Büro", monthly: [450, 450, 450], category: "Raumkosten", note: "Testeintrag ohne KI", from: 1 }];
     return { note: `Testantwort ohne KI zu „${message}“: Miete Büro mit 450 € im Monat ab Monat 2 eingetragen.`, finance };
   }

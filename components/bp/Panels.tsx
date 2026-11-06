@@ -77,6 +77,8 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
       zahlenHref={links.zahlen}
       imported={coach && plan.imports.finance ? { name: plan.imports.finance.name, at: plan.imports.finance.at } : null}
       filled={financeTouched(plan) && !financeIsEmpty(plan.finance)}
+      branche={plan.branche}
+      gesamtHref={aiEnabled() && coach ? files(c.id).gesamt : null}
       share={<ShareButton kind="finanzplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title="Finanzplan" />}
     />
   );

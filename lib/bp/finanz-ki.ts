@@ -4,7 +4,20 @@ import { jsonResponse, pseudonymize } from "../ai";
 import type { User } from "../auth";
 import { one } from "../db";
 import { COST_CATEGORIES, MONTHS, NOTE_KEYS, calculate, eur, monthLabel, normalizeFinance, type FinanceInput } from "./finance";
+import { brancheOf, type Branche } from "./branchen";
 import { VORHABEN, normalizeTurns } from "./notes";
+
+function brancheBlock(b: Branche | null) {
+  if (!b) return "";
+  return [
+    `Branche: ${b.label}`,
+    `Typische laufende Kosten: ${b.kosten.join(", ")}`,
+    `Typische Anschaffungen: ${b.investitionen.join(", ")}`,
+    `Kennzahlen: ${b.kennzahlen.join(", ")}`,
+    b.wareneinsatz ? `Übliche Material-/Wareneinsatzquote: ${b.wareneinsatz[0]} bis ${b.wareneinsatz[1]} % vom Umsatz` : "",
+    ...(b.chapters.finanzen ?? []).map((x) => `Hinweis: ${x}`),
+  ].filter(Boolean).join("\n");
+}
 
 /*
  * KI im Finanzplan (nur Coach): Der Coach schreibt Angaben oder Änderungswünsche in eigenen Worten
@@ -37,6 +50,7 @@ const SCHEMA = obj({
     revenues: { type: "array", items: obj({ label: str, description: str, price: numT, note: str, qty: { type: "array", items: numT, minItems: MONTHS, maxItems: MONTHS } }) },
     financing: { type: "array", items: obj({ label: str, kind: { type: "string", enum: ["eigen", "darlehen", "zuschuss"] }, amount: numT, month: int, rate: numT, years: int, grace: int }) },
     grants: { type: "array", items: obj({ label: str, monthly: numT, from: int, months: int }) },
+    living: { type: "array", items: obj({ label: str, monthly: numT }) },
   }),
 });
 
@@ -53,20 +67,25 @@ Aufbau (alle Beträge netto in Euro):
 - revenues: Leistungsarten mit price = Ø Netto-Preis je Einheit und qty = Menge in jedem der 36 Monate.
 - financing: Eigenkapital, Darlehen (rate = Zins in Prozent im Jahr, years = Laufzeit, grace = tilgungsfreie Monate) oder Zuschuss, month = Auszahlungsmonat.
 - grants: laufende Zuschüsse zum Lebensunterhalt (z. B. Gründungszuschuss), monthly ab Monatsindex from für months Monate.
+- living: private Lebenshaltungskosten des Haushalts im Monat (Miete privat, Lebensmittel, Kranken- und Pflegeversicherung, Altersvorsorge …). Sie belegen, dass privateDraw den Lebensunterhalt deckt; sie fließen nicht in die Rentabilität.
 
 Regeln:
 - Ändere nur, was der Coach sagt oder was daraus zwingend folgt. Alles andere gibst du unverändert zurück, Zahl für Zahl und Text für Text, auch Herleitungen und Hinweise.
 - Neue Posten bekommen einen kurzen, klaren Namen. Steht im Text eine Begründung oder Quelle, gehört sie in note bzw. reason.
 - Mengen über die Zeit: Sagt der Coach z. B. „ab Monat 3 je 80 Stunden, ab Jahr 2 je 100“, setzt du die Monate genau so. Ein Anlauf („steigt in sechs Monaten auf …“) wird gleichmäßig verteilt.
 - „Monat 1“ des Coachs ist Index 0. Nennt er ein Datum, rechnest du den Index aus der Monatsliste aus.
-- Erfinde keine Zahlen. Fehlt eine Angabe, die du für eine Änderung brauchst, ändere diesen Teil nicht und frag in note danach.
+- Ist eine Branche angegeben, nutze ihr Profil: typische Posten, Kennzahlen und übliche Quoten. Bittet der Coach ausdrücklich um eine Schätzung, setze realistische Werte für eine kleine Gründung in Deutschland ein und schreibe „Schätzung, bitte prüfen“ in note bzw. reason des Postens.
+- Erfinde sonst keine Zahlen. Fehlt eine Angabe, die du für eine Änderung brauchst, ändere diesen Teil nicht und frag in note danach.
 - Ist die Nachricht eine Frage zum Plan, beantworte sie in note und gib den Finanzplan unverändert zurück.
 - note: ein bis drei kurze Sätze an den Coach (per du): was du geändert hast, mit den wichtigsten Zahlen, und was noch fehlt.
 - Namen sind durch [Name] ersetzt. Angaben zur Gesundheit gehören nicht in den Finanzplan.`;
 
 /** Angaben des Coachs in den Finanzplan eintragen */
 export async function changeFinance(user: User, c: Coachee, current: FinanceInput, message: string, earlier: FinanceTurn[]) {
-  const vorhaben = await one<{ history: unknown }>("SELECT history FROM bp_notes WHERE coachee_id = $1 AND section = $2", [c.id, VORHABEN]);
+  const [vorhaben, plan] = await Promise.all([
+    one<{ history: unknown }>("SELECT history FROM bp_notes WHERE coachee_id = $1 AND section = $2", [c.id, VORHABEN]),
+    one<{ branche: string }>("SELECT branche FROM business_plans WHERE coachee_id = $1", [c.id]),
+  ]);
   const r = calculate(current);
   const months = Array.from({ length: MONTHS }, (_, i) => `${i}=${monthLabel(current.start, i)}`).join(", ");
   const notes = normalizeTurns(vorhaben?.history ?? []).filter((t) => t.role === "coach").map((t) => `- ${t.text}`).join("\n").slice(0, 4000);
@@ -75,6 +94,7 @@ export async function changeFinance(user: User, c: Coachee, current: FinanceInpu
   const input = [
     `Monatsindizes: ${months}`,
     `Ergebnis bisher je Jahr: Umsatz ${r.years.map((y) => eur(y.revenue)).join(" / ")}, Ergebnis vor Steuern ${r.years.map((y) => eur(y.profit)).join(" / ")}, Kontostand am Jahresende ${r.years.map((y) => eur(y.balance)).join(" / ")}`,
+    brancheBlock(brancheOf(plan?.branche ?? "")),
     notes ? pseudonymize(`Notizen des Coachs zum Vorhaben:\n${notes}`, names) : "",
     earlier.length ? pseudonymize(`Bisher in diesem Gespräch:\n${earlier.slice(-6).map((t) => `Coach: ${t.message}\nDu: ${t.note}`).join("\n")}`, names) : "",
     `Aktueller Finanzplan (JSON):\n${JSON.stringify(current)}`,

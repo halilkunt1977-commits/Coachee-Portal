@@ -1,6 +1,6 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { MONTHS, calculate, hasLiving, investmentDepreciation, monthLabel, staffCost, yearRange, type FinanceInput } from "./finance";
+import { MONTHS, calculate, hasLiving, investmentDepreciation, livingTotal, monthLabel, staffCost, yearRange, type FinanceInput } from "./finance";
 
 /*
  * Finanzplan als Excel-Datei mit denselben acht Arbeitsblättern wie Halils Vorlage. Eingaben stehen als Werte in
@@ -372,6 +372,25 @@ export async function financeWorkbook(f: FinanceInput, meta: { name: string; tit
     lRow("balance", "Kontostand Monatsende", (k) => (k === 0 ? `$B$${open}+B${L.cashflow}` : `${lc(k - 1)}${n}+${lc(k)}${L.cashflow}`), (m) => M[m].balance, GREEN);
     prevBalance = `M${L.balance}`;
     start = n + 3;
+  }
+
+  // ---------- Lebenshaltungskosten (privat), nur wenn eingetragen ----------
+  if (f.living.length) {
+    const lh = wb.addWorksheet("Lebenshaltungskosten", { views: [grid] });
+    lh.columns = [{ width: 40 }, { width: 18 }];
+    title(lh, "Private Lebenshaltungskosten im Monat", 2);
+    head(lh, 3, ["Posten", "Betrag im Monat"]);
+    f.living.forEach((x, i) => {
+      lh.getRow(4 + i).values = [x.label, x.monthly];
+      fmt(lh, 4 + i, 2, 2, EUR);
+    });
+    const last = 3 + f.living.length;
+    const lSum = last + 2;
+    lh.getRow(lSum).values = ["SUMME Lebenshaltungskosten", F(`SUM(B4:B${last})`, livingTotal(f))];
+    fmt(lh, lSum, 2, 2, EUR);
+    band(lh, lSum, 2, GREEN);
+    lh.getRow(lSum + 1).values = ["Private Entnahme Jahr 1", F(`Annahmen!B${A.private}`, f.privateDraw[0])];
+    fmt(lh, lSum + 1, 2, 2, EUR);
   }
 
   for (const ws of wb.worksheets) ws.pageSetup = { orientation: ws.columnCount > 8 ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
