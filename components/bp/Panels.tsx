@@ -37,6 +37,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       coach={coach}
       name={fullName(c)}
       title={plan.title}
+      branche={plan.branche}
       sections={plan.sections}
       glance={plan.glance}
       figures={financeIsEmpty(plan.finance) ? null : keyFigures(plan.finance)}
