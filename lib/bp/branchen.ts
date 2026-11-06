@@ -15,6 +15,8 @@ export type Branche = {
   kennzahlen: string[];
   /** brauchbare Quellen für Markt und Wettbewerb */
   quellen: string[];
+  /** übliche Material- bzw. Wareneinsatzquote in % vom Umsatz (für die Plausibilitätsprüfung) */
+  wareneinsatz?: [number, number];
 };
 
 const HANDWERK_RISIKEN = "Risiken: Auftragsflaute im Winter, Ausfall durch Krankheit oder Unfall, Materialpreise, Zahlungsausfälle, Fachkräftemangel – jeweils mit Gegenmaßnahme.";
@@ -23,6 +25,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "handwerk",
     label: "Handwerk (Maler, Elektro, Sanitär, Bau)",
+    wareneinsatz: [10, 45],
     chapters: {
       gruender: ["Meisterbrief oder Ausnahmebewilligung/Altgesellenregelung; Eintragung in die Handwerksrolle (zulassungspflichtig oder -frei?)"],
       idee: ["Leistungen mit Stundensatz und Materialaufschlag; Ablauf von Aufmaß, Angebot, Ausführung, Abnahme, Rechnung"],
@@ -40,6 +43,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "kfz",
     label: "Kfz-Werkstatt und Autoteile",
+    wareneinsatz: [55, 75],
     chapters: {
       gruender: ["Kfz-Meister oder Betriebsleiter mit Meister (für Werkstatt); Erfahrung im Teilehandel; AU/HU-Berechtigungen"],
       idee: ["Werkstatt: Leistungen mit Stundensatz; Teilehandel: Sortiment (Verschleißteile, Ersatzteile, Zubehör), Kalkulation über Aufschlag auf Einkauf; Lager oder Streckengeschäft; online, Laden oder beides"],
@@ -58,6 +62,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "gastro",
     label: "Gastronomie und Imbiss",
+    wareneinsatz: [25, 35],
     chapters: {
       gruender: ["Gaststättenerlaubnis bzw. Gewerbeanmeldung, Belehrung nach Infektionsschutzgesetz, Hygieneschulung (HACCP)"],
       idee: ["Speisekarte mit Preisen, Wareneinsatz je Gericht, Öffnungszeiten, Sitzplätze, Lieferdienst"],
@@ -75,6 +80,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "handel",
     label: "Einzelhandel und Onlinehandel",
+    wareneinsatz: [45, 70],
     chapters: {
       idee: ["Sortiment, Einkaufsquellen, Kalkulation (Aufschlag auf Einkauf), Laden, Onlineshop oder Marktplätze"],
       zielgruppe: ["Kundengruppen, Einzugsgebiet bzw. Versandgebiet, Bestellungen je Monat"],
@@ -90,6 +96,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "kosmetik",
     label: "Kosmetik, Friseur und Wellness",
+    wareneinsatz: [5, 20],
     chapters: {
       gruender: ["Friseur: Meister bzw. Handwerksrolle; Kosmetik: Ausbildung und Zertifikate; Hygieneschulung"],
       idee: ["Behandlungen mit Dauer und Preis, Termine je Tag, Produktverkauf, mobil oder Studio"],
@@ -105,6 +112,7 @@ export const BRANCHEN: Branche[] = [
   {
     key: "reinigung",
     label: "Reinigung und Hausmeisterdienst",
+    wareneinsatz: [2, 10],
     chapters: {
       gruender: ["Gebäudereiniger: zulassungsfreies Handwerk, Eintragung in die Handwerksrolle; Erfahrung im Objektmanagement"],
       idee: ["Leistungen (Unterhalts-, Glas-, Grund-, Treppenhausreinigung, Winterdienst) mit Preis je Stunde oder Quadratmeter; feste Verträge"],

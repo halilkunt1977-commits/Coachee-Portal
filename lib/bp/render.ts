@@ -1,4 +1,4 @@
-import { MONTHS, calculate, eur, financeIsEmpty, keyFigures, liquidityRows, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange, type FinanceInput } from "./finance";
+import { MONTHS, calculate, eur, financeIsEmpty, keyFigures, liquidityRows, livingTotal, monthLabel, overviewRows, pct, rentaRows, staffCost, yearRange, type FinanceInput } from "./finance";
 import { parseInline, parseMarkdown, type Run } from "./markdown";
 import { SECTIONS, sourceList, type GlanceItem, type Sections } from "./sections";
 
@@ -198,12 +198,15 @@ function financeAnnex(f: FinanceInput, r: ReturnType<typeof calculate>) {
           .join("")}</tbody></table>`;
       })
       .join("");
+  const living = f.living.length
+    ? `<h3>Private Lebenshaltungskosten (€ im Monat)</h3><table class="fin"><tbody>${f.living.map((x) => `<tr><td>${esc(x.label)}</td>${n(x.monthly)}</tr>`).join("")}<tr class="sum"><td>Summe Lebenshaltungskosten</td>${n(livingTotal(f))}</tr><tr><td>Private Entnahme im Monat (Jahr 1)</td>${n(f.privateDraw[0])}</tr></tbody></table>`
+    : "";
   return `<section class="annex">
   <h2>Anhang: Finanzplan</h2>
   <p class="lead">Alle Beträge netto in Euro. Planungszeitraum ${yearRange(f.start, 0).split("–")[0]} bis ${monthLabel(f.start, MONTHS - 1)}, Betrachtung über 36 Monate.</p>
   <h3>Annahmen</h3>${assumptions}
   <h3>Rentabilität Übersicht</h3>${over}
-  ${revenue}${costs}${inv}${staff}${fin}
+  ${revenue}${costs}${inv}${staff}${fin}${living}
 </section>
 <section class="wide">${yearTables("Rentabilitätsvorschau", renta, false)}</section>
 <section class="wide">${yearTables("Liquiditätsplanung", liquidityRows(f), true)}</section>`;

@@ -124,6 +124,7 @@ function mergeFinance(cur: FinanceInput, imp: FinanceInput): { finance: FinanceI
       staff: keep("staff", "Personal"),
       financing: old.financing,
       grants: old.grants,
+      living: imp.living.length ? imp.living : old.living,
       reserve: old.reserve,
       openingCash: imp.openingCash || old.openingCash,
       privateDraw: zero(imp.privateDraw) ? old.privateDraw : imp.privateDraw,

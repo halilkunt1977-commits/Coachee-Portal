@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { askFinanceAi } from "@/app/actions/businessplan";
 import type { FinanceInput } from "@/lib/bp/finance";
 
@@ -12,15 +12,28 @@ type Turn = { message: string; note: string; before: FinanceInput | null };
 
 const EXAMPLES = ["Miete 450 € im Monat ab dem 2. Monat", "Stundensatz auf 60 € erhöhen", "Laptop 1.200 €, 3 Jahre Nutzungsdauer, im ersten Monat", "Ab Jahr 2 eine Teilzeitkraft mit 1.600 € brutto"];
 
-export function FinanzKi({ coacheeId, finance, onApply, blocked }: { coacheeId: string; finance: FinanceInput; onApply: (f: FinanceInput) => void; blocked: boolean }) {
+/** request: ein Auftrag von außen (z. B. „fehlende Branchenposten schätzen“), wird sofort gesendet */
+export function FinanzKi({ coacheeId, finance, onApply, blocked, request }: { coacheeId: string; finance: FinanceInput; onApply: (f: FinanceInput) => void; blocked: boolean; request?: { text: string; n: number } | null }) {
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
-  async function send() {
-    const text = message.trim();
+  const box = useRef<HTMLDivElement>(null);
+  const handled = useRef(0);
+  useEffect(() => {
+    if (!request || request.n === handled.current) return;
+    handled.current = request.n;
+    setOpen(true);
+    box.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    void send(request.text);
+    // send liest den aktuellen Finanzplan; nur bei einem neuen Auftrag auslösen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
+
+  async function send(preset?: string) {
+    const text = (preset ?? message).trim();
     if (!text || busy || blocked) return;
     setBusy(true);
     setError(null);
@@ -30,7 +43,7 @@ export function FinanzKi({ coacheeId, finance, onApply, blocked }: { coacheeId: 
     const changed = JSON.stringify(res.finance) !== JSON.stringify(finance);
     setTurns((t) => [...t, { message: text, note: res.note || (changed ? "Eingetragen." : "Nichts geändert."), before: changed ? finance : null }]);
     if (changed) onApply(res.finance);
-    setMessage("");
+    if (!preset) setMessage("");
   }
 
   function undo(i: number) {
@@ -43,7 +56,7 @@ export function FinanzKi({ coacheeId, finance, onApply, blocked }: { coacheeId: 
   const lastUndo = turns.findLastIndex((t) => t.before);
 
   return (
-    <div className="space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-3 sm:p-4" aria-label="KI im Finanzplan">
+    <div ref={box} className="scroll-mt-24 space-y-3 rounded-xl border border-gold/40 bg-[#fdfaf3] p-3 sm:p-4" aria-label="KI im Finanzplan">
       <button type="button" className="flex w-full items-start justify-between gap-2 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span className="min-w-0">
           <span className="block text-sm font-semibold"><span className="text-gold">✦</span> Finanzplan mit KI ändern</span>

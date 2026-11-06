@@ -326,6 +326,21 @@ export async function importFinanceXlsx(buffer: Buffer): Promise<XlsxImport> {
     }
   }
 
+  // ---------- Lebenshaltungskosten (privat) ----------
+  const leben = sheet(wb, "Lebenshaltungskosten");
+  if (leben) {
+    const d = rows(leben);
+    const h = header(d, ["Posten"]);
+    if (h)
+      for (let k = h.row + 1; k < d.length; k++) {
+        const label = text(at(d[k], 1));
+        if (!label) continue;
+        if (isEnd(label)) break;
+        const v = number(at(d[k], 2));
+        if (v > 0) f.living.push({ label: label.slice(0, 120), monthly: round2(v) });
+      }
+  }
+
   // ---------- Summen der Datei zum Abgleich ----------
   const fileTotals: Partial<FileTotals> = {};
   const over = sheet(wb, "Rentabilität Übersicht", "Rentabilitat Ubersicht");

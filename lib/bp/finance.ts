@@ -14,6 +14,8 @@ export type Staff = { label: string; start: number; gross: number; surcharge: nu
 export type Revenue = { label: string; description: string; price: number; note: string; qty: number[] };
 export type Financing = { label: string; kind: "eigen" | "darlehen" | "zuschuss"; amount: number; month: number; rate: number; years: number; grace: number };
 export type Grant = { label: string; monthly: number; from: number; months: number };
+/** Private Lebenshaltungskosten im Monat (Nachweis, dass die Entnahme den Lebensunterhalt deckt) */
+export type LivingItem = { label: string; monthly: number };
 
 export const NOTE_KEYS = ["period", "material", "opening", "private", "tax", "reserve"] as const;
 export type NoteKey = (typeof NOTE_KEYS)[number];
@@ -33,6 +35,7 @@ export type FinanceInput = {
   revenues: Revenue[];
   financing: Financing[];
   grants: Grant[];
+  living: LivingItem[];
 };
 
 export const FINANCING_KIND = { eigen: "Eigenkapital", darlehen: "Darlehen", zuschuss: "Zuschuss" } as const;
@@ -90,6 +93,7 @@ export function emptyFinance(start?: string): FinanceInput {
     revenues: [],
     financing: [],
     grants: [],
+    living: [],
   };
 }
 
@@ -137,6 +141,7 @@ export function normalizeFinance(raw: unknown): FinanceInput {
       grace: Math.round(num(x.grace, 0, 60)),
     })),
     grants: list(r.grants, (x) => ({ label: str(x.label), monthly: num(x.monthly, 0), from: month(x.from), months: Math.round(num(x.months, 0, 36)) })),
+    living: list(r.living, (x) => ({ label: str(x.label), monthly: num(x.monthly, 0) }), 30),
   };
 }
 
@@ -337,6 +342,10 @@ export function rentaRows(r: FinanceResult, f: FinanceInput): RowDef[] {
 }
 
 /** Hat der Plan Angaben über die Vorlage hinaus (Steuerrücklage, Entnahmen, Zuschüsse)? Dann zeigt die Übersicht sie mit. */
+/** Übliche Posten der privaten Lebenshaltung (Vorschläge im Editor) */
+export const LIVING_PRESETS = ["Miete warm", "Strom", "Lebensmittel und Haushalt", "Kranken- und Pflegeversicherung", "Altersvorsorge", "Private Versicherungen", "Mobilität", "Telefon und Internet", "Kleidung und Freizeit", "Kinder", "Kredite und Raten", "Rücklagen und Sonstiges"];
+export const livingTotal = (f: FinanceInput) => sum(f.living.map((x) => x.monthly));
+
 export const hasLiving = (f: FinanceInput) => f.taxPct > 0 || f.privateDraw.some((x) => x > 0) || f.grants.length > 0;
 
 /** Zeilen der Rentabilität Übersicht (Jahr 1 bis 3) */
@@ -433,6 +442,7 @@ export function financeSummary(f: FinanceInput) {
   for (const s of f.staff) out.push(`- Personal: ${s.label} ab ${monthLabel(f.start, s.start)}${s.gross ? `, ${eur(s.gross)} brutto + ${pct(s.surcharge)} Arbeitgeberanteil = ${eur(staffCost(s))} im Monat` : ", keine Personalkosten"}`);
   for (const x of f.financing) out.push(`- Finanzierung: ${x.label || FINANCING_KIND[x.kind]} ${eur(x.amount)} (${FINANCING_KIND[x.kind]})`);
   for (const g of f.grants) out.push(`- Zuschuss: ${g.label} ${eur(g.monthly)} im Monat für ${g.months} Monate`);
+  if (f.living.length) out.push(`- Private Lebenshaltungskosten: ${eur(livingTotal(f))} im Monat (${f.living.map((x) => `${x.label} ${eur(x.monthly)}`).join("; ")})`);
   if (r.capitalNeed.total) out.push(`- Kapitalbedarf: ${eur(r.capitalNeed.total)} (Investitionen ${eur(r.capitalNeed.investments)}, Reserve ${eur(r.capitalNeed.reserve)}), Finanzierung inkl. Anfangsliquidität ${eur(r.financingTotal)}, ${r.gap >= 0 ? `Überdeckung ${eur(r.gap)}` : `Lücke ${eur(-r.gap)}`}`);
   if (r.breakEvenRevenue) out.push(`- Nötiger Monatsumsatz ab Jahr 2 für alle Kosten und Entnahmen (Break-even): ${eur(r.breakEvenRevenue)}`);
   if (r.firstProfitMonth !== null) out.push(`- Erster Monat mit Überschuss nach Entnahmen: ${monthLabel(f.start, r.firstProfitMonth)}`);
