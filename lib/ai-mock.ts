@@ -60,6 +60,10 @@ export function mockJson(schemaName: string, input: string): unknown {
     const job = input.match(/^Stelle: (.+)$/m)?.[1];
     return { text: job ? `Kurzprofil (Test) zugeschnitten auf: ${job}. Anzeige ${input.includes("Anzeigentext:") ? "gelesen" : "ohne Text"}.` : "Kurzprofil (Test) aus den Angaben im Lebenslauf." };
   }
+  if (schemaName === "leitfaden") {
+    const ids = [...input.matchAll(/^\[([^\]]+)\] /gm)].map((m) => m[1]);
+    return { answers: ids.filter((_, i) => i % 3 === 0).map((id) => ({ id, answer: `Testantwort ohne KI zu ${id}.` })) };
+  }
   if (schemaName === "pdf_kapitel") {
     const lines = input.split("\n");
     return { text: lines.map((l) => (l.length < 40 && !/[.:]$/.test(l) ? `\n### ${l}\n` : l)).join("\n").trim() };
