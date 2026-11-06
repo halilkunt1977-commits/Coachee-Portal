@@ -10,6 +10,7 @@ import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sectio
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
 import { GesamtKi, type Decide } from "./GesamtKi";
+import { Leitfaden } from "./Leitfaden";
 import { DiffLegend, DiffView } from "./DiffView";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
@@ -214,6 +215,8 @@ export function PlanEditor(p: Props) {
           </div>
         )}
       </div>
+
+      {p.coach && <Leitfaden key={branche} href={p.gesamtHref.replace(/\/gesamt$/, "/leitfaden")} branche={branche} ai={p.ai} />}
 
       {p.ai && (
         <GesamtKi
