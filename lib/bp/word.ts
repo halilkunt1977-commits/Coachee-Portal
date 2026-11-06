@@ -1,7 +1,7 @@
 import "server-only";
 import { deflateSync } from "node:zlib";
 import {
-  AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, HeightRule, HighlightColor, HorizontalPositionRelativeFrom, ImageRun, LevelFormat, Packer, PageNumber,
+  AlignmentType, BorderStyle, Document, ExternalHyperlink, Footer, Header, HeightRule, HighlightColor, HorizontalPositionRelativeFrom, ImageRun, LevelFormat, Packer, PageNumber,
   Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, VerticalAlignTable, VerticalPositionRelativeFrom, WidthType, type ParagraphChild,
 } from "docx";
 import { financeIsEmpty, keyFigures, type FinanceInput } from "./finance";
@@ -18,6 +18,7 @@ const FONT = "Aptos";
 const NAVY = "0E2841";
 const ACCENT = "156082";
 const GREY = "B7B7B7";
+const GOLD = "C9A227";
 const PAGE_W = 11906;
 const MARGIN = 1417;
 const BODY_W = PAGE_W - 2 * MARGIN;
@@ -216,9 +217,9 @@ export async function planDocx(sections: Sections, glance: GlanceItem[], finance
   const front: (Paragraph | Table)[] = [
     new Paragraph({ children: [new TextRun({ text: `BUSINESSPLAN – ${meta.name}`, bold: true })] }),
     ...(meta.title ? [new Paragraph({ children: [new TextRun({ text: meta.title, bold: true })] })] : []),
-    new Paragraph({ spacing: { before: 480 }, children: [new TextRun({ text: "Inhaltsverzeichnis", bold: true })] }),
+    new Paragraph({ spacing: { before: 480 }, children: [new TextRun({ text: "Inhaltsverzeichnis", bold: true, color: NAVY })] }),
     ...SECTIONS.map((s) => new Paragraph({ numbering: { reference: "toc", level: 0 }, alignment: AlignmentType.LEFT, spacing: { after: 100 }, children: [new TextRun(s.title)] })),
-    new Paragraph({ pageBreakBefore: true, spacing: { after: 360 }, children: [new TextRun({ text: "Auf einen Blick", bold: true })] }),
+    new Paragraph({ style: "Kapitel", pageBreakBefore: true, spacing: { before: 0, after: 360 }, children: [new TextRun("Auf einen Blick")] }),
     ...glance
       .filter((g) => g.label.trim() && g.value.trim())
       .flatMap((g) => {
@@ -247,7 +248,14 @@ export async function planDocx(sections: Sections, glance: GlanceItem[], finance
     }
   });
 
-  const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: [PageNumber.CURRENT], size: 17, color: "7A7A7A" })] })] });
+  const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: ["Seite ", PageNumber.CURRENT, " von ", PageNumber.TOTAL_PAGES], size: 17, color: "7A7A7A" })] })] });
+  const header = new Header({
+    children: [new Paragraph({
+      alignment: AlignmentType.LEFT,
+      border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GOLD, space: 4 } },
+      children: [new TextRun({ text: `Businessplan · ${meta.name}${meta.title ? ` · ${meta.title}` : ""}`.slice(0, 110), size: 17, color: NAVY })],
+    })],
+  });
   const doc = new Document({
     creator: "gründarium Portal",
     title: `Businessplan ${meta.name}`,
@@ -256,7 +264,7 @@ export async function planDocx(sections: Sections, glance: GlanceItem[], finance
         document: { run: { font: FONT, size: 22 }, paragraph: { spacing: { after: 240, line: 240 }, alignment: AlignmentType.JUSTIFIED } },
       },
       paragraphStyles: [
-        { id: "Kapitel", name: "Kapitel", basedOn: "Normal", next: "Normal", quickFormat: true, run: { bold: true }, paragraph: { spacing: { before: 360, after: 240 }, outlineLevel: 0 } },
+        { id: "Kapitel", name: "Kapitel", basedOn: "Normal", next: "Normal", quickFormat: true, run: { bold: true, color: NAVY }, paragraph: { spacing: { before: 360, after: 240 }, outlineLevel: 0, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: GOLD, space: 3 } } } },
         { id: "Zwischen", name: "Zwischenüberschrift", basedOn: "Normal", next: "Normal", quickFormat: true, run: { bold: true }, paragraph: { spacing: { before: 240, after: 160 }, outlineLevel: 1 } },
       ],
     },
@@ -274,6 +282,7 @@ export async function planDocx(sections: Sections, glance: GlanceItem[], finance
       },
       {
         properties: { page: { size: { width: PAGE_W, height: 16838 }, margin: { top: MARGIN, bottom: 1134, left: MARGIN, right: MARGIN, header: 708, footer: 708 } } },
+        headers: { default: header },
         footers: { default: footer },
         children: [...front, ...chapters],
       },

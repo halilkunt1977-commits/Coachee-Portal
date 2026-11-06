@@ -2,10 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { coacheeFor, fullName } from "@/lib/access";
 import { audit, getSession } from "@/lib/auth";
 import { one } from "@/lib/db";
-import { renderPlanHtml } from "@/lib/bp/render";
+import { planPdf } from "@/lib/bp/plan-pdf";
 import { planFor } from "@/lib/bp/store";
 import { cvFontCss } from "@/lib/cv/fonts";
-import { htmlToPdf } from "@/lib/cv/pdf";
 
 export async function GET(_request: NextRequest, ctx: RouteContext<"/api/businessplan/[id]/pdf">) {
   const { id } = await ctx.params;
@@ -15,17 +14,17 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/busines
   if (c.coaching_type !== "gruendung") return new NextResponse("Nicht gefunden", { status: 404 });
   const plan = await planFor(c);
   const coach = await one<{ name: string }>("SELECT name FROM users WHERE id = $1", [c.coach_id]);
-  const html = renderPlanHtml(plan.sections, plan.glance, plan.finance, {
+  const meta = {
     title: plan.title,
     name: fullName(c),
     email: c.email,
     phone: c.phone,
     coach: coach?.name ?? "Coach",
     date: new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" }),
-  }, cvFontCss());
+  };
   let pdf: Uint8Array;
   try {
-    pdf = await htmlToPdf(html);
+    pdf = await planPdf(plan.sections, plan.glance, plan.finance, meta, cvFontCss());
   } catch (e) {
     console.error("PDF-Erzeugung fehlgeschlagen", e);
     return new NextResponse("Das PDF konnte gerade nicht erzeugt werden. Bitte später noch einmal versuchen.", { status: 500 });
