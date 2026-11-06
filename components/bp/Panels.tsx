@@ -5,7 +5,7 @@ import { query } from "@/lib/db";
 import { financeIsEmpty, keyFigures } from "@/lib/bp/finance";
 import { planIsEmpty } from "@/lib/bp/sections";
 import { loadChats } from "@/lib/bp/context";
-import { CHAT_KEY, getRun } from "@/lib/bp/gesamt-ki";
+import { CHAT_KEY, recentRuns } from "@/lib/bp/gesamt-ki";
 import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { FinanceEditor } from "./FinanceEditor";
@@ -20,7 +20,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
   const plan = await planFor(c);
   const ids = [...new Set(Object.values(plan.sections).map((s) => s.updated_by).filter((x): x is string => Boolean(x)))];
   const coach = user.role === "coach";
-  const [users, bausteine, notes, lastRun] = await Promise.all([
+  const [users, bausteine, notes, runs] = await Promise.all([
     ids.length ? query<{ id: string; name: string }>("SELECT id, name FROM users WHERE id = ANY($1)", [ids]) : Promise.resolve([]),
     query<{ category: string; title: string; detail: string }>(
       "SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND (NOT internal OR $2) ORDER BY created_at",
@@ -28,7 +28,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
     ),
     // Notizen und Verlauf der Schreibhilfe nur für den Coach
     coach ? loadChats(c.id) : Promise.resolve({ chats: {} as Awaited<ReturnType<typeof loadChats>>["chats"], vorhaben: "" }),
-    coach ? getRun(c.id) : Promise.resolve(null),
+    coach ? recentRuns(c.id) : Promise.resolve([]),
   ]);
   const names = Object.fromEntries(users.map((u) => [u.id, u.id === user.id ? "dir" : u.name]));
   return (
@@ -48,7 +48,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       wordHref={files(c.id).word}
       financeHref={links.finance}
       imported={coach && plan.imports.plan ? { name: plan.imports.plan.name, at: plan.imports.plan.at } : null}
-      lastRun={lastRun}
+      runs={runs}
       chat={notes.chats[CHAT_KEY] ?? []}
       gesamtHref={files(c.id).gesamt}
       projectNotes={notes.vorhaben}

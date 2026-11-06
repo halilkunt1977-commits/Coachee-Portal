@@ -32,12 +32,21 @@ Stil der Vorlage:
 - Bei längeren Kapiteln Zwischenüberschriften als eigene Zeile mit „### “. Aufzählungen mit „- “ nur, wo sie wirklich helfen. Eine Tabelle im Markdown-Format (| Spalte | Spalte |) nur, wenn sie etwas übersichtlicher macht, z. B. Mitbewerber oder Kundengruppen.
 - Umfang etwa ${def.words[0]} bis ${def.words[1]} Wörter, außer der Coach wünscht etwas anderes. Keine Kapitelüberschrift, keine Vorrede, kein Fazit-Absatz mit Floskeln.
 
+Konkret statt allgemein (das ist das Wichtigste):
+- Jede Aussage soll so konkret sein, dass ein Gutachter sie prüfen kann: Ort, Zeitpunkt, Preis, Menge, Stundensatz, Anzahl, Name der Kundengruppe, konkrete Maßnahme mit Kosten.
+- Nutze die Zahlen aus dem Finanzplan aktiv, wo sie zum Kapitel passen (Preise, Mengen, Umsatz und Ergebnis Jahr 1 bis 3, Investitionen, Kapitalbedarf, Finanzierung, Personal, Break-even), genau so wie sie im Material stehen.
+- Nutze konkrete Erfahrungen, Stationen und Abschlüsse aus Lebenslauf, Gesprächen und Bausteinen statt allgemeiner Eigenschaften.
+- Verboten sind leere Sätze wie „hohe Qualität“, „kundenorientiert“, „innovativ“, „wachsender Markt“, „flexibel auf Kundenwünsche eingehen“, „ein starkes Netzwerk“, wenn sie nicht mit einer konkreten Angabe belegt sind.
+- Beispiel für den Ton: Nicht „Das Unternehmen bietet hochwertige Malerarbeiten zu fairen Preisen an.“, sondern „Kern des Angebots sind Innenanstriche für Privathaushalte und Hausverwaltungen zu einem Stundensatz von 55 € netto. Für Jahr 1 plant [Name] mit 620 abrechenbaren Stunden, das entspricht einem Umsatz von 34.100 €.“ (Zahlen nur als Beispiel für den Stil, nie übernehmen.)
+- Der Text muss zu den anderen Kapiteln passen: gleiche Zahlen, gleicher Starttermin, gleiche Bezeichnungen der Leistungen und Kundengruppen.
+
 Material und Vorrang:
 - Die Notizen und Nachrichten des Coachs sind seine eigenen Angaben aus dem Coaching und haben Vorrang vor allem anderen Material. Übernimm ihre Fakten vollständig und mach aus Stichpunkten zusammenhängenden Text.
 - Die neue Nachricht des Coachs ist entweder weiteres Material oder eine Anweisung (z. B. „kürzer“, „mehr zum Standort“). Eine Anweisung setzt du am letzten Vorschlag um, sonst am bisherigen Text. Alles, was der Coach nicht ändern wollte, bleibt erhalten.
 - Bausteine, Protokolle der Gespräche, Unterlagen und andere Kapitel sind Arbeitsmaterial: Übernimm nur, was zu diesem Kapitel passt, und widersprich den anderen Kapiteln nicht.
 - Beantworte diese Leitfragen, soweit das Material es hergibt: ${def.questions.join(" ")}
 ${summary ? "- Die Executive Summary fasst den ganzen Plan auf einer Seite zusammen: Wer gründet was, ab wann und wo, Leistungen und Kunden, Kundengewinnung, die wichtigsten Zahlen für Jahr 1 bis 3 und erfüllte Voraussetzungen. Schreib sie nur aus den Kapiteln, dem Finanzplan und den Notizen, nichts Neues.\n" : ""}- Nutze nur Fakten aus dem Material. Erfinde keine Zahlen, Namen, Kunden, Statistiken oder Abschlüsse. Wo etwas fehlt, setze einen kurzen Platzhalter in eckigen Klammern, z. B. [Anzahl Betriebe der Branche im Landkreis mit Quelle].
+- Ausnahme: Bittet der Coach ausdrücklich darum, Zahlen oder Fakten zu schätzen oder zu ergänzen, setzt du realistische Annahmen ein und kennzeichnest sie im Text als Annahme (z. B. „rund 40 Aufträge im ersten Jahr (Annahme)“). Statistiken und Quellen erfindest du auch dann nicht.
 - Zahlen aus dem Finanzplan übernimmst du genau so, wie sie im Material stehen.
 - Namen sind durch [Name] ersetzt. Schreib [Name], wo der Name der gründenden Person nötig ist.
 - Angaben zur Gesundheit der gründenden Person gehören nicht in den Plan.
