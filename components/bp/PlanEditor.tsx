@@ -11,8 +11,8 @@ import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
 import { GesamtKi, type Decide } from "./GesamtKi";
 import { Leitfaden } from "./Leitfaden";
-import { AbgabeCard, BankCard } from "./BankAbgabe";
-import type { BankInfo } from "@/lib/bp/bank";
+import { AmtInfos, BankAngaben, BankFragen, fileHref, fileLabel, type AbgabenState, type BankState } from "./BankAbgabe";
+import { openFile } from "./openFile";
 import { DiffLegend, DiffView } from "./DiffView";
 import { SaveBadge, useAutosave, type SaveResult } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
@@ -44,11 +44,11 @@ type Props = {
   gesamtHref: string;
   runs: RunView[];
   chat: ChatTurn[];
-  /** Abgabe und Angaben für Bank und Förderung */
-  bank: BankInfo;
-  cityLand: string;
-  bankHref: string;
-  abgabeHref: string;
+  /** Fassung fürs Amt oder für die Bank, mit Abgabe und Bankangaben */
+  mode: "amt" | "bank";
+  onBack: () => void;
+  bankState: BankState;
+  abgaben: AbgabenState;
   excelHref: string;
 };
 
@@ -66,6 +66,7 @@ export function PlanEditor(p: Props) {
   );
   const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && chapterProgress(p.sections[s.key].text, s).state !== "fertig")?.key ?? "idee"));
   const [title, setTitle] = useState(p.title);
+  const [tab, setTab] = useState("kapitel");
   const [branche, setBranche] = useState(p.branche);
   const profile = brancheOf(branche);
   const [glance, setGlance] = useState({ items: p.glance, key: 0 });
@@ -152,14 +153,6 @@ export function PlanEditor(p: Props) {
     else if (pending[x.key]?.runId !== r.id) delete pending[x.key];
   }
 
-  async function download(href: string) {
-    // erst speichern, damit die Datei den letzten Stand enthält
-    await save();
-    const a = document.createElement("a");
-    a.href = href;
-    a.click();
-  }
-
   function go(key: string) {
     setActive(key);
     setPreview(false);
@@ -182,70 +175,128 @@ export function PlanEditor(p: Props) {
     });
   }
 
+  const bank = p.mode === "bank";
+  const last = p.abgaben.list.find((a) => a.kind === (bank ? "bank" : "fachstelle"));
+  const fassung = bank ? "?fassung=bank" : "";
+  const tabs: { key: string; label: string }[] = [
+    { key: "kapitel", label: t("Kapitel") },
+    ...(bank ? [{ key: "angaben", label: t("Angaben für die Bank") }, { key: "gespraech", label: t("Bankgespräch") }] : [{ key: "infos", label: t("Infos fürs Amt") }]),
+    ...(p.ai ? [{ key: "ki", label: "✦ KI-Hilfe" }] : []),
+    ...(p.coach ? [{ key: "leitfaden", label: "Gesprächsleitfaden" }] : []),
+    { key: "einstellungen", label: t("Einstellungen") },
+  ];
+
   return (
-    <div className="space-y-5">
-      <div className="card space-y-3 !p-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="min-w-0 flex-1 basis-64">
-            <span className="label">{t("Untertitel: das Vorhaben")}</span>
-            <input
-              className="input font-semibold"
-              value={title}
-              maxLength={120}
-              placeholder={t("z. B. Gründung eines Malerbetriebs")}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => void saveTitle(p.coacheeId, title)}
-            />
-            <span className="mt-1 block text-xs text-muted">{t("Auf dem Deckblatt steht „BUSINESSPLAN – {name}“ und darunter dieser Untertitel.", { name: p.name })}</span>
-          </label>
-          {p.coach && (
-            <label className="min-w-0 basis-56">
-              <span className="label">Branche</span>
-              <select className="input" value={branche} onChange={(e) => { setBranche(e.target.value); void saveBranche(p.coacheeId, e.target.value); }}>
-                <option value="">Keine Branche gewählt</option>
-                {BRANCHEN.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
-              </select>
-            </label>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={p.financeHref} className="btn-ghost">{t("Finanzplan")}</Link>
-            {p.share}
-            <button type="button" className="btn-ghost" onClick={() => void download(p.wordHref)}>{t("Word")}</button>
-            <button type="button" className="btn" onClick={() => void download(p.pdfHref)}>{t("PDF")}</button>
+    <div className="space-y-4">
+      <section className="card overflow-hidden !p-0">
+        <div className="space-y-3 bg-accent px-4 py-4 text-white sm:px-6">
+          <button type="button" className="text-sm text-white/80 hover:text-white" onClick={p.onBack}>← {t("Zur Übersicht")}</button>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-soft">{bank ? t("Businessplan für die Bank") : t("Businessplan fürs Amt")}</p>
+            <h2 className="font-[family-name:var(--font-display)] text-xl font-bold leading-tight text-balance">{title || p.name}</h2>
+            {title && <p className="text-sm text-white/75">{p.name}</p>}
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+              <span>{t("{a} von {b} Kapiteln fertig", { a: done, b: SECTIONS.length })}</span>
+              <span className="text-xs text-white/75">{state.kind === "saved" ? `✓ ${t("Gespeichert")}` : state.kind === "saving" ? t("Speichert …") : state.kind === "dirty" ? t("Ungespeichert …") : state.message ?? t("Nicht gespeichert")}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/20"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(done / SECTIONS.length) * 100}%` }} /></div>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
+          <button type="button" className="btn" disabled={p.abgaben.busy !== null} onClick={() => void save().then(() => p.abgaben.submit(bank ? "bank" : "fachstelle"))}>
+            {p.abgaben.busy ? t("Wird erstellt …") : bank ? t("Für die Bank abgeben") : t("Fürs Amt abgeben")}
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => void openFile(`${p.pdfHref}${fassung ? `${fassung}&ansehen` : "?ansehen"}`, save, true)}>{t("PDF ansehen")}</button>
+          {!bank && <button type="button" className="btn-ghost" onClick={() => void openFile(p.wordHref, save)}>{t("Word")}</button>}
+          <button type="button" className="btn-ghost" onClick={() => void openFile(`${p.excelHref}${fassung}`, save)}>{t("Finanzplan (Excel)")}</button>
+          {p.share}
+        </div>
+        {(last || p.abgaben.error) && (
+          <div className="border-t border-line-soft px-4 py-2.5 text-xs sm:px-6">
+            {p.abgaben.error && <p className="text-danger" role="alert">{p.abgaben.error}</p>}
+            {last && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
+                <span className="font-semibold text-ok">✓ {t("Abgegeben am {zeit}", { zeit: new Date(last.created_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) })}</span>
+                {last.files.filter((f) => !/Leitfaden/.test(f.title)).map((f) => <a key={f.id} className="link" href={fileHref(f)} target="_blank" rel="noreferrer">{t(fileLabel(f.title))}</a>)}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1" aria-label={t("Bereiche")}>
+        {tabs.map((x) => (
+          <button key={x.key} type="button" aria-current={tab === x.key ? "page" : undefined} onClick={() => setTab(x.key)}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${tab === x.key ? "bg-accent text-white shadow-sm" : "bg-surface text-muted ring-1 ring-line-soft hover:text-ink"}`}>
+            {x.label}
+          </button>
+        ))}
+      </nav>
+
+      <div hidden={tab !== "infos"} className="card space-y-4">
+        <h3 className="h3">{t("Was das Amt sehen will")}</h3>
+        <AmtInfos />
+      </div>
+      {bank && <div hidden={tab !== "angaben"}><BankAngaben bank={p.bankState} /></div>}
+      {bank && <div hidden={tab !== "gespraech"}><BankFragen bank={p.bankState} ai={p.ai} /></div>}
+      {p.coach && <div hidden={tab !== "leitfaden"}><Leitfaden key={branche} href={p.gesamtHref.replace(/\/gesamt$/, "/leitfaden")} branche={branche} ai={p.ai} open /></div>}
+      {p.ai && (
+        <div hidden={tab !== "ki"}>
+          <GesamtKi
+            href={p.gesamtHref}
+            coacheeId={p.coacheeId}
+            runs={runs}
+            chat={p.chat}
+            onRun={upsertRun}
+            onCleared={() => setRuns([])}
+            decide={decide}
+            beforeStart={async () => void (await save())}
+            onRunning={setAiRunning}
+            onUpdate={takeOver}
+            onOpen={(key) => { go(key); setTab("kapitel"); }}
+          />
+        </div>
+      )}
+
+      <div hidden={tab !== "einstellungen"} className="card space-y-5">
+        <label className="block">
+          <span className="label">{t("Untertitel: das Vorhaben")}</span>
+          <input
+            className="input font-semibold"
+            value={title}
+            maxLength={120}
+            placeholder={t("z. B. Gründung eines Malerbetriebs")}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => void saveTitle(p.coacheeId, title)}
+          />
+          <span className="mt-1 block text-xs text-muted">{t("Auf dem Deckblatt steht „BUSINESSPLAN – {name}“ und darunter dieser Untertitel.", { name: p.name })}</span>
+        </label>
         {p.coach && (
-          <div className="flex flex-wrap items-start justify-between gap-2 border-t border-line-soft pt-3">
+          <label className="block max-w-md">
+            <span className="label">Branche</span>
+            <select className="input" value={branche} onChange={(e) => { setBranche(e.target.value); void saveBranche(p.coacheeId, e.target.value); }}>
+              <option value="">Keine Branche gewählt</option>
+              {BRANCHEN.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={p.financeHref} className="btn-ghost">{t("Zum Finanzplan")}</Link>
+        </div>
+        {p.coach && (
+          <div className="space-y-2 border-t border-line-soft pt-4">
+            <p className="text-sm font-semibold">Übernehmen aus einer Datei</p>
             <p className="text-xs text-muted">
-              {p.imported ? `Übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen Businessplan (Word oder PDF) oder den Finanzplan (Excel) hier hochladen und übernehmen. Zahlen aus Word oder PDF kommen automatisch in den Finanzplan."}
+              {p.imported ? `Zuletzt übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen Businessplan (Word oder PDF) oder den Finanzplan (Excel) hochladen und übernehmen. Zahlen aus Word oder PDF kommen automatisch in den Finanzplan."}
             </p>
             <ImportFileButton coacheeId={p.coacheeId} accept=".docx,.pdf,.xlsx" filled={p.filled} label="Aus Word, PDF oder Excel übernehmen" />
           </div>
         )}
       </div>
 
-      {p.coach && <Leitfaden key={branche} href={p.gesamtHref.replace(/\/gesamt$/, "/leitfaden")} branche={branche} ai={p.ai} />}
-
-      <AbgabeCard href={p.abgabeHref} coach={p.coach} />
-      <BankCard href={p.bankHref} coacheeId={p.coacheeId} initial={p.bank} cityLand={p.cityLand} ai={p.ai} pdfHref={p.pdfHref} excelHref={p.excelHref} />
-
-      {p.ai && (
-        <GesamtKi
-          href={p.gesamtHref}
-          coacheeId={p.coacheeId}
-          runs={runs}
-          chat={p.chat}
-          onRun={upsertRun}
-          onCleared={() => setRuns([])}
-          decide={decide}
-          beforeStart={async () => void (await save())}
-          onRunning={setAiRunning}
-          onUpdate={takeOver}
-          onOpen={go}
-        />
-      )}
-
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <div hidden={tab !== "kapitel"} className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="card space-y-3 !p-4 lg:sticky lg:top-20">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">

@@ -332,3 +332,29 @@ export const BANK_FRAGEN = [
   "Welche privaten Verpflichtungen (Kredite, Unterhalt, Miete) haben Sie?",
   "Welche Förderprogramme möchten Sie nutzen?",
 ];
+
+/** Businessplan fürs Amt: Gründungszuschuss (Agentur für Arbeit) bzw. Einstiegsgeld (Jobcenter) */
+export const AMT_ABLAUF = [
+  { titel: "Beratung beim Amt", text: "Vor der Gründung mit der Vermittlung bei der Agentur für Arbeit (Gründungszuschuss) bzw. beim Jobcenter (Einstiegsgeld) sprechen und die Gründungsabsicht anmelden." },
+  { titel: "Businessplan und Finanzplan", text: "Den Businessplan in der Fassung fürs Amt fertigstellen: Vorhaben, Qualifikation, Markt, Kapitalbedarf, Rentabilität und Liquidität für drei Jahre." },
+  { titel: "Stellungnahme der fachkundigen Stelle", text: "Eine fachkundige Stelle (IHK, Handwerkskammer, Steuerberater, Gründungsberater) prüft den Plan und bestätigt die Tragfähigkeit." },
+  { titel: "Antrag vor dem Start", text: "Antrag stellen, bevor die Selbstständigkeit beginnt. Für den Gründungszuschuss müssen noch mindestens 150 Tage Arbeitslosengeld I übrig sein." },
+  { titel: "Entscheidung", text: "Beide Leistungen sind Ermessensleistungen. Bei Ablehnung ist ein Widerspruch innerhalb eines Monats möglich." },
+];
+
+export const AMT_UNTERLAGEN = [
+  "Antrag auf Gründungszuschuss bzw. Einstiegsgeld (gibt es beim Amt)",
+  "Businessplan mit Finanzplan (Kapitalbedarf, Rentabilität, Liquidität für 3 Jahre)",
+  "Stellungnahme der fachkundigen Stelle zur Tragfähigkeit",
+  "Lebenslauf mit Qualifikationsnachweisen",
+  "Gewerbeanmeldung bzw. Anmeldung beim Finanzamt (oder Entwurf mit Datum)",
+  "Nachweis der Kranken- und Sozialversicherung als Selbstständige(r)",
+];
+
+export const AMT_VORAUSSETZUNGEN = [
+  "Gründungszuschuss: Anspruch auf Arbeitslosengeld I mit noch mindestens 150 Tagen Restanspruch.",
+  "Einstiegsgeld: Bezug von Grundsicherungsgeld beim Jobcenter und Aussicht, durch die Selbstständigkeit davon unabhängig zu werden.",
+  "Die Selbstständigkeit ist hauptberuflich (mindestens 15 Stunden pro Woche).",
+  "Fachliche und kaufmännische Eignung sind nachgewiesen.",
+  "Der Finanzplan zeigt, dass der Lebensunterhalt nach der Förderung aus dem Gewinn bezahlt werden kann.",
+];

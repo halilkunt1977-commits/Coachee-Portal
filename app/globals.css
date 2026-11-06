@@ -99,6 +99,7 @@ body {
   .hint { @apply mt-1 text-xs text-muted; }
   .h1 { @apply font-[family-name:var(--font-display)] text-2xl font-bold tracking-tight text-balance sm:text-[32px] sm:leading-tight; }
   .h2 { @apply font-[family-name:var(--font-display)] text-lg font-bold tracking-tight; }
+  .h3 { @apply font-[family-name:var(--font-display)] text-base font-bold tracking-tight; }
   .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-muted; }
   .badge { @apply inline-flex items-center gap-1 rounded-full bg-tint px-2.5 py-0.5 text-xs font-semibold text-accent; }
   .link { @apply font-semibold text-accent underline-offset-2 hover:underline; }
