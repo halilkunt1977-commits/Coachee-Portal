@@ -6,7 +6,8 @@ import { BRANCHEN, brancheOf } from "@/lib/bp/branchen";
 import type { ChapterReview } from "@/lib/bp/gesamt-ki";
 import type { RunView } from "@/lib/bp/gesamt-ki";
 import type { ChatTurn } from "@/lib/bp/notes";
-import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type Sections } from "@/lib/bp/sections";
+import { BANK_SECTIONS } from "@/lib/bp/bank-sections";
+import { GLANCE_PRESETS, SECTIONS, chapterProgress, type GlanceItem, type SectionDef, type Sections } from "@/lib/bp/sections";
 import { Markdown } from "../assistant/Markdown";
 import { ImportFileButton } from "./ImportButtons";
 import { GesamtKi, type Decide } from "./GesamtKi";
@@ -58,13 +59,16 @@ const BLICK = "blick";
 
 export function PlanEditor(p: Props) {
   const t = useT();
+  const amt = p.mode !== "bank";
+  // Bankfassung: eigene Kapitel
+  const DEFS: SectionDef[] = amt ? SECTIONS : BANK_SECTIONS;
   const [secs, setSecs] = useState<Record<string, Sec>>(() =>
-    Object.fromEntries(SECTIONS.map((s) => {
+    Object.fromEntries(DEFS.map((s) => {
       const v = p.sections[s.key];
       return [s.key, { text: v.text, sources: v.sources, saved: snapshot(v), version: v.version, updatedAt: v.updated_at, updatedBy: v.updated_by }];
     })),
   );
-  const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : SECTIONS.find((s) => s.key !== "summary" && chapterProgress(p.sections[s.key].text, s).state !== "fertig")?.key ?? "idee"));
+  const [active, setActive] = useState(() => (p.glance.every((g) => !g.value.trim() || g.label === "Gründer" || g.label === "Firmenname") ? BLICK : DEFS.find((s) => s.key !== DEFS[0].key && chapterProgress(p.sections[s.key].text, s).state !== "fertig")?.key ?? DEFS[1].key));
   const [title, setTitle] = useState(p.title);
   const [tab, setTab] = useState("kapitel");
   const [branche, setBranche] = useState(p.branche);
@@ -90,7 +94,7 @@ export function PlanEditor(p: Props) {
       const s = latest.current[key];
       if (snapshot(s) === s.saved || s.conflict) continue;
       const { text, sources } = s;
-      const res = await saveSection(p.coacheeId, key, s.version, text, sources);
+      const res = await saveSection(p.coacheeId, key, s.version, text, sources, p.mode);
       const apply = (fn: (x: Sec) => Sec) => {
         latest.current = { ...latest.current, [key]: fn(latest.current[key]) };
         setSecs((prev) => ({ ...prev, [key]: fn(prev[key]) }));
@@ -116,19 +120,19 @@ export function PlanEditor(p: Props) {
     el.style.height = `${Math.max(320, el.scrollHeight + 4)}px`;
   }, [current?.text, active, preview]);
 
-  const progress = Object.fromEntries(SECTIONS.map((s) => [s.key, chapterProgress(secs[s.key].text, s)]));
-  const done = SECTIONS.filter((s) => progress[s.key].state === "fertig").length;
-  const overall = Math.round(SECTIONS.reduce((a, s) => a + progress[s.key].pct, 0) / SECTIONS.length);
+  const progress = Object.fromEntries(DEFS.map((s) => [s.key, chapterProgress(secs[s.key].text, s)]));
+  const done = DEFS.filter((s) => progress[s.key].state === "fertig").length;
+  const overall = Math.round(DEFS.reduce((a, s) => a + progress[s.key].pct, 0) / DEFS.length);
 
   /** Stand nach einem Durchgang der KI übernehmen (alle Kapitel frisch vom Server) */
-  function takeOver(sections: Sections, items: GlanceItem[]) {
-    const next = Object.fromEntries(SECTIONS.map((s) => {
+  function takeOver(sections: Sections, items?: GlanceItem[]) {
+    const next = Object.fromEntries(DEFS.map((s) => {
       const v = sections[s.key];
       return [s.key, { text: v.text, sources: v.sources, saved: snapshot(v), version: v.version, updatedAt: v.updated_at, updatedBy: v.updated_by }];
     }));
     latest.current = next;
     setSecs(next);
-    setGlance((g) => ({ items, key: g.key + 1 }));
+    if (items) setGlance((g) => ({ items, key: g.key + 1 }));
   }
 
   const upsertRun = (r: RunView) => setRuns((xs) => (xs.some((x) => x.id === r.id) ? xs.map((x) => (x.id === r.id ? r : x)) : [...xs, r]));
@@ -143,12 +147,12 @@ export function PlanEditor(p: Props) {
   };
 
   // Letzte Bewertung der KI je Kapitel
-  const reviewRun = [...runs].reverse().find((r) => r.status === "fertig" && r.result?.review?.length);
+  const reviewRun = !amt ? undefined : [...runs].reverse().find((r) => r.status === "fertig" && r.result?.review?.length);
   const review: Record<string, ChapterReview> = Object.fromEntries((reviewRun?.result?.review ?? []).map((x) => [x.key, x]));
 
   // Offene Änderungen der KI je Kapitel (die jüngste zählt)
   const pending: Record<string, { runId: string; before: string; after: string }> = {};
-  for (const r of runs) for (const x of r.changes) {
+  for (const r of amt ? runs : []) for (const x of r.changes) {
     if (x.decision === "offen") pending[x.key] = { runId: r.id, before: x.before, after: x.after };
     else if (pending[x.key]?.runId !== r.id) delete pending[x.key];
   }
@@ -198,10 +202,10 @@ export function PlanEditor(p: Props) {
           </div>
           <div className="space-y-1">
             <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-              <span>{t("{a} von {b} Kapiteln fertig", { a: done, b: SECTIONS.length })}</span>
+              <span>{t("{a} von {b} Kapiteln fertig", { a: done, b: DEFS.length })}</span>
               <span className="text-xs text-white/75">{state.kind === "saved" ? `✓ ${t("Gespeichert")}` : state.kind === "saving" ? t("Speichert …") : state.kind === "dirty" ? t("Ungespeichert …") : state.message ?? t("Nicht gespeichert")}</span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/20"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(done / SECTIONS.length) * 100}%` }} /></div>
+            <div className="h-1.5 rounded-full bg-white/20"><div className="h-1.5 rounded-full bg-gold transition-all" style={{ width: `${(done / DEFS.length) * 100}%` }} /></div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
@@ -242,7 +246,7 @@ export function PlanEditor(p: Props) {
       {bank && <div hidden={tab !== "angaben"}><BankAngaben bank={p.bankState} /></div>}
       {bank && <div hidden={tab !== "gespraech"}><BankFragen bank={p.bankState} ai={p.ai} /></div>}
       {p.coach && <div hidden={tab !== "leitfaden"}><Leitfaden key={branche} href={p.gesamtHref.replace(/\/gesamt$/, "/leitfaden")} branche={branche} ai={p.ai} open /></div>}
-      {p.ai && (
+      {p.ai && amt && (
         <div hidden={tab !== "ki"}>
           <GesamtKi
             href={p.gesamtHref}
@@ -257,6 +261,11 @@ export function PlanEditor(p: Props) {
             onUpdate={takeOver}
             onOpen={(key) => { go(key); setTab("kapitel"); }}
           />
+        </div>
+      )}
+      {p.ai && !amt && (
+        <div hidden={tab !== "ki"}>
+          <BankPlanStart href={p.bankState.href} ai empty={false} before={save} onDone={(x) => takeOver(x)} />
         </div>
       )}
 
@@ -296,11 +305,15 @@ export function PlanEditor(p: Props) {
         )}
       </div>
 
+      {!amt && tab === "kapitel" && DEFS.every((d) => !secs[d.key].text.trim()) && (
+        <BankPlanStart href={p.bankState.href} ai={p.ai} empty before={save} onDone={(x) => takeOver(x)} />
+      )}
+
       <div hidden={tab !== "kapitel"} className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <aside className="card space-y-3 !p-4 lg:sticky lg:top-20">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
-              <span className="whitespace-nowrap font-semibold">{t("{a} von {b} Kapiteln fertig", { a: done, b: SECTIONS.length })}</span>
+              <span className="whitespace-nowrap font-semibold">{t("{a} von {b} Kapiteln fertig", { a: done, b: DEFS.length })}</span>
               <SaveBadge state={state} />
             </div>
             <div className="mt-1.5 h-1.5 rounded-full bg-line-soft"><div className="h-1.5 rounded-full bg-ok transition-all" style={{ width: `${overall}%` }} /></div>
@@ -310,7 +323,7 @@ export function PlanEditor(p: Props) {
             <span className="sr-only">{t("Kapitel")}</span>
             <select className="input" value={active} onChange={(e) => go(e.target.value)}>
               <option value={BLICK}>{t("Auf einen Blick")}</option>
-              {SECTIONS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {t(s.title)} · {progress[s.key].state === "fertig" ? "✓" : `${progress[s.key].pct} %`}{secs[s.key].conflict ? ` (${t("Konflikt")})` : ""}</option>)}
+              {DEFS.map((s, i) => <option key={s.key} value={s.key}>{i + 1}. {t(s.title)} · {progress[s.key].state === "fertig" ? "✓" : `${progress[s.key].pct} %`}{secs[s.key].conflict ? ` (${t("Konflikt")})` : ""}</option>)}
             </select>
           </label>
           <ol className="hidden space-y-0.5 lg:block">
@@ -320,7 +333,7 @@ export function PlanEditor(p: Props) {
                 <span className="min-w-0 flex-1 truncate">{t("Auf einen Blick")}</span>
               </button>
             </li>
-            {SECTIONS.map((s, i) => {
+            {DEFS.map((s, i) => {
               const sec = secs[s.key];
               const pr = progress[s.key];
               const ok = pr.state === "fertig";
@@ -357,8 +370,8 @@ export function PlanEditor(p: Props) {
 
   // als Funktion aufgerufen, nicht als Komponente: sonst würde das Textfeld bei jeder Eingabe neu aufgebaut
   function renderChapter() {
-    const def = SECTIONS.find((s) => s.key === active)!;
-    const index = SECTIONS.indexOf(def);
+    const def = DEFS.find((s) => s.key === active)!;
+    const index = DEFS.indexOf(def);
     const sec = secs[active];
     const bausteine = p.bausteine.filter((b) => def.from.includes(b.category));
     const words = sec.text.trim() ? sec.text.trim().split(/\s+/).length : 0;
@@ -368,7 +381,7 @@ export function PlanEditor(p: Props) {
       <section className="card min-w-0 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("Kapitel {a} von {b}", { a: index + 1, b: SECTIONS.length })}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("Kapitel {a} von {b}", { a: index + 1, b: DEFS.length })}</p>
             <h2 className="h2">{index + 1}. {t(def.title)}</h2>
             <p className="text-sm text-muted">{t(def.hint)}</p>
           </div>
@@ -507,8 +520,8 @@ export function PlanEditor(p: Props) {
         )}
 
         <div className="flex justify-between gap-2 border-t border-line-soft pt-4">
-          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" onClick={() => go(index === 0 ? BLICK : SECTIONS[index - 1].key)}>← {index === 0 ? t("Auf einen Blick") : t(SECTIONS[index - 1].title)}</button>
-          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" disabled={index === SECTIONS.length - 1} onClick={() => go(SECTIONS[index + 1].key)}>{SECTIONS[index + 1] ? t(SECTIONS[index + 1].title) : t("Weiter")} →</button>
+          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" onClick={() => go(index === 0 ? BLICK : DEFS[index - 1].key)}>← {index === 0 ? t("Auf einen Blick") : t(DEFS[index - 1].title)}</button>
+          <button type="button" className="btn-ghost btn-sm min-w-0 truncate" disabled={index === DEFS.length - 1} onClick={() => go(DEFS[index + 1].key)}>{DEFS[index + 1] ? t(DEFS[index + 1].title) : t("Weiter")} →</button>
         </div>
       </section>
     );
@@ -679,5 +692,41 @@ function ProjectNotes({ coacheeId, initial }: { coacheeId: string; initial: stri
         }}
       />
     </label>
+  );
+}
+
+/** Bankfassung anlegen: aus dem Plan fürs Amt übernehmen (alle) oder von der KI für die Bank schreiben lassen (Coach) */
+function BankPlanStart({ href, ai, empty, before, onDone }: { href: string; ai: boolean; empty: boolean; before: () => Promise<void>; onDone: (s: Sections) => void }) {
+  const t = useT();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  async function run(kind: "copy" | "plan", all: boolean) {
+    setBusy(`${kind}${all ? "-all" : ""}`);
+    setError(null);
+    setConfirm(false);
+    await before();
+    const res = (await fetch(href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [kind]: true, all }) }).then((r) => r.json()).catch(() => ({ error: t("Keine Verbindung.") }))) as { sections?: Sections; error?: string };
+    setBusy(null);
+    if (res.sections) onDone(res.sections);
+    if (res.error) setError(res.error);
+  }
+  return (
+    <section className="card space-y-3 border-gold/40 bg-gold-soft/40">
+      <h3 className="h3">{empty ? t("Die Bankfassung hat eigene Kapitel") : "✦ Bankfassung mit der KI schreiben"}</h3>
+      <p className="text-sm text-muted">
+        {empty
+          ? t("Banken lesen anders als das Amt: Finanzierungsanfrage, Kapitalbedarf, Sicherheiten, Kapitaldienst und Risiken stehen im Mittelpunkt. Fang mit dem Plan fürs Amt als Grundlage an.")
+          : "Die KI schreibt die Kapitel der Bankfassung aus dem Plan fürs Amt, dem Finanzplan und den Angaben für die Bank. Geschriebene Kapitel bleiben, außer du wählst „Alle neu schreiben“."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {ai && <button type="button" className="btn" disabled={busy !== null} onClick={() => void run("plan", false)}>{busy === "plan" ? "KI schreibt …" : empty ? "✦ Von der KI für die Bank schreiben lassen" : "✦ Leere Kapitel schreiben"}</button>}
+        {!ai || empty ? <button type="button" className={ai ? "btn-ghost" : "btn"} disabled={busy !== null} onClick={() => void run("copy", false)}>{busy === "copy" ? t("Wird übernommen …") : t("Aus dem Plan fürs Amt übernehmen")}</button> : null}
+        {ai && !empty && (confirm
+          ? <span className="flex flex-wrap items-center gap-2 text-sm"><span>Alle Kapitel überschreiben?</span><button type="button" className="btn btn-sm" onClick={() => void run("plan", true)}>Ja, alle neu</button><button type="button" className="btn-ghost btn-sm" onClick={() => setConfirm(false)}>Abbrechen</button></span>
+          : <button type="button" className="btn-ghost" disabled={busy !== null} onClick={() => setConfirm(true)}>{busy === "plan-all" ? "KI schreibt …" : "Alle neu schreiben"}</button>)}
+      </div>
+      {error && <p className="text-sm text-danger" role="alert">{error}</p>}
+    </section>
   );
 }

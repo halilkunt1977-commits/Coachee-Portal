@@ -11,6 +11,7 @@ import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { loadFile, storeFile } from "@/lib/files";
 import { documentFile, importAnyFile, importTarget, type ImportResult } from "@/lib/bp/apply-import";
 import { normalizeFinance, type FinanceInput } from "@/lib/bp/finance";
+import { BANK_SECTIONS } from "@/lib/bp/bank-sections";
 import { BRANCHEN } from "@/lib/bp/branchen";
 import { MAX_NOTE, VORHABEN, type ChatTurn } from "@/lib/bp/notes";
 import { appendTurns, setTurnStatus } from "@/lib/bp/schreibhilfe";
@@ -38,28 +39,31 @@ async function auditThrottled(user: User, action: string, coacheeId: string, det
 
 export type SectionSave = { ok: true; version: number; savedAt: string } | { ok: false; error: string; conflict?: { text: string; sources: string; version: number; by: string | null } };
 
-export async function saveSection(coacheeId: string, key: string, baseVersion: number, text: string, sources: string): Promise<SectionSave> {
+export async function saveSection(coacheeId: string, key: string, baseVersion: number, text: string, sources: string, fassung: "amt" | "bank" = "amt"): Promise<SectionSave> {
   const user = await requireUser();
   const c = await gruendungCoachee(user, coacheeId);
-  if (!SECTIONS.some((s) => s.key === key)) return { ok: false, error: "Unbekanntes Kapitel." };
+  const bank = fassung === "bank";
+  // Spaltenname nur aus dieser festen Auswahl
+  const col = bank ? "bank_sections" : "sections";
+  if (!(bank ? BANK_SECTIONS : SECTIONS).some((s) => s.key === key)) return { ok: false, error: "Unbekanntes Kapitel." };
   const body = String(text ?? "").slice(0, 60000);
   const src = String(sources ?? "").slice(0, 8000);
   // Speichern nur, wenn niemand anderes inzwischen geändert hat (eigene schnelle Folgespeicherungen sind erlaubt)
   const row = await one<{ version: number; saved_at: string }>(
     `UPDATE business_plans
-        SET sections = jsonb_set(sections, ARRAY[$2::text], jsonb_build_object('text', $3::text, 'sources', $6::text, 'version', COALESCE((sections->($2::text)->>'version')::int, 0) + 1, 'updated_at', now(), 'updated_by', $4::text)),
+        SET ${col} = jsonb_set(${col}, ARRAY[$2::text], jsonb_build_object('text', $3::text, 'sources', $6::text, 'version', COALESCE((${col}->($2::text)->>'version')::int, 0) + 1, 'updated_at', now(), 'updated_by', $4::text)),
             updated_at = now()
-      WHERE coachee_id = $1 AND (COALESCE((sections->($2::text)->>'version')::int, 0) = $5 OR sections->($2::text)->>'updated_by' = $4::text)
-      RETURNING (sections->($2::text)->>'version')::int AS version, sections->($2::text)->>'updated_at' AS saved_at`,
+      WHERE coachee_id = $1 AND (COALESCE((${col}->($2::text)->>'version')::int, 0) = $5 OR ${col}->($2::text)->>'updated_by' = $4::text)
+      RETURNING (${col}->($2::text)->>'version')::int AS version, ${col}->($2::text)->>'updated_at' AS saved_at`,
     [c.id, key, body, user.id, baseVersion, src],
   );
   if (!row) {
-    const now = await one<{ sections: unknown }>("SELECT sections FROM business_plans WHERE coachee_id = $1", [c.id]);
-    const s = normalizeSections(now?.sections)[key];
+    const now = await one<{ s: unknown }>(`SELECT ${col} AS s FROM business_plans WHERE coachee_id = $1`, [c.id]);
+    const s = normalizeSections(now?.s, bank ? BANK_SECTIONS : SECTIONS)[key];
     const by = s.updated_by ? await one<{ name: string }>("SELECT name FROM users WHERE id = $1", [s.updated_by]) : null;
     return { ok: false, error: "Jemand anderes hat dieses Kapitel gerade geändert.", conflict: { text: s.text, sources: s.sources, version: s.version, by: by?.name ?? null } };
   }
-  await auditThrottled(user, "bp_saved", c.id, { section: key });
+  await auditThrottled(user, "bp_saved", c.id, { section: key, fassung });
   return { ok: true, version: row.version, savedAt: row.saved_at };
 }
 

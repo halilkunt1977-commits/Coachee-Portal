@@ -64,6 +64,10 @@ export function mockJson(schemaName: string, input: string): unknown {
     const nrs = [...input.matchAll(/^\[(\d+)\] /gm)].map((m) => Number(m[1]));
     return { answers: nrs.map((nr) => ({ nr, antwort: `Testantwort ohne KI zu Frage ${nr}. Ich bringe [Eigenmittel ergänzen] ein.` })) };
   }
+  if (schemaName === "bank_plan") {
+    const keys = [...input.matchAll(/^\[kapitel:([a-z]+)\] /gm)].map((m) => m[1]);
+    return { chapters: keys.map((key) => ({ key, text: `### Testtext ohne KI\n\nKapitel ${key} der Bankfassung, geschrieben aus dem Plan fürs Amt und dem Finanzplan. Beantragt werden [Betrag ergänzen].` })) };
+  }
   if (schemaName === "leitfaden") {
     const ids = [...input.matchAll(/^\[([^\]]+)\] /gm)].map((m) => m[1]);
     return { answers: ids.filter((_, i) => i % 3 === 0).map((id) => ({ id, answer: `Testantwort ohne KI zu ${id}.` })) };

@@ -2,6 +2,7 @@
 import { useSearchParams } from "next/navigation";
 import { useRef, type ComponentProps, type ReactNode } from "react";
 import type { BankInfo } from "@/lib/bp/bank";
+import type { Sections } from "@/lib/bp/sections";
 import { BUNDESWEIT, FOERDER_STAND, landOf } from "@/lib/bp/foerderung";
 import { FoerderView, KrediteView, useAbgaben, useBank, type Abgabe, type Zahlen } from "./BankAbgabe";
 import { PlanEditor } from "./PlanEditor";
@@ -17,7 +18,7 @@ const AREAS: Area[] = ["amt", "bank", "foerderung", "kredite"];
 
 type EditorProps = Omit<ComponentProps<typeof PlanEditor>, "mode" | "onBack" | "bankState" | "abgaben">;
 
-export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number }) {
+export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number; bankSections: Sections; bankDone: number; bankCount: number }) {
   const t = useT();
   const sp = useSearchParams();
   const raw = sp.get("bereich");
@@ -38,11 +39,11 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     });
   }
 
-  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, ...editor } = p;
-  void [_b, _c, _h, _a, _l, _z, _d, _n];
+  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, bankSections, bankDone: _bd, bankCount: _bc, ...editor } = p;
+  void [_b, _c, _h, _a, _l, _z, _d, _n, _bd, _bc];
 
   const anchor = <div ref={top} className="h-0" aria-hidden />;
-  if (area === "amt" || area === "bank") return <>{anchor}<PlanEditor {...editor} key={area} mode={area} onBack={() => go(null)} bankState={bank} abgaben={abgaben} /></>;
+  if (area === "amt" || area === "bank") return <>{anchor}<PlanEditor {...editor} sections={area === "bank" ? bankSections : editor.sections} key={area} mode={area} onBack={() => go(null)} bankState={bank} abgaben={abgaben} /></>;
 
   if (area === "foerderung" || area === "kredite") {
     return (
@@ -75,7 +76,7 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
       <Tile icon={<IconAmt />} title={t("Businessplan fürs Amt")} text={t("Für Jobcenter und Agentur für Arbeit: Gründungszuschuss, Einstiegsgeld")} onClick={() => go("amt")}
         foot={<><span>{t("{a} von {b} Kapiteln fertig", { a: p.doneCount, b: p.chapterCount })}</span><span className={lastOf("fachstelle") ? "text-ok" : ""}>{when(lastOf("fachstelle"))}</span></>} />
       <Tile icon={<IconBank />} title={t("Businessplan für die Bank")} text={t("Für Kreditantrag und KfW: mit Kapitaldienst, Tilgungsplan und Fragen fürs Bankgespräch")} onClick={() => go("bank")}
-        foot={<><span>{t("{a} von {b} Bankfragen beantwortet", { a: answered, b: bank.b.fragen.length })}</span><span className={lastOf("bank") ? "text-ok" : ""}>{when(lastOf("bank"))}</span></>} />
+        foot={<><span>{t("{a} von {b} Kapiteln fertig", { a: p.bankDone, b: p.bankCount })} · {t("{a} von {b} Bankfragen beantwortet", { a: answered, b: bank.b.fragen.length })}</span><span className={lastOf("bank") ? "text-ok" : ""}>{when(lastOf("bank"))}</span></>} />
       <Tile icon={<IconFoerder />} title={t("Förderungen")} text={land ? t("Zuschüsse und Programme in {land} und bundesweit", { land: land.name }) : t("Zuschüsse und Programme im Bundesland und bundesweit")} onClick={() => go("foerderung")}
         foot={<span>{t("{n} Programme", { n: foerderCount })}</span>} />
       <Tile icon={<IconKredit />} title={t("Kredite")} text={t("Förderkredite mit aktuellen Zinsen, Ablauf und Unterlagen für die Bank")} onClick={() => go("kredite")}

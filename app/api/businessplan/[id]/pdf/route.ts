@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/business
   };
   let pdf: Uint8Array;
   try {
-    pdf = await planPdf(plan.sections, plan.glance, plan.finance, meta, cvFontCss(), bank ? { bank: plan.bank } : {});
+    pdf = await planPdf(bank ? plan.bankSections : plan.sections, plan.glance, plan.finance, meta, cvFontCss(), bank ? { bank: plan.bank } : {});
   } catch (e) {
     console.error("PDF-Erzeugung fehlgeschlagen", e);
     return new NextResponse("Das PDF konnte gerade nicht erzeugt werden. Bitte später noch einmal versuchen.", { status: 500 });

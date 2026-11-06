@@ -2,6 +2,7 @@ import { MONTHS, calculate, eur, financeIsEmpty, keyFigures, liquidityRows, livi
 import { eigenmittel, ersteRate, kapitaldienst, schuldenSumme, tilgungsplan, vermoegenSumme, type BankInfo } from "./bank";
 import { landOf } from "./foerderung";
 import { parseInline, parseMarkdown, type Run } from "./markdown";
+import { BANK_SECTIONS } from "./bank-sections";
 import { SECTIONS, sourceList, type GlanceItem, type Sections } from "./sections";
 
 /*
@@ -48,7 +49,7 @@ export function tocTargets(hasFinance: boolean, bank = false) {
   return [
     { key: "blick", label: "Auf einen Blick", heading: "Auf einen Blick" },
     ...(bank && hasFinance ? [{ key: "finanzierung", label: "Finanzierung und Kapitaldienst", heading: "Finanzierung und Kapitaldienst" }] : []),
-    ...SECTIONS.map((s, i) => ({ key: s.key, label: `${i + 1}. ${s.title}`, heading: `${i + 1}. ${s.title}` })),
+    ...(bank ? BANK_SECTIONS : SECTIONS).map((s, i) => ({ key: s.key, label: `${i + 1}. ${s.title}`, heading: `${i + 1}. ${s.title}` })),
     ...(hasFinance ? [{ key: "anhang", label: "Anhang: Finanzplan", heading: "Anhang: Finanzplan" }] : []),
   ];
 }
@@ -70,11 +71,12 @@ export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance
     .map((g) => `<p class="glance"><strong>${esc(g.label)}:</strong><br>${mark(esc(g.value)).replace(/\n/g, "<br>")}</p>`)
     .join("");
 
-  const chapters = SECTIONS.map((s, i) => {
+  // Bankfassung: eigene Kapitel (sections sind dann die Bank-Kapitel)
+  const chapters = (bank ? BANK_SECTIONS : SECTIONS).map((s, i) => {
     const sec = sections[s.key];
     const t = sec?.text.trim();
     const src = sourceList(sec?.sources ?? "");
-    return `<section class="chapter"><h2>${i + 1}. ${esc(s.title)}</h2>${t ? mdToHtml(t) : `<p class="missing">Dieses Kapitel ist noch nicht geschrieben.</p>`}${s.key === "finanzen" ? figures : ""}${
+    return `<section class="chapter"><h2>${i + 1}. ${esc(s.title)}</h2>${t ? mdToHtml(t) : `<p class="missing">Dieses Kapitel ist noch nicht geschrieben.</p>`}${s.key === "finanzen" || s.key === "rentabilitaet" ? figures : ""}${
       src.length ? `<h4 class="src">Quellen</h4>${src.map((q) => `<p class="source">${runs(parseInline(q))}</p>`).join("")}` : ""
     }</section>`;
   }).join("\n");

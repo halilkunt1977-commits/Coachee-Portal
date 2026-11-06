@@ -147,11 +147,11 @@ export const emptySection = (): SectionState => ({ text: "", sources: "", versio
 /** Abschnitte der alten Gliederung (vor Migration 020), falls noch ein Plan in alter Form gelesen wird */
 const OLD_KEYS: Record<string, string> = { zusammenfassung: "summary", chancen: "risiken" };
 
-export function normalizeSections(raw: unknown): Sections {
+export function normalizeSections(raw: unknown, defs: Pick<SectionDef, "key">[] = SECTIONS): Sections {
   const r = { ...((raw && typeof raw === "object" ? raw : {}) as Record<string, Partial<SectionState>>) };
-  for (const [from, to] of Object.entries(OLD_KEYS)) if (r[from] && !r[to]) r[to] = r[from];
+  if (defs === SECTIONS) for (const [from, to] of Object.entries(OLD_KEYS)) if (r[from] && !r[to]) r[to] = r[from];
   return Object.fromEntries(
-    SECTIONS.map((s) => {
+    defs.map((s) => {
       const v = r[s.key] ?? {};
       return [s.key, { text: typeof v.text === "string" ? v.text : "", sources: typeof v.sources === "string" ? v.sources : "", version: Number(v.version) || 0, updated_at: v.updated_at ?? null, updated_by: v.updated_by ?? null }];
     }),
