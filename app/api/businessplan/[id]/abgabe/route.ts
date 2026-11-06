@@ -26,7 +26,8 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/busines
 
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/businessplan/[id]/abgabe">) {
   const w = await who(ctx);
-  if (!w) return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
+  // Abgeben nur der Coach; der Coachee sieht die Dateien
+  if (!w || w.user.role !== "coach") return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
   const body = (await request.json().catch(() => null)) as { kind?: unknown } | null;
   const kind = body?.kind === "bank" ? "bank" : body?.kind === "fachstelle" ? "fachstelle" : null;
   if (!kind) return NextResponse.json({ error: "Unbekannte Fassung." }, { status: 400 });

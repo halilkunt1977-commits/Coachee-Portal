@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { coacheeFor } from "@/lib/access";
 import { AiError, assertAiAllowed } from "@/lib/ai";
 import { changeFinance, type FinanceTurn } from "@/lib/bp/finanz-ki";
-import { audit, requireCoach, requireUser, type User } from "@/lib/auth";
+import { audit, requireCoach, type User } from "@/lib/auth";
 import { one, query } from "@/lib/db";
 import { DOC_TYPES, MAX_DOC_BYTES, extOf } from "@/lib/documents";
 import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
@@ -40,7 +40,7 @@ async function auditThrottled(user: User, action: string, coacheeId: string, det
 export type SectionSave = { ok: true; version: number; savedAt: string } | { ok: false; error: string; conflict?: { text: string; sources: string; version: number; by: string | null } };
 
 export async function saveSection(coacheeId: string, key: string, baseVersion: number, text: string, sources: string, fassung: "amt" | "bank" = "amt"): Promise<SectionSave> {
-  const user = await requireUser();
+  const user = await requireCoach(); // Businessplan und Finanzplan bearbeitet nur der Coach
   const c = await gruendungCoachee(user, coacheeId);
   const bank = fassung === "bank";
   // Spaltenname nur aus dieser festen Auswahl
@@ -68,7 +68,7 @@ export async function saveSection(coacheeId: string, key: string, baseVersion: n
 }
 
 export async function saveTitle(coacheeId: string, title: string) {
-  const user = await requireUser();
+  const user = await requireCoach(); // Businessplan und Finanzplan bearbeitet nur der Coach
   const c = await gruendungCoachee(user, coacheeId);
   await query("UPDATE business_plans SET title = $2, updated_at = now() WHERE coachee_id = $1", [c.id, String(title ?? "").trim().slice(0, 120)]);
   return { ok: true };
@@ -85,7 +85,7 @@ export async function saveBranche(coacheeId: string, branche: string) {
 
 /** „Auf einen Blick“: Liste aus Bezeichnung und Angabe, wird als Ganzes gespeichert */
 export async function saveGlance(coacheeId: string, glance: GlanceItem[]) {
-  const user = await requireUser();
+  const user = await requireCoach(); // Businessplan und Finanzplan bearbeitet nur der Coach
   const c = await gruendungCoachee(user, coacheeId);
   await query("UPDATE business_plans SET glance = $2, updated_at = now() WHERE coachee_id = $1", [c.id, JSON.stringify(normalizeGlance(glance))]);
   await auditThrottled(user, "bp_saved", c.id, { section: "blick" });
@@ -140,7 +140,7 @@ export async function clearChapterChat(coacheeId: string, key: string) {
 export type FinanceSave = { ok: true; version: number } | { ok: false; error: string; conflict?: { by: string | null; version: number } };
 
 export async function saveFinance(coacheeId: string, baseVersion: number, raw: unknown): Promise<FinanceSave> {
-  const user = await requireUser();
+  const user = await requireCoach(); // Businessplan und Finanzplan bearbeitet nur der Coach
   const c = await gruendungCoachee(user, coacheeId);
   const f = normalizeFinance(raw);
   const row = await one<{ finance_version: number }>(
@@ -158,7 +158,7 @@ export async function saveFinance(coacheeId: string, baseVersion: number, raw: u
 
 /** Zahlen aus den Gesprächen (Reiter „Zahlen“) neu in den Finanzplan übernehmen. Ersetzt die bisherigen Eingaben. */
 export async function importFinanceItems(coacheeId: string): Promise<{ ok: true; finance: FinanceInput; version: number } | { ok: false; error: string }> {
-  const user = await requireUser();
+  const user = await requireCoach();
   const c = await gruendungCoachee(user, coacheeId);
   const items = await financeItems(c.id);
   if (!items.length) return { ok: false, error: "Es gibt noch keine Zahlen aus den Gesprächen." };

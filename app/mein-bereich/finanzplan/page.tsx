@@ -15,7 +15,7 @@ export default async function MyFinance() {
   if (c.coaching_type !== "gruendung") notFound();
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow={t("Meine Gründung")} title={t("Mein Finanzplan")} description={t("Kapitalbedarf, Finanzierung, Umsatz und Kosten eintragen. Rentabilität und Liquidität für drei Jahre rechnen sich sofort mit, als Excel oder zusammen mit dem Businessplan als PDF.")} />
+      <PageHeader eyebrow={t("Meine Gründung")} title={t("Mein Finanzplan")} description={t("Dein Coach erstellt deinen Finanzplan. Hier siehst du die wichtigsten Zahlen und kannst den ganzen Plan als Excel oder zusammen mit dem Businessplan öffnen.")} />
       <FinancePanel user={user} coachee={c} links={{ plan: "/mein-bereich/businessplan", finance: "/mein-bereich/finanzplan", zahlen: null }} />
     </div>
   );
