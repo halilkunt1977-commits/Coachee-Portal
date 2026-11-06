@@ -11,7 +11,7 @@ import { SECTIONS } from "@/lib/bp/sections";
 
 const chapterNo = (key: string) => SECTIONS.findIndex((s) => s.key === key) + 1;
 
-export function Leitfaden({ href, branche, ai }: { href: string; branche: string; ai: boolean }) {
+export function Leitfaden({ href, branche, ai, open: startOpen = false }: { href: string; branche: string; ai: boolean; open?: boolean }) {
   const [stand, setStand] = useState<LeitfadenStand | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function Leitfaden({ href, branche, ai }: { href: string; branche: string
   const done = list.reduce((n, t) => n + t.fragen.filter((f) => answers[f.id]).length, 0);
 
   return (
-    <details className="card !p-4" aria-label="Gesprächsleitfaden">
+    <details className="card !p-4" aria-label="Gesprächsleitfaden" open={startOpen}>
       <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold">Gesprächsleitfaden · {done} von {total} Fragen beantwortet</span>
         <span className="flex items-center gap-2 text-xs text-muted">

@@ -3,9 +3,7 @@ import { fullName, type Coachee } from "../access";
 import type { User } from "../auth";
 import { one, query } from "../db";
 import { storeFile } from "../files";
-import { htmlToPdf } from "../cv/pdf";
 import { cvFontCss } from "../cv/fonts";
-import { bankLeitfadenHtml } from "./bank-leitfaden";
 import { financeWorkbook } from "./excel";
 import { planPdf } from "./plan-pdf";
 import { planFor } from "./store";
@@ -29,10 +27,9 @@ export async function createAbgabe(user: User, c: Coachee, kind: AbgabeKind) {
   const date = new Date();
   const meta = { title: plan.title, name, email: c.email, phone: c.phone, coach: coach?.name ?? "Coach", date: date.toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" }) };
   const opts = bank ? { bank: plan.bank } : {};
-  const [pdf, xlsx, guide] = await Promise.all([
+  const [pdf, xlsx] = await Promise.all([
     planPdf(plan.sections, plan.glance, plan.finance, meta, cvFontCss(), opts),
     financeWorkbook(plan.finance, { name, title: plan.title }, opts),
-    bank ? htmlToPdf(bankLeitfadenHtml(name, plan.finance, plan.bank)) : Promise.resolve(null),
   ]);
   const tag = bank ? "Bank" : "Fachstelle";
   const day = date.toLocaleDateString("de-DE");
@@ -40,7 +37,6 @@ export async function createAbgabe(user: User, c: Coachee, kind: AbgabeKind) {
     { title: `Abgabe ${tag} – Businessplan ${day}`, file: `Businessplan ${tag} ${name}.pdf`, mime: "application/pdf", data: pdf },
     { title: `Abgabe ${tag} – Finanzplan ${day}`, file: `Finanzplan ${tag} ${name}.xlsx`, mime: XLSX, data: xlsx },
   ];
-  if (guide) parts.push({ title: `Leitfaden Bank und Förderung ${day}`, file: `Leitfaden Bank und Förderung ${name}.pdf`, mime: "application/pdf", data: guide });
   const docs: string[] = [];
   for (const p of parts) {
     const fileId = await storeFile({ coacheeId: c.id, kind: "dokument", name: p.file, mime: p.mime, data: Buffer.from(p.data), userId: user.id });

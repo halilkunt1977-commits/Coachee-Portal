@@ -14,6 +14,7 @@ import { Num, Pick, QtyInput, Rows, Text } from "./fields";
 import { FinanzFassungen } from "./FinanzFassungen";
 import { FinanzKi } from "./FinanzKi";
 import { ImportFileButton } from "./ImportButtons";
+import { openFile } from "./openFile";
 import { SaveBadge, useAutosave } from "./useAutosave";
 import { useT } from "@/components/i18n/LangProvider";
 import type { T } from "@/lib/i18n";
@@ -100,12 +101,7 @@ export function FinanceEditor(p: Props) {
   };
   const months = useMemo(() => Array.from({ length: MONTHS }, (_, i) => ({ value: i, label: monthLabel(f.start, i) })), [f.start]);
 
-  async function download(href: string) {
-    await save();
-    const a = document.createElement("a");
-    a.href = href;
-    a.click();
-  }
+  const download = (href: string, view = false) => void openFile(href, save, view);
 
   return (
     <div className="space-y-5">
@@ -118,8 +114,8 @@ export function FinanceEditor(p: Props) {
           <div className="flex flex-wrap gap-2">
             <Link href={p.planHref} className="btn-ghost btn-sm">{t("Businessplan")}</Link>
             {p.share}
-            <button type="button" className="btn-ghost btn-sm" onClick={() => void download(p.excelHref)}>{t("Excel")}</button>
-            <button type="button" className="btn btn-sm" onClick={() => void download(p.pdfHref)}>{t("PDF mit Businessplan")}</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => download(p.excelHref)}>{t("Excel")}</button>
+            <button type="button" className="btn btn-sm" onClick={() => download(`${p.pdfHref}?ansehen`, true)}>{t("PDF mit Businessplan")}</button>
           </div>
         </div>
         {p.coach && (

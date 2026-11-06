@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, ctx: RouteContext<"/api/business
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`Businessplan ${bank ? "Bank " : ""}${fullName(c)}.pdf`)}`,
+      "Content-Disposition": `${request.nextUrl.searchParams.has("ansehen") ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(`Businessplan ${bank ? "Bank " : ""}${fullName(c)}.pdf`)}`,
       "Cache-Control": "private, no-store",
     },
   });
