@@ -190,9 +190,9 @@ export function PlanEditor(p: Props) {
         {p.coach && (
           <div className="flex flex-wrap items-start justify-between gap-2 border-t border-line-soft pt-3">
             <p className="text-xs text-muted">
-              {p.imported ? `Übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen fertigen Businessplan nach der Vorlage (Word) oder den Finanzplan (Excel) hier hochladen und übernehmen."}
+              {p.imported ? `Übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen Businessplan (Word oder PDF) oder den Finanzplan (Excel) hier hochladen und übernehmen. Zahlen aus Word oder PDF kommen automatisch in den Finanzplan."}
             </p>
-            <ImportFileButton coacheeId={p.coacheeId} accept=".docx,.xlsx" filled={p.filled} label="Aus Word/Excel übernehmen" />
+            <ImportFileButton coacheeId={p.coacheeId} accept=".docx,.pdf,.xlsx" filled={p.filled} label="Aus Word, PDF oder Excel übernehmen" />
           </div>
         )}
       </div>

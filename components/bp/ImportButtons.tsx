@@ -22,17 +22,20 @@ function ResultBox({ res }: { res: ImportResult }) {
  * „Aus Word/Excel übernehmen“ im Businessplan oder Finanzplan (nur Coach). Ist dort schon etwas eingetragen,
  * wird erst nachgefragt. Nach der Übernahme lädt die Seite neu, damit der Editor den neuen Stand zeigt.
  */
-export function ImportFileButton({ coacheeId, accept, filled, label }: { coacheeId: string; accept: string; filled: boolean; label: string }) {
+export function ImportFileButton({ coacheeId, accept, filled, label, target = "plan" }: { coacheeId: string; accept: string; filled: boolean; label: string; target?: "plan" | "finance" }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyName, setBusyName] = useState("");
   const [res, setRes] = useState<ImportResult | null>(null);
 
   async function run(f: File) {
     setBusy(true);
+    setBusyName(f.name);
     setRes(null);
     const fd = new FormData();
     fd.set("file", f);
+    fd.set("target", target);
     const r = await importPlanFile(coacheeId, fd).catch((): ImportResult => ({ ok: false, error: "Hochladen fehlgeschlagen. Bitte noch einmal versuchen." }));
     setBusy(false);
     setFile(null);
@@ -43,7 +46,7 @@ export function ImportFileButton({ coacheeId, accept, filled, label }: { coachee
   return (
     <div className="space-y-2">
       <label className={`btn-ghost btn-sm cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
-        {busy ? "Wird übernommen …" : label}
+        {busy ? (busyName.toLowerCase().endsWith(".xlsx") ? "Wird übernommen …" : "Wird gelesen und übernommen, das dauert etwas …") : label}
         <input
           ref={input}
           type="file"
@@ -59,7 +62,7 @@ export function ImportFileButton({ coacheeId, accept, filled, label }: { coachee
       </label>
       {file && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[#fbf1e3] px-3 py-2 text-sm">
-          <span>„{file.name}“ ersetzt die vorhandenen Eingaben. {accept === ".xlsx" ? "Bereiche, die in der Datei leer sind oder nur 0 € enthalten, bleiben erhalten; der jetzige Stand wird als frühere Fassung abgelegt." : "Kapitel, die in der Datei leer sind, bleiben erhalten."}</span>
+          <span>„{file.name}“ ersetzt die vorhandenen Eingaben. {target === "finance" || file.name.toLowerCase().endsWith(".xlsx") ? "Bereiche, zu denen die Datei nichts sagt, bleiben erhalten; der jetzige Stand wird als frühere Fassung abgelegt." : "Kapitel, die in der Datei leer sind, bleiben erhalten. Nennt die Datei Zahlen, kommen sie auch in den Finanzplan (der jetzige Stand wird als frühere Fassung abgelegt)."}</span>
           <button type="button" className="btn btn-sm" onClick={() => void run(file)}>Übernehmen</button>
           <button type="button" className="btn-ghost btn-sm" onClick={() => { setFile(null); if (input.current) input.current.value = ""; }}>Abbrechen</button>
         </div>

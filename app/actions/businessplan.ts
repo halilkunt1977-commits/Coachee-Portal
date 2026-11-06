@@ -9,7 +9,7 @@ import { one, query } from "@/lib/db";
 import { DOC_TYPES, MAX_DOC_BYTES, extOf } from "@/lib/documents";
 import { PARSER_VERSION, extractDocumentText } from "@/lib/documents-text";
 import { loadFile, storeFile } from "@/lib/files";
-import { applyFinanceXlsx, applyPlanDocx, documentFile, importTarget, type ImportResult } from "@/lib/bp/apply-import";
+import { documentFile, importAnyFile, importTarget, type ImportResult } from "@/lib/bp/apply-import";
 import { normalizeFinance, type FinanceInput } from "@/lib/bp/finance";
 import { MAX_NOTE, VORHABEN, type ChatTurn } from "@/lib/bp/notes";
 import { appendTurns, setTurnStatus } from "@/lib/bp/schreibhilfe";
@@ -167,14 +167,15 @@ export async function importPlanFile(coacheeId: string, fd: FormData): Promise<I
   const coach = await requireCoach();
   const c = await gruendungCoachee(coach, coacheeId);
   const file = fd.get("file");
+  const target = fd.get("target") === "finance" ? "finance" : "plan";
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Keine Datei ausgewählt." };
   const ext = extOf(file.name);
-  if (ext !== "docx" && ext !== "xlsx") return { ok: false, error: "Bitte eine Word-Datei (.docx) für den Businessplan oder eine Excel-Datei (.xlsx) für den Finanzplan wählen." };
+  if (ext !== "docx" && ext !== "xlsx" && ext !== "pdf") return { ok: false, error: "Bitte eine Word-Datei (.docx), eine PDF oder eine Excel-Datei (.xlsx) wählen." };
   if (file.size > MAX_DOC_BYTES) return { ok: false, error: "Die Datei ist größer als 25 MB." };
   const data = Buffer.from(await file.arrayBuffer());
-  const category = ext === "docx" ? "businessplan" : "finanzplan";
+  const category = ext === "xlsx" || target === "finance" ? "finanzplan" : "businessplan";
   // erst prüfen, ob die Datei passt, dann ablegen
-  const result = ext === "docx" ? await applyPlanDocx(coach, c, data, { document: null, name: file.name }) : await applyFinanceXlsx(coach, c, data, { document: null, name: file.name });
+  const result = await importAnyFile(coach, c, data, { document: null, name: file.name }, target);
   if (!result.ok) return result;
   const fileId = await storeFile({ coacheeId: c.id, kind: "dokument", name: file.name, mime: DOC_TYPES[ext], data, userId: coach.id });
   const plain = await extractDocumentText(file.name, data);
@@ -182,21 +183,21 @@ export async function importPlanFile(coacheeId: string, fd: FormData): Promise<I
     "INSERT INTO documents (coachee_id, file_id, category, title, extracted_text, created_by, parser_version) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
     [c.id, fileId, category, file.name.replace(/\.[a-z0-9]+$/i, "").replace(/_+/g, " ").trim().slice(0, 200) || file.name, plain || null, coach.id, PARSER_VERSION],
   );
-  await query(`UPDATE business_plans SET imports = jsonb_set(imports, ARRAY[$2::text, 'document'], to_jsonb($3::text)) WHERE coachee_id = $1 AND imports ? $2`, [c.id, ext === "docx" ? "plan" : "finance", doc!.id]);
+  await query(`UPDATE business_plans SET imports = jsonb_set(imports, ARRAY[$2::text, 'document'], to_jsonb($3::text)) WHERE coachee_id = $1 AND imports ? $2`, [c.id, category === "businessplan" ? "plan" : "finance", doc!.id]);
   revalidatePath(`/coach/coachees/${c.id}`);
   return { ...result, message: `${result.message} Die Datei liegt unter Dokumente.` };
 }
 
-/** Ein unter Dokumente abgelegtes Word- oder Excel-Dokument übernehmen */
+/** Ein unter Dokumente abgelegtes Word-, PDF- oder Excel-Dokument übernehmen */
 export async function importDocument(coacheeId: string, docId: string): Promise<ImportResult> {
   const coach = await requireCoach();
   const c = await gruendungCoachee(coach, coacheeId);
   const doc = await documentFile(c.id, coach.id, docId);
   if (!doc) return { ok: false, error: "Dokument nicht gefunden." };
   const target = importTarget(doc.category, doc.name);
-  if (!target) return { ok: false, error: "Übernehmen geht nur mit einem Businessplan als .docx oder einem Finanzplan als .xlsx." };
+  if (!target) return { ok: false, error: "Übernehmen geht nur mit einem Businessplan (Word oder PDF) oder einem Finanzplan (Excel, Word oder PDF)." };
   const data = await loadFile(doc.file_id);
-  const result = target === "plan" ? await applyPlanDocx(coach, c, data, { document: doc.id, name: doc.name }) : await applyFinanceXlsx(coach, c, data, { document: doc.id, name: doc.name });
+  const result = await importAnyFile(coach, c, data, { document: doc.id, name: doc.name }, target);
   revalidatePath(`/coach/coachees/${c.id}`);
   return result;
 }

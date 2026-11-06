@@ -1,11 +1,15 @@
 import "server-only";
 import type { Coachee } from "../access";
+import { AiError, aiEnabled } from "../ai";
+import { extractDocumentText } from "../documents-text";
 import { audit, type User } from "../auth";
 import { one, query } from "../db";
 import { calculate, eur, financeIsEmpty, monthsBetween, shiftMonths, type FinanceInput } from "./finance";
 import { saveSnapshot } from "./fassungen";
 import { importBusinessplanDocx } from "./import-docx";
 import { importFinanceXlsx } from "./import-xlsx";
+import { hasFinanceInfo, planFromText } from "./import-pdf";
+import { changeFinance } from "./finanz-ki";
 import { SECTIONS, planIsEmpty } from "./sections";
 import { financeTouched, planFor } from "./store";
 
@@ -160,7 +164,9 @@ export async function autoImportDocument(user: User, c: Coachee, doc: { id: stri
 /** Kann dieses Dokument in Businessplan oder Finanzplan übernommen werden? */
 export const importTarget = (category: string, name: string): "plan" | "finance" | null => {
   const ext = name.toLowerCase().split(".").pop();
-  return category === "businessplan" && ext === "docx" ? "plan" : category === "finanzplan" && ext === "xlsx" ? "finance" : null;
+  if (category === "businessplan" && (ext === "docx" || ext === "pdf")) return "plan";
+  if (category === "finanzplan" && (ext === "xlsx" || ext === "pdf" || ext === "docx")) return "finance";
+  return null;
 };
 
 export async function documentFile(coacheeId: string, coachId: string, docId: string) {
@@ -169,4 +175,103 @@ export async function documentFile(coacheeId: string, coachId: string, docId: st
     "SELECT d.id, d.file_id, d.category, f.name FROM documents d JOIN files f ON f.id = d.file_id JOIN coachees c ON c.id = d.coachee_id WHERE d.id = $1 AND d.coachee_id = $2 AND c.coach_id = $3",
     [docId, coacheeId, coachId],
   );
+}
+
+// ---------- PDF und Word in freiem Aufbau ----------
+
+/** Businessplan aus dem Text einer PDF (oder Word-Datei ohne Vorlagen-Aufbau); leere Kapitel überschreiben nichts */
+export async function applyPlanText(user: User, c: Coachee, text: string, source: Source, ai: boolean): Promise<ImportResult> {
+  if (!text.trim()) return { ok: false, error: "In der Datei ließ sich kein Text lesen. Ist es ein eingescanntes Bild? Dann bitte als Word-Datei oder als PDF mit Text hochladen." };
+  let res;
+  try {
+    res = await planFromText(user, c, text, ai);
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("PDF-Import", e);
+    return { ok: false, error: e instanceof AiError ? e.message : "Die Datei ließ sich nicht in Kapitel aufteilen. Bitte noch einmal versuchen." };
+  }
+  if (!res) return { ok: false, error: "In der Datei wurden keine Kapitel der Vorlage gefunden (z. B. „1. Executive Summary“, „2. Gründerprofil“)." };
+  const plan = await planFor(c);
+  const now = new Date().toISOString();
+  const sections: Record<string, unknown> = {};
+  for (const s of SECTIONS) {
+    const old = plan.sections[s.key];
+    const imp = res.sections[s.key];
+    sections[s.key] = imp && (imp.text.trim() || imp.sources.trim()) ? { text: imp.text.slice(0, 60000), sources: imp.sources.slice(0, 8000), version: old.version + 1, updated_at: now, updated_by: user.id } : old;
+  }
+  const glance = res.glance.length ? res.glance : plan.glance;
+  await query(
+    `UPDATE business_plans SET sections = $2, glance = $3, title = CASE WHEN $4 <> '' THEN $4 ELSE title END,
+            imports = imports || jsonb_build_object('plan', $5::jsonb), updated_at = now() WHERE coachee_id = $1`,
+    [c.id, JSON.stringify(sections), JSON.stringify(glance), res.subtitle, JSON.stringify({ document: source.document, name: source.name.slice(0, 200), at: now })],
+  );
+  await audit(user.id, "bp_imported", c.id, { name: source.name.slice(0, 120), chapters: String(res.stats.length) });
+  const words = res.stats.reduce((a, s) => a + s.words, 0);
+  const details = [
+    ...res.stats.map((s) => `${SECTIONS.findIndex((x) => x.key === s.key) + 1}. ${s.title}: ${s.words} Wörter`),
+    ...(res.glance.length ? [`Auf einen Blick: ${res.glance.length} Angaben`] : []),
+    res.how === "ki" ? "Die Datei hat einen eigenen Aufbau; die Inhalte wurden den Kapiteln der Vorlage zugeordnet. Bitte kurz prüfen." : res.formatted ? "Zwischenüberschriften, Aufzählungen und Tabellen wurden aus der PDF wiederhergestellt." : "Aus der PDF kommt reiner Text; Zwischenüberschriften und Tabellen bitte bei Bedarf nachziehen.",
+    ...(res.unmatched.length ? [`Nicht in der Datei: ${res.unmatched.join(", ")}`] : []),
+  ];
+  return { ok: true, message: `${res.stats.length} von ${SECTIONS.length} Kapiteln mit zusammen ${words.toLocaleString("de-DE")} Wörtern übernommen.`, details };
+}
+
+/**
+ * Zahlen und Angaben zum Finanzplan aus dem Text einer Datei (Businessplan, Angebot, Finanzplan als PDF/Word) in die
+ * Finanzplan-Vorlage des Portals eintragen. Was die Datei nicht nennt, bleibt; der vorige Stand wird als frühere Fassung abgelegt.
+ * null: nichts übernommen (kein Finanzbezug oder keine Änderung).
+ */
+export async function applyFinanceText(user: User, c: Coachee, text: string, source: Source): Promise<{ ok: true; details: string[] } | { ok: false; error: string } | null> {
+  if (!hasFinanceInfo(text)) return null;
+  const plan = await planFor(c);
+  const message = `Übernimm alle Zahlen und Angaben zum Finanzplan aus diesem Dokument („${source.name.slice(0, 120)}“) in den Finanzplan: Startmonat, Leistungen mit Preisen und Mengen je Monat, laufende Kosten, Investitionen, Personal, Finanzierung, Zuschüsse, Entnahmen, Anfangsliquidität, Materialquote. Steht etwas nur als Jahreswert da, verteile es sinnvoll auf die Monate (Kosten: Jahresbetrag ÷ 12; Umsatzmengen gleichmäßig, bei beschriebenem Anlauf entsprechend). Werte im bisherigen Finanzplan, zu denen das Dokument nichts sagt, bleiben unverändert. Erfinde nichts. In note: was du übernommen hast und was im Dokument fehlte.\n\n=== Dokument ===\n${text.slice(0, 60000)}`;
+  let out;
+  try {
+    out = await changeFinance(user, c, plan.finance, message, []);
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("Finanzangaben aus Datei", e);
+    return { ok: false, error: e instanceof AiError ? e.message : "Die Zahlen für den Finanzplan ließen sich gerade nicht auslesen." };
+  }
+  if (JSON.stringify(out.finance) === JSON.stringify(plan.finance) || financeIsEmpty(out.finance)) return null;
+  await saveSnapshot(c.id, plan.finance, `Vor der Übernahme der Zahlen aus „${source.name}“`, user.id);
+  await query(
+    `UPDATE business_plans SET finance = $2, finance_version = finance_version + 1, finance_updated_by = $3,
+            imports = imports || jsonb_build_object('finance', $4::jsonb), updated_at = now() WHERE coachee_id = $1`,
+    [c.id, JSON.stringify(out.finance), user.id, JSON.stringify({ document: source.document, name: source.name.slice(0, 200), at: new Date().toISOString() })],
+  );
+  await audit(user.id, "finance_imported_file", c.id, { name: source.name.slice(0, 120) });
+  const r = calculate(out.finance);
+  return {
+    ok: true,
+    details: [
+      `Finanzplan: ${out.note || "Zahlen übernommen."}`,
+      `Umsatz Jahr 1/2/3 jetzt ${r.years.map((y) => eur(y.revenue)).join(" / ")}, Ergebnis vor Steuern ${r.years.map((y) => eur(y.profit)).join(" / ")}.`,
+      "Der vorige Stand des Finanzplans liegt unter „Frühere Fassungen“.",
+    ],
+  };
+}
+
+/**
+ * Eine Datei in Businessplan oder Finanzplan übernehmen, je nach Art und Ziel:
+ * Excel → Finanzplan. Word/PDF fürs Ziel Businessplan → Kapitel, dazu Zahlen in den Finanzplan, wenn die Datei welche nennt.
+ * Word/PDF fürs Ziel Finanzplan → nur die Zahlen.
+ */
+export async function importAnyFile(user: User, c: Coachee, data: Buffer, source: Source, target: "plan" | "finance"): Promise<ImportResult> {
+  const ext = source.name.toLowerCase().split(".").pop();
+  if (ext === "xlsx") return applyFinanceXlsx(user, c, data, source);
+  if (ext !== "docx" && ext !== "pdf") return { ok: false, error: "Bitte eine Word-Datei (.docx), eine PDF oder eine Excel-Datei (.xlsx) wählen." };
+  const ai = aiEnabled() && user.role === "coach";
+  const text = await extractDocumentText(source.name, data);
+  if (target === "finance") {
+    if (!ai) return { ok: false, error: "Zahlen aus Word oder PDF liest die KI aus; sie ist gerade nicht eingerichtet. Bitte den Finanzplan als Excel hochladen." };
+    const f = await applyFinanceText(user, c, text, source);
+    if (!f) return { ok: false, error: "In der Datei wurden keine Zahlen für den Finanzplan gefunden (Umsätze, Kosten, Investitionen, Finanzierung)." };
+    return f.ok ? { ok: true, message: "Zahlen aus der Datei in den Finanzplan eingetragen.", details: f.details } : f;
+  }
+  let plan = ext === "docx" ? await applyPlanDocx(user, c, data, source) : null;
+  // Word ohne die nummerierten Kapitel der Vorlage: wie eine PDF über den Text
+  if (!plan || (!plan.ok && /keine Kapitel/.test(plan.error))) plan = await applyPlanText(user, c, text, source, ai);
+  if (!ai || !plan.ok) return plan;
+  const f = await applyFinanceText(user, c, text, source);
+  if (!f) return plan;
+  return { ...plan, details: [...plan.details, ...(f.ok ? f.details : [`Finanzplan: ${f.error}`])] };
 }

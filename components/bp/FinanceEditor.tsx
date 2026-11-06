@@ -96,8 +96,8 @@ export function FinanceEditor(p: Props) {
         </div>
         {p.coach && (
           <div className="flex flex-wrap items-start justify-between gap-2 border-t border-line-soft pt-3">
-            <p className="text-xs text-muted">{p.imported ? `Übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen Finanzplan nach der Excel-Vorlage (acht Arbeitsblätter) hochladen und übernehmen."}</p>
-            <ImportFileButton coacheeId={p.coacheeId} accept=".xlsx" filled={p.filled} label="Aus Excel übernehmen" />
+            <p className="text-xs text-muted">{p.imported ? `Übernommen aus „${p.imported.name}“ am ${new Date(p.imported.at).toLocaleDateString("de-DE")}.` : "Einen Finanzplan nach der Excel-Vorlage hochladen, oder eine PDF bzw. Word-Datei mit Zahlen (z. B. Businessplan, Angebote): Die Zahlen werden in die Vorlage eingetragen."}</p>
+            <ImportFileButton coacheeId={p.coacheeId} accept=".xlsx,.pdf,.docx" filled={p.filled} label="Aus Excel, PDF oder Word übernehmen" target="finance" />
           </div>
         )}
       </div>
