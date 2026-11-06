@@ -16,6 +16,7 @@ import { listAbgaben } from "@/lib/bp/abgabe";
 import { eigenmittel, ersteRate, kapitaldienst } from "@/lib/bp/bank";
 import { calculate } from "@/lib/bp/finance";
 import { SECTIONS, chapterProgress, planIsEmpty } from "@/lib/bp/sections";
+import { BANK_SECTIONS } from "@/lib/bp/bank-sections";
 import { ShareButton } from "../teilen/ShareButton";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
@@ -81,6 +82,9 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       zahlen={zahlen}
       doneCount={SECTIONS.filter((x) => chapterProgress(plan.sections[x.key].text, x).state === "fertig").length}
       chapterCount={SECTIONS.length}
+      bankSections={plan.bankSections}
+      bankDone={BANK_SECTIONS.filter((x) => chapterProgress(plan.bankSections[x.key].text, x).state === "fertig").length}
+      bankCount={BANK_SECTIONS.length}
       filled={!planIsEmpty(plan.sections, plan.glance) || (financeTouched(plan) && !financeIsEmpty(plan.finance))}
       share={<ShareButton kind="businessplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title={plan.title || "Businessplan"} className="btn-ghost" />}
     />

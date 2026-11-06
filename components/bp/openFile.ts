@@ -1,17 +1,20 @@
 "use client";
 import { isStandalone } from "../app/RegisterSW";
 
+/** Adresse der Ansicht im Portal (mit „Zurück“-Knopf) */
+export const viewerHref = (href: string, name = "") => `/ansehen?src=${encodeURIComponent(href)}${name ? `&name=${encodeURIComponent(name)}` : ""}`;
+
 /**
- * Datei öffnen, nachdem vorher gespeichert wurde. PDFs zum Ansehen und alles in der App vom Home-Bildschirm
- * öffnen in einem eigenen Fenster (dort gibt es „Fertig“ zurück ins Portal); Word und Excel am Rechner laden direkt herunter.
+ * Datei öffnen, nachdem vorher gespeichert wurde. PDFs zum Ansehen und in der App vom Home-Bildschirm alle Dateien
+ * öffnen in der Ansicht im Portal (mit „Zurück“); Word und Excel am Rechner laden direkt herunter.
  */
 export async function openFile(href: string, before?: () => Promise<unknown>, view = false) {
-  const win = view || isStandalone() ? window.open("", "_blank") : null;
   if (before) await before().catch(() => undefined);
-  if (win) win.location.href = href;
-  else {
-    const a = document.createElement("a");
-    a.href = href;
-    a.click();
+  if (view || isStandalone()) {
+    window.location.href = viewerHref(href);
+    return;
   }
+  const a = document.createElement("a");
+  a.href = href;
+  a.click();
 }

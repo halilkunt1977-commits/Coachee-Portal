@@ -2060,4 +2060,13 @@ export const TR: Record<string, string> = {
   "{a} von {b} Bankfragen beantwortet": "{b} banka sorusundan {a} tanesi yanıtlandı",
   "{n} Kredite": "{n} kredi",
   "{n} Programme": "{n} program",
+  "Aus dem Plan fürs Amt übernehmen": "Kurum için plandan aktar",
+  "Banken lesen anders als das Amt: Finanzierungsanfrage, Kapitalbedarf, Sicherheiten, Kapitaldienst und Risiken stehen im Mittelpunkt. Fang mit dem Plan fürs Amt als Grundlage an.": "Bankalar kurumdan farklı okur: finansman talebi, sermaye ihtiyacı, teminatlar, borç servisi ve riskler ön plandadır. Kurum için planı temel alarak başla.",
+  "Datei wird geladen …": "Dosya yükleniyor …",
+  "Die Bankfassung hat eigene Kapitel": "Banka sürümünün kendi bölümleri var",
+  "Die Datei konnte nicht geladen werden. Bitte noch einmal versuchen.": "Dosya yüklenemedi. Lütfen tekrar dene.",
+  "Diese Datei gibt es nicht.": "Bu dosya yok.",
+  "Diese Datei kann hier nicht angezeigt werden. Mit „Teilen oder sichern“ öffnest du sie in Excel oder Word oder sicherst sie in deinen Dateien.": "Bu dosya burada gösterilemiyor. „Paylaş veya kaydet“ ile Excel ya da Word'de açabilir veya dosyalarına kaydedebilirsin.",
+  "Teilen oder sichern": "Paylaş veya kaydet",
+  "Wird übernommen …": "Aktarılıyor …",
 };

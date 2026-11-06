@@ -28,7 +28,7 @@ export async function createAbgabe(user: User, c: Coachee, kind: AbgabeKind) {
   const meta = { title: plan.title, name, email: c.email, phone: c.phone, coach: coach?.name ?? "Coach", date: date.toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" }) };
   const opts = bank ? { bank: plan.bank } : {};
   const [pdf, xlsx] = await Promise.all([
-    planPdf(plan.sections, plan.glance, plan.finance, meta, cvFontCss(), opts),
+    planPdf(bank ? plan.bankSections : plan.sections, plan.glance, plan.finance, meta, cvFontCss(), opts),
     financeWorkbook(plan.finance, { name, title: plan.title }, opts),
   ]);
   const tag = bank ? "Bank" : "Fachstelle";
