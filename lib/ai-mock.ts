@@ -60,6 +60,13 @@ export function mockJson(schemaName: string, input: string): unknown {
     const job = input.match(/^Stelle: (.+)$/m)?.[1];
     return { text: job ? `Kurzprofil (Test) zugeschnitten auf: ${job}. Anzeige ${input.includes("Anzeigentext:") ? "gelesen" : "ohne Text"}.` : "Kurzprofil (Test) aus den Angaben im Lebenslauf." };
   }
+  if (schemaName === "pdf_kapitel") {
+    const lines = input.split("\n");
+    return { text: lines.map((l) => (l.length < 40 && !/[.:]$/.test(l) ? `\n### ${l}\n` : l)).join("\n").trim() };
+  }
+  if (schemaName === "pdf_plan") {
+    return { subtitle: "Testvorhaben ohne KI", chapters: [{ key: "idee", text: input.slice(0, 1500), sources: [] }, { key: "zielgruppe", text: "Zielgruppe aus der Testzuordnung ohne KI.", sources: [] }] };
+  }
   if (schemaName === "finanzplan") {
     const json = input.match(/^Aktueller Finanzplan \(JSON\):\n(.+)$/m)?.[1] ?? "{}";
     const finance = JSON.parse(json) as { costs?: unknown[] };
