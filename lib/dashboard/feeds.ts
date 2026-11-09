@@ -26,10 +26,19 @@ async function cached<T>(key: string, fn: () => Promise<T>, ttl = TTL): Promise<
   }
 }
 
-async function getJson(url: string) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000), cache: "no-store", headers: { "user-agent": "gruendarium-portal" } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+async function getJson(url: string, timeout = 8000) {
+  let last: unknown;
+  // ein zweiter Versuch, falls die erste Verbindung hängt
+  for (let i = 0; i < 2; i++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeout), cache: "no-store", headers: { "user-agent": "gruendarium-portal/1.0 (+https://portal.gruendarium.de)" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
 }
 
 // ---------- Wetter ----------
@@ -59,17 +68,55 @@ export const weatherLabel = (code: number) => WMO.find(([c]) => c.includes(code)
 /** Ort aus Freitext: „12345 Musterstadt“ oder „Musterstadt-Nord“ → Suchbegriff */
 export const cityQuery = (city: string) => city.replace(/\b\d{5}\b/g, "").replace(/\s*\(.*\)\s*/g, " ").split(",")[0].trim().slice(0, 80);
 
+/** Letzter Fehlergrund je Ort, damit die Startseite sagen kann, woran es liegt */
+const weatherErrors = new Map<string, "ort" | "dienst">();
+export const weatherError = (city: string | null) => (city ? weatherErrors.get(cityQuery(city).toLowerCase()) ?? null : null);
+
+/** Suchbegriffe für die Ortssuche: „Nürnberg-Langwasser“ → „Nürnberg-Langwasser“, „Nürnberg“ */
+export const cityCandidates = (q: string) => {
+  const first = q.split(/\s+/)[0].trim();
+  // „Bad Homburg“ nicht zu „Bad“ kürzen
+  const word = /^(bad|sankt|st\.?|neu|groß|gross|klein|hohen|alt)$/i.test(first) ? "" : first;
+  return [...new Set([q, q.split(/[-/]/)[0].trim(), word].filter((x) => x.length > 1))];
+};
+
+async function geocode(q: string) {
+  for (const name of cityCandidates(q)) {
+    for (const country of ["&countryCode=DE", ""]) {
+      const geo = await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=de${country}`);
+      const g = geo?.results?.[0];
+      if (g) return g as { name?: string; latitude: number; longitude: number };
+    }
+  }
+  return null;
+}
+
 export async function weatherFor(city: string | null): Promise<Weather | null> {
   const q = city ? cityQuery(city) : "";
   if (!q) return null;
-  return cached(`wetter:${q.toLowerCase()}`, async () => {
-    const geo = await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=de&countryCode=DE`);
-    const g = geo?.results?.[0];
-    if (!g) throw new Error(`Ort nicht gefunden: ${q}`);
-    const w = await getJson(
-      `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FBerlin&forecast_days=4`,
-    );
-    return parseWeather(g.name ?? q, w);
+  const k = q.toLowerCase();
+  return cached(`wetter:${k}`, async () => {
+    let g: Awaited<ReturnType<typeof geocode>>;
+    try {
+      g = await geocode(q);
+    } catch (e) {
+      weatherErrors.set(k, "dienst");
+      throw e;
+    }
+    if (!g) {
+      weatherErrors.set(k, "ort");
+      throw new Error(`Ort nicht gefunden: ${q}`);
+    }
+    try {
+      const w = await getJson(
+        `https://api.open-meteo.com/v1/forecast?latitude=${g.latitude}&longitude=${g.longitude}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FBerlin&forecast_days=4`,
+      );
+      weatherErrors.delete(k);
+      return parseWeather(g.name ?? q, w);
+    } catch (e) {
+      weatherErrors.set(k, "dienst");
+      throw e;
+    }
   });
 }
 
@@ -136,7 +183,7 @@ export function parseRss(xml: string, max = 8): NewsItem[] {
 
 export async function newsFor(feed: FeedKey, max = 6): Promise<NewsItem[]> {
   const items = await cached(`news:${feed}`, async () => {
-    const res = await fetch(FEEDS[feed].url, { signal: AbortSignal.timeout(4000), cache: "no-store", headers: { "user-agent": "gruendarium-portal" } });
+    const res = await fetch(FEEDS[feed].url, { signal: AbortSignal.timeout(8000), cache: "no-store", headers: { "user-agent": "gruendarium-portal" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return parseRss(await res.text(), 12);
   }, 15 * 60_000);

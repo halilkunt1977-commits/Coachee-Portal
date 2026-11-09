@@ -1,4 +1,4 @@
-import { FEEDS, FEEDS_BY_LANG, newsFor, weatherFor, weatherIcon, weatherLabel, type FeedKey } from "@/lib/dashboard/feeds";
+import { FEEDS, FEEDS_BY_LANG, newsFor, weatherError, weatherFor, weatherIcon, weatherLabel, type FeedKey } from "@/lib/dashboard/feeds";
 import { getT, serverLang } from "@/lib/i18n-server";
 
 const weekday = (iso: string, i: number, lang: "de" | "tr") =>
@@ -10,7 +10,13 @@ export async function WeatherBox({ city, edit }: { city: string | null; edit?: R
   if (!w)
     return (
       <div className="space-y-2 text-sm text-white/80">
-        <p>{city ? t("Für „{city}“ ist gerade kein Wetter abrufbar.", { city }) : t("Trag einen Ort ein, dann steht hier das Wetter.")}</p>
+        <p>
+          {!city
+            ? t("Trag einen Ort ein, dann steht hier das Wetter.")
+            : weatherError(city) === "ort"
+              ? t("Den Ort „{city}“ finde ich nicht. Bitte nur den Ortsnamen eintragen, z. B. Köln.", { city })
+              : t("Für „{city}“ ist gerade kein Wetter abrufbar.", { city })}
+        </p>
         {edit}
       </div>
     );

@@ -2136,4 +2136,5 @@ export const TR: Record<string, string> = {
   "Neu hochgeladen": "Yeni yüklendi",
   "Bitte mindestens ein Dokument auswählen.": "Lütfen en az bir belge seç.",
   "Die PDF konnte gerade nicht erstellt werden. Bitte gleich noch einmal versuchen.": "PDF şu an oluşturulamadı. Lütfen birazdan tekrar dene.",
+  "Den Ort „{city}“ finde ich nicht. Bitte nur den Ortsnamen eintragen, z. B. Köln.": "„{city}“ yerini bulamıyorum. Lütfen sadece şehir adını yaz, örneğin Köln.",
 };
