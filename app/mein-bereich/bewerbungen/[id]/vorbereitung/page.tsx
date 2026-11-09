@@ -12,6 +12,7 @@ import { hasFeature } from "@/lib/features";
 import { getT } from "@/lib/i18n-server";
 import { normalizeInterview } from "@/lib/jobs/interview-shared";
 import { ensureInterviewTr, trFor } from "@/lib/jobs/interview-tr";
+import { inTurkey } from "@/lib/turkey";
 
 export const generateMetadata = async () => ({ title: (await getT())("Gesprächsvorbereitung") });
 
@@ -51,8 +52,10 @@ export default async function MyInterviewPrep({ params }: PageProps<"/mein-berei
   if (!a.seen) await query("UPDATE applications SET interview_seen_at = now() WHERE id = $1 AND interview_seen_at IS NULL", [a.id]);
   const interview = normalizeInterview(a.interview);
   // Türkische Oberfläche: Übersetzung unter dem deutschen Text; fehlt sie noch, entsteht sie im Hintergrund
-  const tr = c.language === "tr" ? trFor(a.interview_tr, interview) : null;
-  if (c.language === "tr" && !tr) after(() => ensureInterviewTr(c, a.id, user.id));
+  // In der Türkei ist die Vorbereitung schon türkisch, dann ohne Übersetzung
+  const translate = c.language === "tr" && !(await inTurkey(c));
+  const tr = translate ? trFor(a.interview_tr, interview) : null;
+  if (translate && !tr) after(() => ensureInterviewTr(c, a.id, user.id));
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
@@ -62,7 +65,7 @@ export default async function MyInterviewPrep({ params }: PageProps<"/mein-berei
         description={`${[a.employer, a.location].filter(Boolean).join(" · ")}${a.employer || a.location ? ". " : ""}${t("Lies dir alles in Ruhe durch und sprich die Antworten ein paarmal laut. Sag sie in deinen eigenen Worten, nicht auswendig gelernt.")}`}
         actions={<>{self && <SelfPrepButton appId={a.id} again />}<PrintButton /></>}
       />
-      {c.language === "tr" && !tr && <p className="card mb-4 text-sm text-muted">{t("Die türkische Übersetzung wird gerade vorbereitet. Lade die Seite in ein paar Minuten neu.")}</p>}
+      {translate && !tr && <p className="card mb-4 text-sm text-muted">{t("Die türkische Übersetzung wird gerade vorbereitet. Lade die Seite in ein paar Minuten neu.")}</p>}
       <InterviewView interview={interview} tr={tr} coachName={a.coach_name?.split(" ")[0] || t("deinem Coach")} />
     </div>
   );

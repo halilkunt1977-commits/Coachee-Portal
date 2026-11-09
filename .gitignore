@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Lokale Dateiablage (verschlüsselte Uploads)
 /.data/
+
+# Gesichtserkennung (wird beim Build aus node_modules kopiert)
+/public/mediapipe/wasm/

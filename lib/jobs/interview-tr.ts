@@ -4,6 +4,7 @@ import type { Coachee } from "../access";
 import { jsonResponse, pseudonymize } from "../ai";
 import { one, query } from "../db";
 import { hasFeature } from "../features";
+import { inTurkey } from "../turkey";
 import { normalizeInterview, type Interview } from "./interview-shared";
 
 /*
@@ -64,7 +65,8 @@ const running = new Set<string>();
  * Ohne Übersetzung sieht der Coachee einfach den deutschen Text.
  */
 export async function ensureInterviewTr(c: Coachee, appId: string, userId: string) {
-  if (c.language !== "tr") return;
+  // Bei Adresse in der Türkei ist die Vorbereitung schon türkisch
+  if (c.language !== "tr" || (await inTurkey(c))) return;
   const a = await one<{ interview: unknown; interview_tr: unknown }>(
     "SELECT COALESCE(interview_sent, CASE WHEN $3 THEN interview END) AS interview, interview_tr FROM applications WHERE id = $1 AND coachee_id = $2",
     [appId, c.id, hasFeature(c, "gespraechsvorbereitung") || hasFeature(c, "gespraechsvorbereitung_selbst")],

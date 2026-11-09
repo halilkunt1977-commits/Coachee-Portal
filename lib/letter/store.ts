@@ -6,6 +6,7 @@ import { lockPersonal, normalizeCv, type CvData } from "../cv/types";
 import { personalLockOf } from "../cv/store";
 import { one } from "../db";
 import { getApplication } from "../jobs/store";
+import { looksTurkeyAddress } from "../turkey";
 import type { Application } from "../jobs/shared";
 import { normalizeStoredEmail } from "./email";
 import { attachmentsFor, closingFor, isLetterLang, looksTurkish, normalizeStoredLetter, salutationFor, splitContact, subjectFor, type LetterField, type LetterLang } from "./types";
@@ -72,10 +73,12 @@ export const SENDER_LOCKED = ["senderName", "senderEmail", "senderPhone"] as con
 export const berlinDate = () => new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Berlin" });
 
 /**
- * Sprache, wenn niemand gewählt hat: Türkisch nur für Coachees mit türkischer Ansicht, deren Lebenslauf türkisch ist
- * oder deren Stelle bei einer türkischen Firma liegt. Alle anderen schreiben deutsch.
+ * Sprache, wenn niemand gewählt hat: Türkisch für Coachees mit Adresse in der Türkei, außerdem bei türkischer Ansicht,
+ * wenn Lebenslauf oder Stelle türkisch sind. Alle anderen schreiben deutsch.
  */
 export function autoLang(c: Coachee, a: Application, cv: CvData | null): LetterLang {
+  // Adresse in der Türkei: immer Türkisch (Halils Regel)
+  if (looksTurkeyAddress(c.city, cv?.personal.city, cv?.personal.street)) return "tr";
   if (c.language !== "tr") return "de";
   return cv?.language === "tr" || looksTurkish(a.title, a.employer) ? "tr" : "de";
 }

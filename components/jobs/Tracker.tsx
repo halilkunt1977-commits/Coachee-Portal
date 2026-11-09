@@ -7,7 +7,7 @@ import { useT } from "../i18n/LangProvider";
 import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 /** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung. prepAll: jede gespeicherte zeigen (Coach oder Freigabe), sonst nur geschickte */
-type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean; prepSelf?: boolean };
+type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean; prepSelf?: boolean; trainHref?: string | null };
 
 const ACTIVE: Status[] = ["vorschlag", "gemerkt", "beworben", "gespraech"];
 type Filter = "aktiv" | "alle" | Status;
@@ -233,6 +233,7 @@ export function Tracker(p: Props) {
                   {p.prepHref && (a.interview_sent || (p.prepAll && (a.has_interview || !p.coach)) || p.prepSelf) && (
                     <Link href={p.prepHref.replace("{id}", a.id)} prefetch={false} className="btn-ghost btn-sm tap">{t("Gesprächsvorbereitung")}</Link>
                   )}
+                  {p.trainHref && <Link href={p.trainHref.replace("{id}", a.id)} prefetch={false} className="btn-ghost btn-sm tap">{t("Interview-Training")}</Link>}
                   <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />
                   <button type="button" aria-expanded={isOpen} className="btn-ghost btn-sm tap" onClick={() => setOpen(isOpen ? null : a.id)}>{isOpen ? t("Zuklappen") : t("Details")}</button>
                 </div>
