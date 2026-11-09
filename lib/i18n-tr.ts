@@ -2213,4 +2213,5 @@ export const TR: Record<string, string> = {
   "Mach den Ton an. Dein Bild bleibt auf deinem Gerät und wird nicht übertragen oder gespeichert. Deine Antworten werden in Text umgewandelt, die Aufnahme selbst wird nicht gespeichert.": "Sesi aç. Görüntün cihazında kalır, gönderilmez ve kaydedilmez. Cevapların yazıya çevrilir, kaydın kendisi saklanmaz.",
   "Gespräch beginnen": "Görüşmeyi başlat",
   "Die Stimme lässt sich auf diesem Gerät gerade nicht abspielen. Prüfe den Ton (Lautlos-Schalter am Handy) oder lies die Frage mit.": "Bu cihazda ses şu an çalınamıyor. Sesi kontrol et (telefondaki sessiz düğmesi) ya da soruyu okuyarak takip et.",
+  "Verbindung wird aufgebaut …": "Bağlantı kuruluyor …",
 };
