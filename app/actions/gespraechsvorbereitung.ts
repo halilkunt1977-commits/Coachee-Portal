@@ -1,11 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { coacheeFor } from "@/lib/access";
+import { after } from "next/server";
+import { coacheeFor, ownCoachee } from "@/lib/access";
 import { AiError, assertAiAllowed } from "@/lib/ai";
-import { audit, requireCoach } from "@/lib/auth";
+import { audit, requireCoach, requireUser } from "@/lib/auth";
+import { hasFeature } from "@/lib/features";
+import { notify } from "@/lib/push";
 import { one, query } from "@/lib/db";
 import { editInterview, prepareInterview } from "@/lib/jobs/interview";
 import { normalizeInterview, type Interview, type InterviewAiTask } from "@/lib/jobs/interview-shared";
+import { ensureInterviewTr } from "@/lib/jobs/interview-tr";
 
 /*
  * Gesprächsvorbereitung je Stelle: erstellen, bearbeiten und löschen nur durch den Coach. Der Coachee sieht die Fassung,
@@ -41,6 +45,7 @@ export async function generateInterview(coacheeId: string, appId: string, brief?
     const interview = await prepareInterview(c, appId, coach.id);
     if (!interview) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
     await audit(coach.id, "interview_prepared", c.id, { application: appId });
+    after(() => ensureInterviewTr(c, appId, coach.id));
     refresh(c.id);
     return { ok: true, interview, savedAt: new Date().toISOString() };
   } catch (e) {
@@ -85,6 +90,8 @@ export async function saveInterview(coacheeId: string, appId: string, input: Int
   if (!row) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
   const recent = await one("SELECT 1 FROM audit_log WHERE user_id = $1 AND action = 'interview_saved' AND detail->>'application' = $2 AND created_at > now() - interval '30 minutes' LIMIT 1", [coach.id, appId]);
   if (!recent) await audit(coach.id, "interview_saved", c.id, { application: appId });
+  // türkische Coachees: Übersetzung der Fassung, die sie sehen, im Hintergrund nachziehen
+  after(() => ensureInterviewTr(c, appId, coach.id));
   refresh(c.id);
   return { ok: true, interview, savedAt: row.at };
 }
@@ -98,4 +105,30 @@ export async function deleteInterview(coacheeId: string, appId: string): Promise
   await audit(coach.id, "interview_deleted", c.id, { application: appId });
   refresh(c.id);
   return { ok: true, interview: null, savedAt: null };
+}
+
+/**
+ * Coachee mit Freigabe „gespraechsvorbereitung_selbst“: Vorbereitung für eine eigene Bewerbung selbst erstellen lassen.
+ * Die Empfehlungen des Coachs bleiben; der Coach bekommt eine Meldung und kann alles wie gewohnt bearbeiten.
+ */
+export async function coacheeGenerateInterview(appId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser("coachee");
+  const c = await ownCoachee(user);
+  if (!c || c.coaching_type !== "job" || !hasFeature(c, "gespraechsvorbereitung_selbst")) return { ok: false, error: "Diese Funktion hat dein Coach für dich noch nicht freigeschaltet." };
+  if (!isId(appId)) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
+  try {
+    await assertAiAllowed(user, { feature: "gespraechsvorbereitung_selbst", coachee: c });
+    const interview = await prepareInterview(c, appId, user.id);
+    if (!interview) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
+    await audit(user.id, "interview_prepared_self", c.id, { application: appId });
+    const app = await one<{ title: string }>("SELECT title FROM applications WHERE id = $1", [appId]);
+    await notify([c.coach_id], { title: `${c.first_name} ${c.last_name} hat eine Gesprächsvorbereitung erstellt`, body: app?.title ?? "", url: `/coach/coachees/${c.id}/vorbereitung/${appId}`, tag: `vorbereitung-${appId}` }).catch(() => undefined);
+    after(() => ensureInterviewTr(c, appId, user.id));
+    revalidatePath(`/mein-bereich/bewerbungen/${appId}/vorbereitung`);
+    refresh(c.id);
+    return { ok: true };
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("[ai] gespraechsvorbereitung selbst", e);
+    return { ok: false, error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
+  }
 }
