@@ -2199,4 +2199,7 @@ export const TR: Record<string, string> = {
   "Diese Frage gibt es nicht.": "Bu soru yok.",
   "Die Antwort ist zu lang.": "Cevap çok uzun.",
   "Die Antwort ließ sich nicht verarbeiten. Bitte noch einmal versuchen.": "Cevap işlenemedi. Lütfen tekrar dene.",
+  "Ton an": "Sesi aç",
+  "Ton aus": "Sesi kapat",
+  "Lautstärke": "Ses seviyesi",
 };

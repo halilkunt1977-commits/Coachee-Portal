@@ -33,6 +33,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
       meter.current?.stop();
       stream.current?.getTracks().forEach((x) => x.stop());
       window.speechSynthesis?.cancel();
+      player.current?.pause();
     },
     [],
   );
@@ -48,12 +49,64 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     return () => window.clearInterval(id);
   }, [phase]);
 
-  function read(q: string) {
-    if (!speak || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(q);
+  // Vorlesen: natürliche Stimme vom Server (MP3), sonst die Stimme des Browsers
+  const player = useRef<HTMLAudioElement | null>(null);
+  const cache = useRef(new Map<number, Promise<string | null>>());
+  const [volume, setVolumeState] = useState(0.9);
+  // gemerkte Lautstärke erst im Browser lesen (sonst passt die erste Anzeige nicht zur Server-Fassung)
+  useEffect(() => {
+    try {
+      const v = Number(window.localStorage.getItem("training-volume"));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (Number.isFinite(v) && v > 0 && v <= 1) setVolumeState(v);
+    } catch {}
+  }, []);
+  const [muted, setMuted] = useState(false);
+  const setVolume = (v: number) => {
+    setVolumeState(v);
+    setMuted(v === 0);
+    if (player.current) player.current.volume = v;
+    try {
+      window.localStorage.setItem("training-volume", String(v || 0.9));
+    } catch {}
+  };
+  useEffect(() => {
+    if (player.current) player.current.muted = muted;
+    if (muted) window.speechSynthesis?.cancel();
+  }, [muted]);
+
+  /** MP3 einer Frage holen (einmal je Frage), null = keine Stimme verfügbar */
+  function voice(i: number) {
+    let p = cache.current.get(i);
+    if (!p) {
+      p = fetch(`/api/training/${trainingId}/stimme?i=${i}`)
+        .then(async (r) => (r.status === 200 ? URL.createObjectURL(await r.blob()) : null))
+        .catch(() => null);
+      cache.current.set(i, p);
+    }
+    return p;
+  }
+
+  async function read(i: number) {
+    if (!speak || muted) return;
+    window.speechSynthesis?.cancel();
+    player.current?.pause();
+    const url = await voice(i);
+    // nächste Frage schon im Hintergrund laden
+    if (i + 1 < questions.length) void voice(i + 1);
+    if (url) {
+      const a = (player.current ??= new Audio());
+      a.src = url;
+      a.volume = volume;
+      a.muted = muted;
+      await a.play().catch(() => undefined);
+      return;
+    }
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(questions[i]);
     u.lang = lang === "tr" ? "tr-TR" : "de-DE";
     u.rate = 0.95;
+    u.volume = volume;
     window.speechSynthesis.speak(u);
   }
 
@@ -67,7 +120,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
         await video.current.play().catch(() => undefined);
       }
       setPhase("ready");
-      read(questions[index]);
+      void read(index);
       meter.current = await createFaceMeter(video.current!);
       setFaceOk(Boolean(meter.current));
     } catch {
@@ -79,6 +132,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
   function startAnswer() {
     if (!stream.current) return;
     window.speechSynthesis?.cancel();
+    player.current?.pause();
     const audio = new MediaStream(stream.current.getAudioTracks());
     const type = ["audio/webm", "audio/mp4", "audio/ogg"].find((x) => MediaRecorder.isTypeSupported(x)) ?? "";
     const r = new MediaRecorder(audio, type ? { mimeType: type, audioBitsPerSecond: 48000 } : undefined);
@@ -123,7 +177,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     if (index + 1 < questions.length) {
       setIndex(index + 1);
       setPhase("ready");
-      read(questions[index + 1]);
+      void read(index + 1);
     } else {
       await finish();
     }
@@ -161,6 +215,14 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
             <span className="size-2.5 animate-pulse rounded-full bg-red-500" /> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
           </span>
         )}
+        {phase !== "intro" && (
+          <div className="absolute right-3 top-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-white">
+            <button type="button" className="tap grid size-7 place-items-center text-base" aria-label={muted ? t("Ton an") : t("Ton aus")} onClick={() => setMuted((m) => !m)}>
+              {muted || volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}
+            </button>
+            <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} aria-label={t("Lautstärke")} className="w-24 accent-white sm:w-32" onChange={(e) => setVolume(Number(e.target.value))} />
+          </div>
+        )}
         {faceOk === false && phase !== "intro" && <span className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white">{t("Die Mimik kann auf diesem Gerät nicht gemessen werden. Die Antworten werden trotzdem ausgewertet.")}</span>}
       </div>
 
@@ -176,7 +238,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
         {phase === "ready" && (
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn" onClick={startAnswer}>● {t("Antwort starten")}</button>
-            <button type="button" className="btn-ghost" onClick={() => read(q)}>{t("Noch einmal vorlesen")}</button>
+            <button type="button" className="btn-ghost" onClick={() => void read(index)}>{t("Noch einmal vorlesen")}</button>
           </div>
         )}
         {phase === "recording" && (
