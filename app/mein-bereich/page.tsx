@@ -311,7 +311,10 @@ export default async function MyArea() {
 
         {docs.length > 0 && (
           <section className="card space-y-3">
-            <h2 className="h2">{t("Meine Dokumente")}</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="h2">{t("Meine Dokumente")}</h2>
+              <Link href="/mein-bereich/dokumente" className="link text-sm">{t("Zu einer PDF zusammenführen")}</Link>
+            </div>
             <ul className="divide-y divide-line-soft text-sm">
               {docs.map((d) => (
                 <li key={d.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
