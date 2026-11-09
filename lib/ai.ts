@@ -49,7 +49,7 @@ export async function assertAiAllowed(user: User, opts: AiCheck) {
     if (!c || !hasFeature(c, opts.feature)) throw new AiError(NOT_RELEASED);
     if (!aiEnabled()) throw new AiError("Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
     const limit = c.ai_monthly_limit ?? defaultMonthlyLimit();
-    const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now()) AND purpose NOT IN ('text_tr', 'interview_tr')", [user.id]);
+    const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now()) AND purpose NOT IN ('text_tr', 'interview_tr', 'training_transcribe')", [user.id]);
     if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
     return;
   }
@@ -113,10 +113,16 @@ export async function readImage(data: Buffer, mime: string, usage: Usage): Promi
 }
 
 /** Sprache zu Text. Die Aufnahme wird nur im Arbeitsspeicher gehalten und nirgends abgelegt. */
-export async function transcribe(file: File, usage: Usage) {
+export async function transcribe(file: File, usage: Usage, language: "de" | "tr" = "de") {
   if (!aiEnabled()) throw new AiError(AI_MISSING);
+  if (mockAi()) {
+    await logUsage(usage, "mock");
+    return language === "tr"
+      ? "Ee, merhaba. Yani ben depo işlerinde beş yıl çalıştım, ekip yönettim ve SAP kullandım. Müşteriyle iletişimim iyidir."
+      : "Ähm, also ich habe fünf Jahre im Lager gearbeitet und dort ein kleines Team geführt. Mit SAP EWM kenne ich mich gut aus.";
+  }
   const model = TRANSCRIBE_MODEL();
-  const result = await openai().audio.transcriptions.create({ file, model, language: "de", response_format: "json" });
+  const result = await openai().audio.transcriptions.create({ file, model, language, response_format: "json" });
   await logUsage(usage, model);
   return result.text;
 }

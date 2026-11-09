@@ -125,6 +125,27 @@ export function mockJson(schemaName: string, input: string): unknown {
     const q = (n: number) => ({ question: `Testfrage ${n}: Wie gehen Sie mit ${wunsch.slice(0, 40) || "Zeitdruck"} um?`, answer: "Ich bleibe ruhig, kläre zuerst, was am dringendsten ist, und spreche mich mit dem Team ab.", tips: "Ein konkretes Beispiel aus deiner letzten Stelle macht die Antwort glaubwürdig.", followups: ["Können Sie ein Beispiel nennen?"] });
     return schemaName === "gespraechsfrage" ? { question: q(0) } : { questions: [q(1), q(2), q(3), q(4)] };
   }
+  if (schemaName === "training_fragen") {
+    const tr = /auf Türkisch/.test(input) || /Ipekli|Sat[iı]s/i.test(input);
+    return {
+      questions: tr
+        ? ["Kendinizi kısaca tanıtır mısınız?", "Neden bu pozisyona başvurdunuz?", "Depo yönetiminde hangi deneyimleriniz var?", "Bir ekibi nasıl yönetirsiniz?", "Güçlü ve zayıf yönleriniz nelerdir?", "Ne zaman başlayabilirsiniz?"]
+        : ["Erzählen Sie kurz etwas über sich.", "Warum möchten Sie bei uns arbeiten?", "Welche Erfahrung haben Sie in der Lagerlogistik?", "Wie führen Sie ein Team?", "Was sind Ihre Stärken und Schwächen?", "Wann könnten Sie anfangen?"],
+    };
+  }
+  if (schemaName === "training_auswertung") {
+    const n = (input.match(/^Frage \d+:/gm) ?? []).length;
+    const tr = /auf Türkisch|Türkisch, in der Du-Form/.test(input);
+    return {
+      score: 68,
+      summary: tr ? "Genel olarak iyi bir başlangıç. Cevapların kısa ama samimi." : "Insgesamt ein guter Anfang. Deine Antworten sind kurz, aber ehrlich.",
+      strengths: tr ? ["Deneyimini net anlattın", "Sakin kaldın"] : ["Du hast deine Erfahrung klar genannt", "Du bist ruhig geblieben"],
+      improve: tr ? ["Her cevaba somut bir örnek ekle", "Dolgu sözcüklerini azalt"] : ["Bring zu jeder Antwort ein konkretes Beispiel", "Weniger Füllwörter wie „ähm“"],
+      body: tr ? "Kameraya çoğunlukla baktın, bu iyi. Biraz daha gülümseyebilirsin." : "Du hast meistens in die Kamera geschaut, das wirkt sicher. Ein Lächeln ab und zu wirkt noch freundlicher.",
+      speech: tr ? "Konuşma hızın iyi. Cevaplar biraz kısa." : "Dein Tempo ist gut. Die Antworten waren etwas kurz.",
+      answers: Array.from({ length: n }, (_, i) => ({ score: 60 + i, good: tr ? "Net bir giriş." : "Klarer Einstieg.", improve: tr ? "Somut bir örnek eksik." : "Ein konkretes Beispiel fehlt.", better: tr ? "Beş yıl depoda çalıştım ve dört kişilik bir ekibi yönettim." : "Ich habe fünf Jahre im Lager gearbeitet und ein Team von vier Leuten geführt." })),
+    };
+  }
   if (schemaName === "text_tr") return { text: input.split("\n").map((l) => (l.trim() ? `TR: ${l}` : l)).join("\n") };
   if (schemaName === "gespraechsvorbereitung_tr") {
     // Testübersetzung: jeder Text mit „TR:“ davor, Aufbau bleibt gleich

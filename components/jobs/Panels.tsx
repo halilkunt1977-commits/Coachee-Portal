@@ -51,6 +51,7 @@ export async function BewerbungenPanel({ user, coachee: c, links, focus }: { use
       prepHref={user.role === "coach" ? `/coach/coachees/${c.id}/vorbereitung/{id}` : "/mein-bereich/bewerbungen/{id}/vorbereitung"}
       prepAll={user.role === "coach" || hasFeature(c, "gespraechsvorbereitung") || hasFeature(c, "gespraechsvorbereitung_selbst")}
       prepSelf={user.role !== "coach" && hasFeature(c, "gespraechsvorbereitung_selbst")}
+      trainHref={user.role !== "coach" && hasFeature(c, "interview_training") ? "/mein-bereich/bewerbungen/{id}/training" : null}
     />
   );
 }

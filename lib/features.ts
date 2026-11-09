@@ -67,6 +67,15 @@ export const FEATURES = [
     types: ["job"],
     ai: true,
   },
+  {
+    key: "interview_training",
+    label: "Interview-Training mit Kamera",
+    description: "Probe-Vorstellungsgespräch je Stelle mit Kamera und Mikrofon: Fragen passend zur Anzeige, der Coachee antwortet laut, danach eine Auswertung der Antworten, der Sprechweise und der Mimik (Blickkontakt, Lächeln, Ruhe). Das Bild wird nur auf dem Gerät gemessen und nicht übertragen; Aufnahmen werden nicht gespeichert. Du siehst das Ergebnis in der Akte.",
+    where: "Bewerbungen › Interview-Training",
+    purposes: ["interview_training"],
+    types: ["job"],
+    ai: true,
+  },
 ] as const satisfies readonly { key: string; label: string; description: string; where: string; purposes: readonly string[]; types: readonly ("job" | "gruendung")[]; ai: boolean }[];
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

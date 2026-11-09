@@ -4,6 +4,7 @@ import { jsonResponse, pseudonymize } from "../ai";
 import { one, query } from "../db";
 import type { JobAnalysis } from "./analysis";
 import { LIST_SECTIONS, normalizeInterview, type Interview, type InterviewAiTask } from "./interview-shared";
+import { inTurkey } from "../turkey";
 import { profileForAi } from "./store";
 
 /*
@@ -50,6 +51,8 @@ Grundlage sind nur die Angaben zur Stelle und das Profil (Lebenslauf und Kompete
 - ask: 4–6 gute Fragen an den Arbeitgeber, passend zu dieser Stelle (Einarbeitung, Team, typischer Arbeitstag, nächste Schritte).
 Allgemein: einfache, klare Sprache, kurze Sätze. Niemals Gesundheit, Behinderung, Alter, Herkunft, Religion oder Familie des Coachees bewerten oder ansprechen. Namen sind durch [Name] ersetzt; schreibe [Name] nie in den Text. Kein Hinweis auf Software, Auswertungen oder KI.`;
 
+const TURKISH = `SPRACHE (wichtig, hat Vorrang): Der Coachee lebt in der Türkei und bewirbt sich dort. Schreibe ALLES auf Türkisch: Fragen des Arbeitgebers in der „siz“-Form, Antwortvorschläge in der Ich-Form, Tipps und Hinweise in der „sen“-Form, einfaches, natürliches Alltagstürkisch. Hinweise zu Gesprächsablauf, Unterlagen und Rechten passend für die Türkei, nicht für Deutschland.`;
+
 type AppRow = { id: string; title: string; employer: string; location: string; job_text: string; ad_text: string | null; brief: string; analysis: JobAnalysis | null; interview: unknown };
 
 const loadApp = (c: Coachee, appId: string) =>
@@ -60,9 +63,11 @@ const loadApp = (c: Coachee, appId: string) =>
 
 /** Stelle, Beschreibung des Coachs, Profil und Einschätzung als Eingabe für die KI, Namen ersetzt */
 async function context(c: Coachee, a: AppRow) {
-  const profile = await profileForAi(c);
+  const [profile, turkey] = await Promise.all([profileForAi(c), inTurkey(c)]);
   const ad = a.job_text.trim() || a.ad_text?.trim() || "";
   return [
+    // Adresse in der Türkei: Gespräch und Vorbereitung auf Türkisch (Halils Regel)
+    ...(turkey ? [TURKISH, ""] : []),
     `Stelle: ${a.title}`,
     `Arbeitgeber: ${a.employer || "unbekannt"}`,
     `Ort: ${a.location || "unbekannt"}`,
