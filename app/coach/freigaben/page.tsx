@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SetupHint } from "@/components/coach/SetupHint";
+import { SimliKeyForm } from "@/components/coach/SimliKeyForm";
 import { greetingVoiceEnabled } from "@/lib/greeting-audio";
 import { FeatureToggle } from "@/components/features/FeatureToggle";
 import { FeatureUse, LimitForm, MonthMeter } from "@/components/features/Parts";
@@ -10,6 +11,7 @@ import { requireCoach } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { limitOf, usageFor, type CoacheeUsage } from "@/lib/feature-usage";
 import { FEATURES, defaultMonthlyLimit, hasFeature, type Feature } from "@/lib/features";
+import { simliFromEnv, simliKey } from "@/lib/simli";
 
 export const metadata = { title: "Freigaben" };
 
@@ -29,6 +31,7 @@ export default async function Freigaben() {
     usageFor(coach.id),
   ]);
   const running = rows.filter((c) => c.status !== "abgeschlossen");
+  const simliActive = Boolean(await simliKey());
   const closed = rows.filter((c) => c.status === "abgeschlossen");
 
   return (
@@ -64,6 +67,8 @@ export default async function Freigaben() {
             );
           })}
         </section>
+
+        <SimliKeyForm active={simliActive} fromEnv={simliFromEnv()} />
 
         <section className="space-y-3">
           <h2 className="h2">Laufende Coachings</h2>
