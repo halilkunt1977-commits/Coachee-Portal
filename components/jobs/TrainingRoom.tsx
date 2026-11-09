@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { SimliClient } from "simli-client";
 import { finishTraining } from "@/app/actions/training";
 import { useT } from "@/components/i18n/LangProvider";
 import { goodbyeText, INTERVIEWER, MAX_ANSWER_SECONDS, welcomeText, type TrainingLang, type TrainingVoice } from "@/lib/jobs/training-shared";
@@ -34,6 +35,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
       meter.current?.stop();
       stream.current?.getTracks().forEach((x) => x.stop());
       stopVoice();
+      void simli.current?.stop().catch(() => undefined);
       void audio.current?.ctx.close().catch(() => undefined);
     },
      
@@ -89,6 +91,124 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
     } catch {}
   };
 
+  /*
+   * Echt wirkendes Gegenüber über Simli (nur wenn auf dem Server ein Schlüssel gesetzt ist). Die Stimme wird als
+   * 16-kHz-PCM an Simli geschickt, zurück kommt Video mit passenden Lippen und derselbe Ton. Der Ton läuft über
+   * unseren Audio-Kontext (Lautstärke, iPhone), das Audio-Element selbst bleibt stumm. Klappt etwas nicht, bleibt
+   * die gezeichnete Person.
+   */
+  const simli = useRef<SimliClient | null>(null);
+  const simliVideo = useRef<HTMLVideoElement>(null);
+  const simliAudio = useRef<HTMLAudioElement>(null);
+  const simliRouted = useRef<MediaStream | null>(null);
+  const simliTimer = useRef(0);
+  const [avatar, setAvatar] = useState<"off" | "connecting" | "on">("off");
+  const avatarOn = useRef(false);
+  const simliModule = useRef<Promise<typeof import("simli-client") | null> | null>(null);
+  useEffect(() => {
+    simliModule.current = import("simli-client").catch(() => null);
+  }, []);
+
+  function avatarOff() {
+    avatarOn.current = false;
+    setAvatar("off");
+    const c = simli.current;
+    simli.current = null;
+    void c?.stop().catch(() => undefined);
+  }
+
+  /** Simli-Sitzung aufbauen; false = keine (kein Schlüssel, Fehler oder zu langsam) */
+  async function connectAvatar(): Promise<boolean> {
+    try {
+      const res = await fetch(`/api/training/${trainingId}/avatar`, { method: "POST" });
+      if (!res.ok) return false;
+      const { token } = (await res.json()) as { token: string };
+      const mod = await simliModule.current;
+      if (!mod || !simliVideo.current || !simliAudio.current) return false;
+      setAvatar("connecting");
+      simliAudio.current.muted = true;
+      const c = new mod.SimliClient(token, simliVideo.current, simliAudio.current, null, mod.LogLevel.ERROR, "livekit");
+      simli.current = c;
+      c.on("stop", avatarOff);
+      c.on("error", avatarOff);
+      await Promise.race([c.start(), new Promise((_, no) => window.setTimeout(() => no(new Error("timeout")), 15000))]);
+      if (simli.current !== c) return false;
+      avatarOn.current = true;
+      setAvatar("on");
+      return true;
+    } catch {
+      avatarOff();
+      return false;
+    }
+  }
+
+  /** Ton von Simli einmalig über den Audio-Kontext leiten */
+  function routeAvatarAudio() {
+    const el = simliAudio.current;
+    const a = audio.current;
+    const src = el?.srcObject;
+    if (!el || !a || !(src instanceof MediaStream) || simliRouted.current === src || !src.getAudioTracks().length) return;
+    el.muted = true;
+    void el.play().catch(() => undefined);
+    a.ctx.createMediaStreamSource(src).connect(a.gain);
+    simliRouted.current = src;
+  }
+
+  /** MP3 in 16-kHz-Mono-PCM16 umwandeln, wie Simli es braucht */
+  async function toPcm16(data: ArrayBuffer) {
+    const a = audio.current!;
+    const buf = await a.ctx.decodeAudioData(data.slice(0));
+    const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(buf.duration * 16000)), 16000);
+    const s = off.createBufferSource();
+    s.buffer = buf;
+    s.connect(off.destination);
+    s.start();
+    const f = (await off.startRendering()).getChannelData(0);
+    const pcm = new Int16Array(f.length);
+    for (let k = 0; k < f.length; k++) pcm[k] = Math.max(-1, Math.min(1, f[k])) * 0x7fff;
+    return { bytes: new Uint8Array(pcm.buffer), seconds: buf.duration };
+  }
+
+  /** Text über das Gegenüber sprechen lassen; true = gesprochen */
+  async function avatarSay(data: ArrayBuffer, id: number): Promise<boolean> {
+    const c = simli.current;
+    if (!c || !audio.current) return false;
+    try {
+      if (audio.current.ctx.state !== "running") await audio.current.ctx.resume();
+      routeAvatarAudio();
+      const { bytes, seconds } = await toPcm16(data);
+      if (id !== playId.current || simli.current !== c) return true;
+      setNoVoice(false);
+      setSpeaking(true);
+      // gut eine Sekunde vorweg, danach etwas schneller als Echtzeit nachschieben
+      const CHUNK = 6000;
+      let pos = 0;
+      const send = () => {
+        if (id !== playId.current || simli.current !== c) return false;
+        c.sendAudioData(bytes.slice(pos, pos + CHUNK));
+        pos += CHUNK;
+        return pos < bytes.length;
+      };
+      for (let k = 0; k < 6 && send(); k++);
+      await new Promise<void>((done) => {
+        const t0 = Date.now();
+        simliTimer.current = window.setInterval(() => {
+          if (pos < bytes.length && !send()) {
+            /* alles geschickt */
+          }
+          if (id !== playId.current || simli.current !== c || Date.now() - t0 > seconds * 1000 + 900) {
+            window.clearInterval(simliTimer.current);
+            done();
+          }
+        }, 150);
+      });
+      if (id === playId.current) setSpeaking(false);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** MP3 holen (einmal je Text), null = keine Stimme vom Server */
   function fetchVoice(i: number) {
     let p = cache.current.get(i);
@@ -141,6 +261,10 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
 
   function stopVoice() {
     playId.current++;
+    window.clearInterval(simliTimer.current);
+    try {
+      simli.current?.ClearBuffer();
+    } catch {}
     try {
       source.current?.stop();
     } catch {}
@@ -163,6 +287,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
     const data = await fetchVoice(i);
     if (i >= 0 && i + 1 < questions.length) void fetchVoice(i + 1);
     if (id !== playId.current) return;
+    if (data && avatarOn.current && (await avatarSay(data, id))) return;
     const a = audio.current;
     if (data && a) {
       try {
@@ -253,6 +378,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
   async function openCamera() {
     setError(null);
     unlockAudio();
+    const avatarReady = connectAvatar();
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: { echoCancellation: true, noiseSuppression: true } });
       stream.current = s;
@@ -265,6 +391,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
         meter.current = m;
         setFaceOk(Boolean(m));
       });
+      await avatarReady;
       if (index === 0) await say(-1);
       // schon mit der Antwort angefangen? Dann die Frage nicht mehr hineinsprechen
       if (rec.current?.state !== "recording") void say(index);
@@ -335,6 +462,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
       finishTraining(trainingId).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." })),
       say(-2),
     ]);
+    avatarOff();
     if (!res.ok) {
       setError(t(res.error));
       setPhase("error");
@@ -348,6 +476,10 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <div className="relative overflow-hidden rounded-2xl bg-line-soft" style={{ aspectRatio: "4 / 3" }}>
         <Interviewer voice={voice} level={level} speaking={speaking} />
+        {/* echt wirkendes Gegenüber (Simli) liegt über der Zeichnung, sobald es verbunden ist */}
+        <video ref={simliVideo} muted playsInline autoPlay className={`absolute inset-0 size-full bg-line-soft object-cover transition-opacity duration-500 ${avatar === "on" ? "opacity-100" : "pointer-events-none opacity-0"}`} />
+        <audio ref={simliAudio} muted autoPlay className="hidden" />
+        {avatar === "connecting" && <span className="absolute left-3 top-3 rounded-full bg-black/60 px-3 py-1 text-xs text-white">{t("Verbindung wird aufgebaut …")}</span>}
         <span className="absolute bottom-3 left-3 rounded-lg bg-black/60 px-3 py-1 text-xs text-white">
           <b>{INTERVIEWER[voice][lang]}</b> · Gründarium{speaking && <span className="ml-1.5 inline-block size-2 animate-pulse rounded-full bg-emerald-400 align-middle" />}
         </span>
