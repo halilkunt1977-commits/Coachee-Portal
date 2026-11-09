@@ -1,4 +1,4 @@
-import { lines, paragraphs, type LetterView } from "./types";
+import { attachmentsLabel, lines, paragraphs, type LetterView } from "./types";
 
 /*
  * Anschreiben als A4-HTML nach DIN 5008 (Form B): Briefkopf, Anschriftfeld 45 mm von oben, Ort und Datum rechts,
@@ -36,8 +36,8 @@ export function renderLetterHtml(v: LetterView, o: Opts) {
   const recipient = lines(v.recipient).map((l) => `<div>${esc(l)}</div>`).join("");
   const body = paragraphs(v.body).map((p) => `<p>${p.map(esc).join("<br>")}</p>`).join("");
   const attachments = lines(v.attachments);
-  const sign = v.signature && o.signature ? `<img class="sig" src="${esc(o.signature)}" alt="Unterschrift">` : '<div class="nosig"></div>';
-  return `<!doctype html><html lang="de" data-fit="0"><head><meta charset="utf-8"><title>Anschreiben ${esc(v.senderName)}</title><style>
+  const sign = v.signature && o.signature ? `<img class="sig" src="${esc(o.signature)}" alt="${v.lang === "tr" ? "İmza" : "Unterschrift"}">` : '<div class="nosig"></div>';
+  return `<!doctype html><html lang="${v.lang === "tr" ? "tr" : "de"}" data-fit="0"><head><meta charset="utf-8"><title>${v.lang === "tr" ? "Ön Yazı" : "Anschreiben"} ${esc(v.senderName)}</title><style>
 ${o.fontCss}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 ${fitCss}
@@ -72,6 +72,6 @@ header .contact i { font-style: normal; margin: 0 1.6mm; color: #9aa0a8; }
 <div class="salutation">${esc(v.salutation)}</div>
 <div class="body">${body}</div>
 <div class="closing"><div>${esc(v.closing)}</div>${sign}<div>${esc(v.senderName)}</div></div>
-${attachments.length ? `<div class="attachments"><b>Anlagen</b>${attachments.map((a) => `<div>${esc(a)}</div>`).join("")}</div>` : ""}
+${attachments.length ? `<div class="attachments"><b>${attachmentsLabel(v.lang)}</b>${attachments.map((a) => `<div>${esc(a)}</div>`).join("")}</div>` : ""}
 </div></div></body></html>`;
 }

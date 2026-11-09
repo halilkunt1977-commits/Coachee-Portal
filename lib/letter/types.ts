@@ -4,8 +4,12 @@
 export const LETTER_FIELDS = ["senderName", "senderStreet", "senderCity", "senderPhone", "senderEmail", "recipient", "place", "date", "subject", "reference", "salutation", "closing", "attachments"] as const;
 export type LetterField = (typeof LETTER_FIELDS)[number];
 
+/** Sprache des Briefs: Deutsch, oder Türkisch für Bewerbungen bei türkischen Firmen */
+export type LetterLang = "de" | "tr";
+export const isLetterLang = (v: unknown): v is LetterLang => v === "de" || v === "tr";
+
 /** Fertiger Brief, so wie er gedruckt wird */
-export type LetterView = Record<LetterField, string> & { body: string; signature: boolean };
+export type LetterView = Record<LetterField, string> & { body: string; signature: boolean; lang?: LetterLang };
 
 /** Was in applications.letter steht: nur der Text und die Felder, die jemand von Hand geändert hat */
 export type StoredLetter = { body: string; adText: string; signature: boolean; fields: Partial<Record<LetterField, string>> };
@@ -29,7 +33,7 @@ export function normalizeStoredLetter(raw: unknown): StoredLetter | null {
 }
 
 /** Automatische Werte mit den eigenen Änderungen zusammenführen */
-export function resolveLetter(auto: Record<LetterField, string> & { body: string }, stored: StoredLetter | null): LetterView {
+export function resolveLetter(auto: Record<LetterField, string> & { body: string; lang?: LetterLang }, stored: StoredLetter | null): LetterView {
   const out = { ...auto, signature: stored?.signature ?? true } as LetterView;
   if (stored) {
     for (const k of LETTER_FIELDS) if (stored.fields[k] !== undefined) out[k] = stored.fields[k]!;
@@ -59,14 +63,18 @@ export const paragraphs = (body: string) =>
 export const lines = (t: string) => t.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean);
 
 /** Betreff: „Bewerbung als …“, außer der Titel sagt schon, worum es geht (z. B. „Initiativbewerbung Lager“) */
-export function subjectFor(title: string) {
+export function subjectFor(title: string, lang: LetterLang = "de") {
   const t = title.trim();
+  if (lang === "tr") {
+    if (!t) return "İş Başvurusu";
+    return /ba[şs]vuru/i.test(t) ? t : `${t} Pozisyonu İçin Başvuru`;
+  }
   if (!t) return "Bewerbung";
   return /bewerbung/i.test(t) ? t : `Bewerbung als ${t}`;
 }
 
 /** Briefanrede nach DIN 5008: mit Namen, wenn bekannt, sonst die allgemeine Form */
-export function salutationFor(salutation: string, contact: string) {
+export function salutationFor(salutation: string, contact: string, lang: LetterLang = "de") {
   // Im Feld steht oft mehr als der Name („Frau Müller, 0911 …“): nur den Teil vor dem ersten Komma nehmen
   let name = contact.split(/[,;\n(]/)[0].replace(/\S+@\S+/g, "").replace(/[+\d][\d\s/()-]{5,}/g, "").trim();
   let s = salutation;
@@ -79,6 +87,8 @@ export function salutationFor(salutation: string, contact: string) {
   // Titel wie „Dr.“ gehören in die Anrede, der Vorname nicht
   const title = words.filter((w) => /^(dr|prof)\.?$/i.test(w)).map((w) => (w.endsWith(".") ? w : `${w}.`));
   const last = words.filter((w) => !/^(dr|prof)\.?$/i.test(w)).pop();
+  // Türkisch: „Sayın Ayşe Yılmaz,“ (Hanım/Bey nur mit Vornamen üblich, der fehlt oft), sonst „Sayın Yetkili,“
+  if (lang === "tr") return last ? `Sayın ${words.join(" ")},` : "Sayın Yetkili,";
   if (!last) return "Sehr geehrte Damen und Herren,";
   if (s === "frau") return `Sehr geehrte Frau ${[...title, last].join(" ")},`;
   if (s === "herr") return `Sehr geehrter Herr ${[...title, last].join(" ")},`;
@@ -87,6 +97,19 @@ export function salutationFor(salutation: string, contact: string) {
 
 export const DEFAULT_CLOSING = "Mit freundlichen Grüßen";
 export const DEFAULT_ATTACHMENTS = "Lebenslauf\nZeugnisse";
+export const closingFor = (lang: LetterLang = "de") => (lang === "tr" ? "Saygılarımla" : DEFAULT_CLOSING);
+export const attachmentsFor = (lang: LetterLang = "de") => (lang === "tr" ? "Özgeçmiş\nBelgeler" : DEFAULT_ATTACHMENTS);
+/** Überschrift über der Anlagenliste */
+export const attachmentsLabel = (lang: LetterLang = "de") => (lang === "tr" ? "Ekler" : "Anlagen");
+
+/**
+ * Stelle bei einer türkischen Firma? Titel oder Arbeitgeber mit türkischen Buchstaben oder typischen Berufswörtern
+ * (oft ohne Sonderzeichen getippt, z. B. „Satis Yöneticisi“, „Ipekli Rulman“).
+ */
+export function looksTurkish(...texts: string[]) {
+  const t = texts.join(" ");
+  return /[ğĞıİşŞ]/.test(t) || /(^|[\s(/-])(sat[iı][sş]|y[öo]netici|sorumlu|uzman|m[üu]d[üu]r|eleman|destek|temsilci|operatör|[şs]of[öo]r|m[üu]hendis|muhasebe|[çc]al[iı][sş]an|pazarlama|g[üu]venlik|ba[şs]vuru|garson|kasiyer|teknisyen|[şs]irket|ticaret|sanayi)/i.test(t);
+}
 
 /**
  * Ansprechperson aus dem Freitextfeld „Kontakt“ der Bewerbung (z. B. „Frau Weber, weber@firma.de, 0911 …“):

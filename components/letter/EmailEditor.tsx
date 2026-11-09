@@ -15,14 +15,14 @@ import {
   type EmailValues,
   type StoredEmail,
 } from "@/lib/letter/email";
-import type { LetterField } from "@/lib/letter/types";
+import type { LetterField, LetterLang } from "@/lib/letter/types";
 import { useT } from "@/components/i18n/LangProvider";
 
 type Props = {
   applicationId: string;
   app: { contact: string; refnr: string | null };
   /** Aktueller Stand des Anschreibens im Editor (auch ungespeichert) */
-  letter: Record<LetterField, string> & { body: string };
+  letter: Record<LetterField, string> & { body: string; lang?: LetterLang };
   stored: StoredEmail;
   cvId: string | null;
   coach: boolean;
@@ -82,7 +82,7 @@ export function EmailEditor(p: Props) {
 
   const mailto = mailtoHref(values.to, values.subject, text);
   const toInvalid = values.to.trim() !== "" && !looksLikeEmail(values.to);
-  const extra = attachmentNames(p.letter.attachments).filter((n) => !/^(anschreiben|lebenslauf)$/i.test(n));
+  const extra = attachmentNames(p.letter.attachments, p.letter.lang).filter((n) => !/^(anschreiben|lebenslauf|ön yazı|özgeçmiş|cv)$/i.test(n));
 
   const draftLabel = p.coach ? t("Kurzfassung mit KI vorschlagen") : t("Kurzfassung vorschlagen");
   const draftBusy = p.coach ? t("Die KI schreibt eine Kurzfassung …") : t("Der Text wird vorbereitet …");
@@ -133,7 +133,7 @@ export function EmailEditor(p: Props) {
           </span>
         </div>
 
-        {!drafting && <TrBox coach={p.coach} text={[values.subject, values.body].filter((x) => x.trim()).join("\n\n")} />}
+        {!drafting && p.letter.lang !== "tr" && <TrBox coach={p.coach} text={[values.subject, values.body].filter((x) => x.trim()).join("\n\n")} />}
 
         {p.draft && (
           <div className="space-y-2 rounded-xl bg-bg p-3">

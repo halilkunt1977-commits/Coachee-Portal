@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/anschre
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(letterFileName(l.view.senderName, l.app.title, "pdf"))}`,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(letterFileName(l.view.senderName, l.app.title, "pdf", l.view.lang))}`,
       "Cache-Control": "private, no-store",
     },
   });

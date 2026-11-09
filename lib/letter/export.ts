@@ -16,5 +16,5 @@ export async function letterForDownload(id: string) {
 }
 
 /** Dateiname wie „Anschreiben Stefan Schmidt - Lagerist.pdf“ */
-export const letterFileName = (name: string, title: string, ext: string) =>
-  `${["Anschreiben", name].filter(Boolean).join(" ")}${title ? ` - ${title.replace(/\s*\([mwdfx/|,\s]+\)/gi, "")}` : ""}`.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 120).trim() + `.${ext}`;
+export const letterFileName = (name: string, title: string, ext: string, lang?: string) =>
+  `${[lang === "tr" ? "Ön Yazı" : "Anschreiben", name].filter(Boolean).join(" ")}${title ? ` - ${title.replace(/\s*\([mwdfx/|,\s]+\)/gi, "")}` : ""}`.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").slice(0, 120).trim() + `.${ext}`;

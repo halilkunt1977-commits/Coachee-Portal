@@ -2,7 +2,7 @@ import "server-only";
 import { AlignmentType, BorderStyle, Document, HeightRule, ImageRun, Packer, Paragraph, type IParagraphOptions, Table, TableCell, TableRow, TextRun, WidthType } from "docx";
 import type { Signature } from "../signature";
 import { FIT } from "./render";
-import { lines, paragraphs, type LetterView } from "./types";
+import { attachmentsLabel, lines, paragraphs, type LetterView } from "./types";
 
 /*
  * Anschreiben als Word-Datei mit demselben Aufbau wie das PDF (DIN 5008, Form B). Word kennt die Portal-Schrift
@@ -78,7 +78,7 @@ export async function letterDocx(v: LetterView, o: { color: string; signature: S
     p(v.closing, { spacing: { before: mm(f.close) }, keepNext: true }),
     sig ? new Paragraph({ spacing: { before: mm(2), after: mm(1) }, keepNext: true, children: [sig] }) : p("", { spacing: { before: mm(f.nosig) }, keepNext: true }),
     p(v.senderName),
-    ...(lines(v.attachments).length ? [p("Anlagen", { spacing: { before: mm(f.att) }, keepNext: true, run: { size: 20, bold: true } }), ...lines(v.attachments).map((l) => p(l, { run: { size: 20 } }))] : []),
+    ...(lines(v.attachments).length ? [p(attachmentsLabel(v.lang), { spacing: { before: mm(f.att) }, keepNext: true, run: { size: 20, bold: true } }), ...lines(v.attachments).map((l) => p(l, { run: { size: 20 } }))] : []),
   ];
 
   const doc = new Document({

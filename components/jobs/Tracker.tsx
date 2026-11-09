@@ -230,7 +230,7 @@ export function Tracker(p: Props) {
                     </select>
                   )}
                   {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm tap">{t("Anschreiben")}</Link>}
-                  {p.prepHref && (a.interview_sent || (p.prepAll && a.has_interview) || p.prepSelf) && (
+                  {p.prepHref && (a.interview_sent || (p.prepAll && (a.has_interview || !p.coach)) || p.prepSelf) && (
                     <Link href={p.prepHref.replace("{id}", a.id)} prefetch={false} className="btn-ghost btn-sm tap">{t("Gesprächsvorbereitung")}</Link>
                   )}
                   <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />

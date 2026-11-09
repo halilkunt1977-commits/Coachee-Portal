@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, ctx: RouteContext<"/api/anschre
   return new NextResponse(new Uint8Array(docx), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(letterFileName(l.view.senderName, l.app.title, "docx"))}`,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(letterFileName(l.view.senderName, l.app.title, "docx", l.view.lang))}`,
       "Cache-Control": "private, no-store",
     },
   });

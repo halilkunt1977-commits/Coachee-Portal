@@ -2,17 +2,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { draftLetterBody, resetLetter, saveContact, saveLetter } from "@/app/actions/anschreiben";
+import { draftLetterBody, resetLetter, saveContact, saveLetter, setLetterLang } from "@/app/actions/anschreiben";
 import { CvPreview } from "@/components/cv/CvPreview";
 import { SignatureField } from "@/components/cv/SignatureField";
 import { EmailEditor } from "@/components/letter/EmailEditor";
 import { TrBox } from "@/components/letter/TrBox";
 import type { StoredEmail } from "@/lib/letter/email";
 import { renderLetterHtml } from "@/lib/letter/render";
-import { LETTER_FIELDS, resolveLetter, splitContact, type LetterField, type StoredLetter } from "@/lib/letter/types";
+import { LETTER_FIELDS, resolveLetter, splitContact, type LetterField, type LetterLang, type StoredLetter } from "@/lib/letter/types";
 import { useT } from "@/components/i18n/LangProvider";
 
-type Auto = Record<LetterField, string> & { body: string };
+type Auto = Record<LetterField, string> & { body: string; lang: LetterLang };
 type Props = {
   applicationId: string;
   coacheeId: string;
@@ -139,7 +139,7 @@ export function LetterEditor(p: Props) {
 
   // ---------- Vorschau ----------
   const signatureUrl = signatureId ? `/api/dateien/${signatureId}` : null;
-  const current = useMemo(() => ({ ...values, body, signature: useSignature }), [values, body, useSignature]);
+  const current = useMemo(() => ({ ...values, body, signature: useSignature, lang: auto.lang }), [values, body, useSignature, auto.lang]);
   const letter = useDeferredValue(current);
   const html = useMemo(() => renderLetterHtml(letter, { color: p.color, signature: signatureUrl, fontCss: PREVIEW_FONTS }), [letter, p.color, signatureUrl]);
 
@@ -170,6 +170,21 @@ export function LetterEditor(p: Props) {
     a.click();
   }
 
+  const [langBusy, setLangBusy] = useState(false);
+  async function switchLang(lang: LetterLang) {
+    if (lang === auto.lang || langBusy) return;
+    setLangBusy(true);
+    await flush();
+    const res = await setLetterLang(p.applicationId, lang).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
+    if (!res.ok) {
+      setLangBusy(false);
+      setDraftError(t(res.error));
+      return;
+    }
+    // Seite neu laden: Vorlage, Anrede, Betreff und Mail entstehen in der neuen Sprache
+    router.refresh();
+  }
+
   const emailApp = useMemo(() => ({ contact, refnr: p.job.refnr }), [contact, p.job.refnr]);
 
   const draftLabel = p.coach ? t("Text mit KI neu entwerfen") : t("Neuen Textvorschlag erstellen");
@@ -197,6 +212,18 @@ export function LetterEditor(p: Props) {
             {m === "brief" ? t("Brief") : t("E-Mail-Bewerbung")}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+        <span className="font-semibold">{t("Sprache von Brief und E-Mail")}</span>
+        <div role="radiogroup" aria-label={t("Sprache von Brief und E-Mail")} className="inline-flex rounded-xl border border-line bg-surface p-1">
+          {(["de", "tr"] as const).map((l) => (
+            <button key={l} type="button" role="radio" aria-checked={auto.lang === l} disabled={langBusy} onClick={() => void switchLang(l)} className={`tap rounded-lg px-3 py-1.5 font-semibold disabled:opacity-60 ${auto.lang === l ? "bg-accent text-white" : "text-muted hover:text-ink"}`}>
+              {l === "de" ? "Deutsch" : "Türkçe"}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-muted">{langBusy ? t("Wird umgestellt …") : auto.lang === "tr" ? t("Für Bewerbungen bei türkischen Firmen. Beim Umstellen entstehen Text, Anrede und Betreff neu.") : t("Beim Umstellen entstehen Text, Anrede und Betreff neu.")}</span>
       </div>
 
       <section className="card grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -251,7 +278,7 @@ export function LetterEditor(p: Props) {
               />
               <span className="mt-1 block text-xs text-muted">{drafting ? draftBusy : t("Absätze mit einer Leerzeile trennen. Im Brief steht der Text im Blocksatz.")}</span>
             </label>
-            {!drafting && <TrBox coach={p.coach} text={[current.salutation, body].filter((x) => x?.trim()).join("\n\n")} />}
+            {!drafting && auto.lang !== "tr" && <TrBox coach={p.coach} text={[current.salutation, body].filter((x) => x?.trim()).join("\n\n")} />}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               {body.trim() !== auto.body.trim() && (
                 <button

@@ -2156,4 +2156,9 @@ export const TR: Record<string, string> = {
   "Diese Hilfe gibt es nur mit türkischer Ansicht.": "Bu yardım sadece Türkçe görünümde var.",
   "Noch kein Text da.": "Henüz metin yok.",
   "Das geht gerade nicht. Bitte später noch einmal versuchen.": "Bu şu an olmuyor. Lütfen sonra tekrar dene.",
+  "Sprache von Brief und E-Mail": "Mektup ve e-posta dili",
+  "Wird umgestellt …": "Değiştiriliyor …",
+  "Für Bewerbungen bei türkischen Firmen. Beim Umstellen entstehen Text, Anrede und Betreff neu.": "Türk firmalarına başvurular için. Dil değişince metin, hitap ve konu yeniden oluşur.",
+  "Beim Umstellen entstehen Text, Anrede und Betreff neu.": "Dil değişince metin, hitap ve konu yeniden oluşur.",
+  "Diese Sprache gibt es nicht.": "Bu dil yok.",
 };
