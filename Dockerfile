@@ -2,7 +2,8 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# Netzwerk am Server bricht ab und zu ab (ECONNRESET): mehrere Versuche, notfalls ein zweiter Durchlauf
+RUN npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 || (sleep 15 && npm ci --no-audit --no-fund --fetch-retries=5)
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
