@@ -54,6 +54,7 @@ export const coacheeNav = (type: "job" | "gruendung" | null = null, b: { proposa
     items: [
       { href: "/mein-bereich/handbuch", label: "Mein Handbuch", icon: "book" },
       { href: "/mein-bereich/lebenslauf", label: "Lebenslauf", icon: "idcard" },
+      { href: "/mein-bereich/dokumente", label: "Dokumente", icon: "folder" },
       { href: "/mein-bereich/erfahrung", label: "Erfahrungsbogen", icon: "doc" },
       // Erklärvideo nur, wenn der Coach es freigegeben hat
       ...(b.video ? [{ href: "/mein-bereich/hilfe", label: "So funktioniert’s", icon: "play" as const }] : []),

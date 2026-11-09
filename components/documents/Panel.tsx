@@ -14,6 +14,7 @@ import { ConfirmButton } from "../ConfirmButton";
 import { ShareButton } from "../teilen/ShareButton";
 import { Empty, Notice, formatDate, formatUnits } from "../ui";
 import { EditDocument, ImportRows, UploadForm } from "./Forms";
+import { MappeBuilder } from "./Mappe";
 
 type Doc = { id: string; file_id: string; category: string; title: string; shared: boolean; extracted: ReportRow[] | null; has_text: boolean; extracted_text: string | null; name: string; size: number; created_at: string; signature: "offen" | "unterschrieben" | null };
 type Att = { id: string; held_on: string; units: number; starts_at: string | null };
@@ -49,6 +50,16 @@ export async function DocumentsPanel({ coachee: c }: { coachee: Coachee }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
       <div className="min-w-0 space-y-6">
+        <details className="card group">
+          <summary className="flex cursor-pointer items-center justify-between gap-2">
+            <span>
+              <span className="h2 block">Mehrere Dokumente zu einer PDF</span>
+              <span className="text-sm text-muted">Anschreiben, Lebenslauf, Zeugnisse und eigene Dateien auswählen, sortieren und als eine PDF herunterladen.</span>
+            </span>
+            <span className="text-muted transition group-open:rotate-90" aria-hidden>›</span>
+          </summary>
+          <div className="mt-4"><MappeBuilder coacheeId={c.id} coach /></div>
+        </details>
         {docs.length === 0 && <Empty>Noch keine Dokumente. Lade rechts Berichte, Nachweise, Businesspläne oder Lebensläufe hoch.</Empty>}
         {groups.map((g) => (
           <section key={g.key} className="card space-y-2">
