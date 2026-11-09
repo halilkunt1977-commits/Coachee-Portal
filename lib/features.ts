@@ -58,6 +58,15 @@ export const FEATURES = [
     types: ["job"],
     ai: false,
   },
+  {
+    key: "gespraechsvorbereitung_selbst",
+    label: "Gesprächsvorbereitung selbst erstellen",
+    description: "Der Coachee lässt sich die Vorbereitung aufs Vorstellungsgespräch je Stelle selbst erstellen (Fragen mit Antwortvorschlag, Auftreten, Fragen an den Arbeitgeber). Du bekommst eine Meldung und kannst sie wie gewohnt bearbeiten.",
+    where: "Bewerbungen › Gesprächsvorbereitung",
+    purposes: ["interview_prep"],
+    types: ["job"],
+    ai: true,
+  },
 ] as const satisfies readonly { key: string; label: string; description: string; where: string; purposes: readonly string[]; types: readonly ("job" | "gruendung")[]; ai: boolean }[];
 
 export type FeatureKey = (typeof FEATURES)[number]["key"];

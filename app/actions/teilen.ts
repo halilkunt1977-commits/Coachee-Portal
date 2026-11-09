@@ -1,5 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { ensureInterviewTr } from "@/lib/jobs/interview-tr";
 import { ownCoachee, type Coachee } from "@/lib/access";
 import { audit, requireUser, type User } from "@/lib/auth";
 import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
@@ -89,8 +91,11 @@ export async function shareItem(input: ShareInput): Promise<ShareResult> {
   if (!target) return { error: NOT_FOUND };
   status ??= target.status as Status | undefined;
   // Gesprächsvorbereitung: genau die gespeicherte Fassung geht als Kopie raus; spätere Änderungen erst beim nächsten Schicken
-  if (coach && kind === "vorbereitung")
+  if (coach && kind === "vorbereitung") {
     await query("UPDATE applications SET interview_sent = interview, interview_sent_at = now(), interview_seen_at = NULL WHERE id = $1 AND coachee_id = $2", [refId, c.id]);
+    const app = refId;
+    after(() => ensureInterviewTr(c, app, user.id));
+  }
   // Ein Dokument zu schicken heißt auch: Der Coachee darf es öffnen
   if (coach && kind === "dokument" && !target.shared) await query("UPDATE documents SET shared = true WHERE id = $1 AND coachee_id = $2", [refId, c.id]);
 

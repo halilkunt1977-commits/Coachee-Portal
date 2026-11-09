@@ -7,7 +7,7 @@ import { useT } from "../i18n/LangProvider";
 import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 /** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung. prepAll: jede gespeicherte zeigen (Coach oder Freigabe), sonst nur geschickte */
-type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean };
+type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean; prepSelf?: boolean };
 
 const ACTIVE: Status[] = ["vorschlag", "gemerkt", "beworben", "gespraech"];
 type Filter = "aktiv" | "alle" | Status;
@@ -230,7 +230,7 @@ export function Tracker(p: Props) {
                     </select>
                   )}
                   {(a.status !== "vorschlag" || p.coach) && <Link href={`/anschreiben/${a.id}`} className="btn-ghost btn-sm tap">{t("Anschreiben")}</Link>}
-                  {p.prepHref && (a.interview_sent || (p.prepAll && a.has_interview)) && (
+                  {p.prepHref && (a.interview_sent || (p.prepAll && a.has_interview) || p.prepSelf) && (
                     <Link href={p.prepHref.replace("{id}", a.id)} prefetch={false} className="btn-ghost btn-sm tap">{t("Gesprächsvorbereitung")}</Link>
                   )}
                   <ShareButton kind="stelle" refId={a.id} role={p.coach ? "coach" : "coachee"} coacheeId={p.coacheeId} recipient={p.firstName} title={[a.title, a.employer].filter(Boolean).join(" · ")} />

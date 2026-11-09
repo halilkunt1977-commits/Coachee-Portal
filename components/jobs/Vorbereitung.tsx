@@ -36,6 +36,7 @@ export async function GespraechsVorbereitung({ coachee: c }: { coachee: Coachee 
             Je Stelle: Fragen des Arbeitgebers mit Antwortvorschlag, mögliche Nachfragen, Auftreten und Fragen an den Arbeitgeber, dazu deine Empfehlungen.
             {` Nur für dich, bis du sie ${c.first_name} schickst: Dann bekommt ${c.first_name} genau diese Fassung als Nachricht.`}
             {released ? ` Freigegeben: ${c.first_name} sieht außerdem jede gespeicherte Vorbereitung, die du noch nicht geschickt hast.` : ""}
+            {hasFeature(c, "gespraechsvorbereitung_selbst") ? ` ${c.first_name} kann sich Vorbereitungen auch selbst erstellen lassen und sieht jede gespeicherte.` : ""}
           </p>
         </div>
         <span className="flex items-center gap-2 rounded-xl bg-surface-2/70 px-3 py-2">
