@@ -49,7 +49,7 @@ export async function assertAiAllowed(user: User, opts: AiCheck) {
     if (!c || !hasFeature(c, opts.feature)) throw new AiError(NOT_RELEASED);
     if (!aiEnabled()) throw new AiError("Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.");
     const limit = c.ai_monthly_limit ?? defaultMonthlyLimit();
-    const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now())", [user.id]);
+    const row = await one<{ n: number }>("SELECT count(*)::int AS n FROM ai_usage WHERE user_id = $1 AND created_at >= date_trunc('month', now()) AND purpose NOT IN ('text_tr', 'interview_tr')", [user.id]);
     if ((row?.n ?? 0) >= limit) throw new AiError("Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.");
     return;
   }

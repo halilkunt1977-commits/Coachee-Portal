@@ -6,6 +6,7 @@ import { draftLetterBody, resetLetter, saveContact, saveLetter } from "@/app/act
 import { CvPreview } from "@/components/cv/CvPreview";
 import { SignatureField } from "@/components/cv/SignatureField";
 import { EmailEditor } from "@/components/letter/EmailEditor";
+import { TrBox } from "@/components/letter/TrBox";
 import type { StoredEmail } from "@/lib/letter/email";
 import { renderLetterHtml } from "@/lib/letter/render";
 import { LETTER_FIELDS, resolveLetter, splitContact, type LetterField, type StoredLetter } from "@/lib/letter/types";
@@ -250,6 +251,7 @@ export function LetterEditor(p: Props) {
               />
               <span className="mt-1 block text-xs text-muted">{drafting ? draftBusy : t("Absätze mit einer Leerzeile trennen. Im Brief steht der Text im Blocksatz.")}</span>
             </label>
+            {!drafting && <TrBox coach={p.coach} text={[current.salutation, body].filter((x) => x?.trim()).join("\n\n")} />}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               {body.trim() !== auto.body.trim() && (
                 <button

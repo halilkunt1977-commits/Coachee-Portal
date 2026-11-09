@@ -1,4 +1,5 @@
 "use client";
+import { TrBox } from "@/components/letter/TrBox";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { draftEmailText, saveEmail } from "@/app/actions/anschreiben";
@@ -131,6 +132,8 @@ export function EmailEditor(p: Props) {
             {drafting ? draftBusy : own.body === null ? t("Kurzfassung des Anschreibens. Ändert sich der Brief, passt sich dieser Text an, solange er hier nicht von Hand geändert wurde.") : t("Von Hand geändert.")}
           </span>
         </div>
+
+        {!drafting && <TrBox coach={p.coach} text={[values.subject, values.body].filter((x) => x.trim()).join("\n\n")} />}
 
         {p.draft && (
           <div className="space-y-2 rounded-xl bg-bg p-3">
