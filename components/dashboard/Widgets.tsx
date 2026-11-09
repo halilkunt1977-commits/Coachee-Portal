@@ -1,4 +1,4 @@
-import { FEEDS, newsFor, weatherFor, weatherIcon, weatherLabel, type FeedKey } from "@/lib/dashboard/feeds";
+import { FEEDS, FEEDS_BY_LANG, newsFor, weatherFor, weatherIcon, weatherLabel, type FeedKey } from "@/lib/dashboard/feeds";
 import { getT, serverLang } from "@/lib/i18n-server";
 
 const weekday = (iso: string, i: number, lang: "de" | "tr") =>
@@ -43,8 +43,10 @@ export function WeatherSkeleton() {
 }
 
 /** Schlagzeilen, je Rubrik eine Spalte */
-export async function NewsBox({ feeds = ["aktuell", "wirtschaft"], max = 5 }: { feeds?: FeedKey[]; max?: number }) {
-  const [lists, t] = await Promise.all([Promise.all(feeds.map(async (f) => ({ f, items: await newsFor(f, max) }))), getT()]);
+export async function NewsBox({ feeds, max = 5 }: { feeds?: FeedKey[]; max?: number }) {
+  const lang = await serverLang();
+  const list = feeds ?? FEEDS_BY_LANG[lang];
+  const [lists, t] = await Promise.all([Promise.all(list.map(async (f) => ({ f, items: await newsFor(f, max) }))), getT()]);
   if (lists.every((l) => !l.items.length)) return <p className="text-sm text-muted">{t("Die Nachrichten sind gerade nicht abrufbar.")}</p>;
   return (
     <div className={`grid gap-6 ${lists.length > 1 ? "md:grid-cols-2" : ""}`}>
@@ -56,14 +58,14 @@ export async function NewsBox({ feeds = ["aktuell", "wirtschaft"], max = 5 }: { 
               <li key={n.link} className="min-w-0">
                 <a href={n.link} target="_blank" rel="noreferrer" className="group block">
                   <p className="font-medium leading-snug group-hover:text-accent group-hover:underline">{n.title}</p>
-                  {n.date && <p className="text-xs text-muted">{new Date(n.date).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })}</p>}
+                  {n.date && <p className="text-xs text-muted">{new Date(n.date).toLocaleString(lang === "tr" ? "tr-TR" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })}</p>}
                 </a>
               </li>
             ))}
           </ul>
         </div>
       ))}
-      <p className="text-xs text-muted md:col-span-2">{t("Quelle: tagesschau.de (auf Deutsch)")}</p>
+      <p className="text-xs text-muted md:col-span-2">{lang === "tr" && !feeds ? "Kaynak: DW Türkçe ve BBC Türkçe" : t("Quelle: tagesschau.de (auf Deutsch)")}</p>
     </div>
   );
 }

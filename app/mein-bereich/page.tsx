@@ -224,6 +224,12 @@ export default async function MyArea() {
               </Link>
             )}
             {nextAppt && <Link href="/mein-bereich/kalender" className="inline-flex min-h-11 items-center px-1 text-sm text-white/60 transition hover:text-white">{t("Alle Termine im Kalender →")}</Link>}
+            {/* Wetter im dunklen Kopfband: weiße Schrift, deshalb nicht in einer hellen Karte */}
+            <div className="glass p-4">
+              <Suspense fallback={<WeatherSkeleton />}>
+                <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder={t("Dein Wohnort")} />} />
+              </Suspense>
+            </div>
           </div>
         </div>
       </section>
@@ -276,11 +282,6 @@ export default async function MyArea() {
               <p className="whitespace-pre-wrap text-[15px] leading-snug">{c.goal}</p>
             </section>
           )}
-          <section className="card">
-            <Suspense fallback={<WeatherSkeleton />}>
-              <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder={t("Dein Wohnort")} />} />
-            </Suspense>
-          </section>
         </div>
 
         {gruendung ? (

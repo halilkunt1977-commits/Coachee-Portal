@@ -1,7 +1,7 @@
 import "server-only";
 
 /*
- * Wetter (Open-Meteo, ohne Schlüssel) und Nachrichten (RSS der Tagesschau) für die Startseiten.
+ * Wetter (Open-Meteo, ohne Schlüssel) und Nachrichten (RSS der Tagesschau, für türkische Coachees DW Türkçe und BBC Türkçe) für die Startseiten.
  * Beides ist Beiwerk: Antworten werden 30 Minuten im Speicher gehalten, und wenn ein Dienst nicht antwortet,
  * zeigt die Seite einfach nichts an, statt zu warten oder einen Fehler zu werfen.
  */
@@ -97,7 +97,11 @@ export type NewsItem = { title: string; link: string; date: string | null; tease
 export const FEEDS = {
   aktuell: { label: "Aktuell", url: "https://www.tagesschau.de/index~rss2.xml" },
   wirtschaft: { label: "Wirtschaft", url: "https://www.tagesschau.de/wirtschaft/index~rss2.xml" },
+  // Für Coachees mit türkischer Oberfläche: Nachrichten auf Türkisch, DW mit Blick auf Deutschland
+  dw_tr: { label: "DW Türkçe", url: "https://rss.dw.com/rdf/rss-tur-all" },
+  bbc_tr: { label: "BBC Türkçe", url: "https://feeds.bbci.co.uk/turkce/rss.xml" },
 } as const;
+export const FEEDS_BY_LANG: Record<"de" | "tr", FeedKey[]> = { de: ["aktuell", "wirtschaft"], tr: ["dw_tr", "bbc_tr"] };
 export type FeedKey = keyof typeof FEEDS;
 
 const decode = (s: string) =>
@@ -122,7 +126,7 @@ export function parseRss(xml: string, max = 8): NewsItem[] {
     const title = decode(tag("title"));
     const link = decode(tag("link"));
     if (!title || !/^https:\/\//.test(link)) continue;
-    const pub = tag("pubDate");
+    const pub = tag("pubDate") || tag("dc:date"); // RSS 2.0 bzw. RDF (DW)
     const date = pub && !Number.isNaN(Date.parse(pub)) ? new Date(pub).toISOString() : null;
     out.push({ title, link, date, teaser: decode(tag("description")).slice(0, 220) });
     if (out.length >= max) break;
