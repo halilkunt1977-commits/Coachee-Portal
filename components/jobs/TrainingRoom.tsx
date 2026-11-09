@@ -3,16 +3,17 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { finishTraining } from "@/app/actions/training";
 import { useT } from "@/components/i18n/LangProvider";
-import { MAX_ANSWER_SECONDS, type TrainingLang } from "@/lib/jobs/training-shared";
+import { goodbyeText, INTERVIEWER, MAX_ANSWER_SECONDS, welcomeText, type TrainingLang, type TrainingVoice } from "@/lib/jobs/training-shared";
 import { createFaceMeter, type FaceMeter } from "./face";
+import { Interviewer } from "./Interviewer";
 
 /*
- * Probegespräch vor der Kamera: Frage lesen (auf Wunsch vorgelesen), laut antworten, weiter. Hochgeladen wird je
+ * Probegespräch vor der Kamera: Das Gegenüber von Gründarium begrüßt und liest jede Frage vor, man antwortet laut. Hochgeladen wird je
  * Antwort nur der Ton (wird in Text umgewandelt und nicht gespeichert) und die Messwerte zur Mimik.
  */
 type Phase = "intro" | "ready" | "recording" | "sending" | "finishing" | "error";
 
-export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainingId: string; questions: string[]; lang: TrainingLang; startAt: number }) {
+export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { trainingId: string; questions: string[]; lang: TrainingLang; voice: TrainingVoice; startAt: number }) {
   const t = useT();
   const router = useRouter();
   const video = useRef<HTMLVideoElement>(null);
@@ -32,9 +33,10 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     () => () => {
       meter.current?.stop();
       stream.current?.getTracks().forEach((x) => x.stop());
-      window.speechSynthesis?.cancel();
-      player.current?.pause();
+      stopVoice();
+      void audio.current?.ctx.close().catch(() => undefined);
     },
+     
     [],
   );
 
@@ -49,10 +51,23 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     return () => window.clearInterval(id);
   }, [phase]);
 
-  // Vorlesen: natürliche Stimme vom Server (MP3), sonst die Stimme des Browsers
-  const player = useRef<HTMLAudioElement | null>(null);
-  const cache = useRef(new Map<number, Promise<string | null>>());
+  /*
+   * Stimme: Die MP3 vom Server läuft über Web Audio. Der Audio-Kontext wird im Klick auf „Gespräch beginnen“
+   * freigeschaltet, sonst blockieren Browser (vor allem iPhone) den Ton, wenn er erst nach dem Laden startet.
+   * Die Lautstärke hängt an einem Gain-Knoten (das iPhone ignoriert die Lautstärke von <audio>), der Analyser liefert
+   * den Pegel für den Mund des Gegenübers. Ohne Server-Stimme liest der Browser vor.
+   */
+  const audio = useRef<{ ctx: AudioContext; gain: GainNode; analyser: AnalyserNode } | null>(null);
+  const source = useRef<AudioBufferSourceNode | null>(null);
+  const playId = useRef(0);
+  const raf = useRef(0);
+  const cache = useRef(new Map<number, Promise<ArrayBuffer | null>>());
+  const [level, setLevel] = useState(0);
+  const [speaking, setSpeaking] = useState(false);
+  const [noVoice, setNoVoice] = useState(false);
   const [volume, setVolumeState] = useState(0.9);
+  const [muted, setMuted] = useState(false);
+  const loud = useRef({ volume: 0.9, muted: false });
   // gemerkte Lautstärke erst im Browser lesen (sonst passt die erste Anzeige nicht zur Server-Fassung)
   useEffect(() => {
     try {
@@ -61,57 +76,183 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
       if (Number.isFinite(v) && v > 0 && v <= 1) setVolumeState(v);
     } catch {}
   }, []);
-  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    loud.current = { volume, muted };
+    if (audio.current) audio.current.gain.gain.value = muted ? 0 : volume;
+    if (muted) window.speechSynthesis?.cancel();
+  }, [volume, muted]);
   const setVolume = (v: number) => {
     setVolumeState(v);
     setMuted(v === 0);
-    if (player.current) player.current.volume = v;
     try {
       window.localStorage.setItem("training-volume", String(v || 0.9));
     } catch {}
   };
-  useEffect(() => {
-    if (player.current) player.current.muted = muted;
-    if (muted) window.speechSynthesis?.cancel();
-  }, [muted]);
 
-  /** MP3 einer Frage holen (einmal je Frage), null = keine Stimme verfügbar */
-  function voice(i: number) {
+  /** MP3 holen (einmal je Text), null = keine Stimme vom Server */
+  function fetchVoice(i: number) {
     let p = cache.current.get(i);
     if (!p) {
       p = fetch(`/api/training/${trainingId}/stimme?i=${i}`)
-        .then(async (r) => (r.status === 200 ? URL.createObjectURL(await r.blob()) : null))
+        .then((r) => (r.status === 200 ? r.arrayBuffer() : null))
         .catch(() => null);
       cache.current.set(i, p);
     }
     return p;
   }
+  // Begrüßung und erste Frage schon beim Öffnen der Seite laden
+  useEffect(() => {
+    if (startAt === 0) void fetchVoice(-1);
+    void fetchVoice(Math.min(startAt, questions.length - 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function read(i: number) {
-    if (!speak || muted) return;
+  /** Muss direkt im Klick laufen: Audio-Kontext anlegen/fortsetzen, Browser-Stimme vorwärmen */
+  function unlockAudio() {
+    try {
+      if (!audio.current) {
+        const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AC();
+        const gain = ctx.createGain();
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        gain.connect(analyser);
+        analyser.connect(ctx.destination);
+        gain.gain.value = loud.current.muted ? 0 : loud.current.volume;
+        audio.current = { ctx, gain, analyser };
+      }
+      const { ctx } = audio.current;
+      void ctx.resume();
+      // ein winziger stiller Ton schaltet den Kontext auf dem iPhone endgültig frei
+      const b = ctx.createBufferSource();
+      b.buffer = ctx.createBuffer(1, 1, 22050);
+      b.connect(ctx.destination);
+      b.start(0);
+    } catch {}
+    try {
+      const synth = window.speechSynthesis;
+      if (synth) {
+        const u = new SpeechSynthesisUtterance(" ");
+        u.volume = 0;
+        synth.speak(u);
+      }
+    } catch {}
+  }
+
+  function stopVoice() {
+    playId.current++;
+    try {
+      source.current?.stop();
+    } catch {}
+    source.current = null;
     window.speechSynthesis?.cancel();
-    player.current?.pause();
-    const url = await voice(i);
-    // nächste Frage schon im Hintergrund laden
-    if (i + 1 < questions.length) void voice(i + 1);
-    if (url) {
-      const a = (player.current ??= new Audio());
-      a.src = url;
-      a.volume = volume;
-      a.muted = muted;
-      await a.play().catch(() => undefined);
-      return;
+    cancelAnimationFrame(raf.current);
+    setSpeaking(false);
+    setLevel(0);
+  }
+
+  function textFor(i: number) {
+    return i === -1 ? welcomeText(lang, voice) : i === -2 ? goodbyeText(lang) : questions[i];
+  }
+
+  /** Text i vorlesen (-1 Begrüßung, -2 Abschied); fertig, wenn zu Ende gesprochen oder abgebrochen */
+  async function say(i: number): Promise<void> {
+    stopVoice();
+    if (!speak || loud.current.muted) return;
+    const id = playId.current;
+    const data = await fetchVoice(i);
+    if (i >= 0 && i + 1 < questions.length) void fetchVoice(i + 1);
+    if (id !== playId.current) return;
+    const a = audio.current;
+    if (data && a) {
+      try {
+        if (a.ctx.state !== "running") await a.ctx.resume();
+        const buf = await a.ctx.decodeAudioData(data.slice(0));
+        if (id !== playId.current) return;
+        if (a.ctx.state === "running") {
+          setNoVoice(false);
+          await new Promise<void>((done) => {
+            const src = a.ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(a.gain);
+            src.onended = () => done();
+            source.current = src;
+            src.start();
+            setSpeaking(true);
+            const bins = new Uint8Array(a.analyser.fftSize);
+            const tick = () => {
+              a.analyser.getByteTimeDomainData(bins);
+              let sum = 0;
+              for (const v of bins) sum += ((v - 128) / 128) ** 2;
+              setLevel(Math.min(1, Math.sqrt(sum / bins.length) * 4.5));
+              raf.current = requestAnimationFrame(tick);
+            };
+            tick();
+          });
+          if (id === playId.current) {
+            cancelAnimationFrame(raf.current);
+            setSpeaking(false);
+            setLevel(0);
+          }
+          return;
+        }
+      } catch {}
     }
-    if (!window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(questions[i]);
-    u.lang = lang === "tr" ? "tr-TR" : "de-DE";
-    u.rate = 0.95;
-    u.volume = volume;
-    window.speechSynthesis.speak(u);
+    await browserSay(textFor(i), id);
+  }
+
+  /** Stimme des Browsers; der Mund bewegt sich dann gleichmäßig mit */
+  function browserSay(text: string, id: number) {
+    const synth = window.speechSynthesis;
+    if (!synth || !text) {
+      setNoVoice(true);
+      return Promise.resolve();
+    }
+    return new Promise<void>((done) => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang === "tr" ? "tr-TR" : "de-DE";
+      const v = synth.getVoices().filter((x) => x.lang.toLowerCase().startsWith(lang));
+      const pick = v.find((x) => /natural|online|premium|enhanced|neural/i.test(x.name)) ?? v[0];
+      if (pick) u.voice = pick;
+      u.rate = 0.95;
+      u.volume = loud.current.volume;
+      let began = false;
+      const end = () => {
+        cancelAnimationFrame(raf.current);
+        if (id === playId.current) {
+          setSpeaking(false);
+          setLevel(0);
+        }
+        done();
+      };
+      u.onstart = () => {
+        began = true;
+        setNoVoice(false);
+        setSpeaking(true);
+        const t0 = performance.now();
+        const tick = () => {
+          const x = (performance.now() - t0) / 1000;
+          setLevel(0.25 + 0.35 * Math.abs(Math.sin(x * 9)) * (0.6 + 0.4 * Math.sin(x * 2.3)));
+          raf.current = requestAnimationFrame(tick);
+        };
+        tick();
+      };
+      u.onend = end;
+      u.onerror = end;
+      synth.speak(u);
+      // spricht der Browser nach 3 Sekunden noch nicht, Hinweis zeigen
+      window.setTimeout(() => {
+        if (!began && id === playId.current && !synth.speaking) {
+          setNoVoice(true);
+          done();
+        }
+      }, 3000);
+    });
   }
 
   async function openCamera() {
     setError(null);
+    unlockAudio();
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: { echoCancellation: true, noiseSuppression: true } });
       stream.current = s;
@@ -120,9 +261,13 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
         await video.current.play().catch(() => undefined);
       }
       setPhase("ready");
-      void read(index);
-      meter.current = await createFaceMeter(video.current!);
-      setFaceOk(Boolean(meter.current));
+      void createFaceMeter(video.current!).then((m) => {
+        meter.current = m;
+        setFaceOk(Boolean(m));
+      });
+      if (index === 0) await say(-1);
+      // schon mit der Antwort angefangen? Dann die Frage nicht mehr hineinsprechen
+      if (rec.current?.state !== "recording") void say(index);
     } catch {
       setError(t("Kein Zugriff auf Kamera oder Mikrofon. Bitte im Browser erlauben und die Seite neu laden."));
       setPhase("error");
@@ -131,11 +276,10 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
 
   function startAnswer() {
     if (!stream.current) return;
-    window.speechSynthesis?.cancel();
-    player.current?.pause();
-    const audio = new MediaStream(stream.current.getAudioTracks());
+    stopVoice();
+    const mic = new MediaStream(stream.current.getAudioTracks());
     const type = ["audio/webm", "audio/mp4", "audio/ogg"].find((x) => MediaRecorder.isTypeSupported(x)) ?? "";
-    const r = new MediaRecorder(audio, type ? { mimeType: type, audioBitsPerSecond: 48000 } : undefined);
+    const r = new MediaRecorder(mic, type ? { mimeType: type, audioBitsPerSecond: 48000 } : undefined);
     chunks.current = [];
     r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
     r.onstop = () => void upload();
@@ -177,7 +321,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     if (index + 1 < questions.length) {
       setIndex(index + 1);
       setPhase("ready");
-      void read(index + 1);
+      void say(index + 1);
     } else {
       await finish();
     }
@@ -187,7 +331,10 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
     setPhase("finishing");
     meter.current?.stop();
     stream.current?.getTracks().forEach((x) => x.stop());
-    const res = await finishTraining(trainingId).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." }));
+    const [res] = await Promise.all([
+      finishTraining(trainingId).catch(() => ({ ok: false as const, error: "Gerade keine Verbindung. Bitte noch einmal versuchen." })),
+      say(-2),
+    ]);
     if (!res.ok) {
       setError(t(res.error));
       setPhase("error");
@@ -199,21 +346,28 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
   const q = questions[index];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      <div className="relative overflow-hidden rounded-2xl bg-ink/90" style={{ aspectRatio: "4 / 3" }}>
-        <video ref={video} muted playsInline className="size-full -scale-x-100 object-cover" />
+      <div className="relative overflow-hidden rounded-2xl bg-line-soft" style={{ aspectRatio: "4 / 3" }}>
+        <Interviewer voice={voice} level={level} speaking={speaking} />
+        <span className="absolute bottom-3 left-3 rounded-lg bg-black/60 px-3 py-1 text-xs text-white">
+          <b>{INTERVIEWER[voice][lang]}</b> · Gründarium{speaking && <span className="ml-1.5 inline-block size-2 animate-pulse rounded-full bg-emerald-400 align-middle" />}
+        </span>
+        {/* eigenes Bild klein in der Ecke; bleibt immer im DOM, weil die Mimik daraus gemessen wird */}
+        <div className={`absolute right-3 bottom-3 w-[30%] min-w-24 overflow-hidden rounded-xl border-2 border-white/80 bg-ink shadow-lg ${phase === "intro" ? "opacity-0" : ""}`} style={{ aspectRatio: "4 / 3" }}>
+          <video ref={video} muted playsInline className="size-full -scale-x-100 object-cover" />
+          {phase === "recording" && (
+            <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">
+              <span className="size-2 animate-pulse rounded-full bg-red-500" /> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+            </span>
+          )}
+        </div>
         {phase === "intro" && (
-          <div className="absolute inset-0 grid place-items-center p-6 text-center text-white">
+          <div className="absolute inset-0 grid place-items-center bg-ink/55 p-6 text-center text-white">
             <div className="max-w-sm space-y-3">
-              <p className="text-lg font-semibold">{t("Kamera und Mikrofon")}</p>
-              <p className="text-sm text-white/80">{t("Dein Bild bleibt auf deinem Gerät und wird nicht übertragen oder gespeichert. Deine Antworten werden in Text umgewandelt, die Aufnahme selbst wird nicht gespeichert.")}</p>
-              <button type="button" className="btn" onClick={() => void openCamera()}>{t("Kamera einschalten")}</button>
+              <p className="text-lg font-semibold">{t("{name} von Gründarium führt das Gespräch mit dir", { name: INTERVIEWER[voice][lang] })}</p>
+              <p className="text-sm text-white/85">{t("Mach den Ton an. Dein Bild bleibt auf deinem Gerät und wird nicht übertragen oder gespeichert. Deine Antworten werden in Text umgewandelt, die Aufnahme selbst wird nicht gespeichert.")}</p>
+              <button type="button" className="btn" onClick={() => void openCamera()}>{t("Gespräch beginnen")}</button>
             </div>
           </div>
-        )}
-        {phase === "recording" && (
-          <span className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white">
-            <span className="size-2.5 animate-pulse rounded-full bg-red-500" /> {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
-          </span>
         )}
         {phase !== "intro" && (
           <div className="absolute right-3 top-3 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-white">
@@ -223,7 +377,8 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
             <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} aria-label={t("Lautstärke")} className="w-24 accent-white sm:w-32" onChange={(e) => setVolume(Number(e.target.value))} />
           </div>
         )}
-        {faceOk === false && phase !== "intro" && <span className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white">{t("Die Mimik kann auf diesem Gerät nicht gemessen werden. Die Antworten werden trotzdem ausgewertet.")}</span>}
+        {noVoice && phase !== "intro" && <span className="absolute left-3 right-3 top-14 rounded-lg bg-black/70 px-3 py-1.5 text-xs text-white">{t("Die Stimme lässt sich auf diesem Gerät gerade nicht abspielen. Prüfe den Ton (Lautlos-Schalter am Handy) oder lies die Frage mit.")}</span>}
+        {faceOk === false && phase !== "intro" && <span className="absolute left-3 right-3 top-24 rounded-lg bg-black/60 px-3 py-1.5 text-xs text-white">{t("Die Mimik kann auf diesem Gerät nicht gemessen werden. Die Antworten werden trotzdem ausgewertet.")}</span>}
       </div>
 
       <section className="card flex min-w-0 flex-col gap-4">
@@ -238,7 +393,7 @@ export function TrainingRoom({ trainingId, questions, lang, startAt }: { trainin
         {phase === "ready" && (
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn" onClick={startAnswer}>● {t("Antwort starten")}</button>
-            <button type="button" className="btn-ghost" onClick={() => void read(index)}>{t("Noch einmal vorlesen")}</button>
+            <button type="button" className="btn-ghost" onClick={() => void say(index)}>{t("Noch einmal vorlesen")}</button>
           </div>
         )}
         {phase === "recording" && (

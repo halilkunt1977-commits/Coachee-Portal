@@ -9,7 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { one } from "@/lib/db";
 import { hasFeature } from "@/lib/features";
 import { getT } from "@/lib/i18n-server";
-import { loadTraining, trainingsFor } from "@/lib/jobs/training";
+import { loadTraining, trainingLangFor, trainingsFor } from "@/lib/jobs/training";
 
 export const generateMetadata = async () => ({ title: (await getT())("Interview-Training") });
 
@@ -44,7 +44,7 @@ export default async function TrainingPage({ params, searchParams }: PageProps<"
     return (
       <div className="mx-auto max-w-5xl space-y-4">
         {header}
-        <TrainingRoom trainingId={current.id} questions={current.questions} lang={current.interview_lang} startAt={answered} />
+        <TrainingRoom trainingId={current.id} questions={current.questions} lang={current.interview_lang} voice={current.voice} startAt={answered} />
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default async function TrainingPage({ params, searchParams }: PageProps<"
       <section className="card space-y-3">
         <p className="text-sm">{t("Übe das Vorstellungsgespräch für diese Stelle vor der Kamera: Du bekommst Fragen wie im echten Gespräch und antwortest laut. Danach siehst du, was gut war, was du üben kannst, und wie du vor der Kamera wirkst.")}</p>
         <p className="text-xs text-muted">{t("Dein Bild bleibt auf deinem Gerät und wird nicht übertragen oder gespeichert. Deine Antworten werden in Text umgewandelt, die Aufnahme selbst wird nicht gespeichert. Dein Coach sieht die Auswertung.")}</p>
-        <StartTrainingButton appId={app.id} again={past.length > 0} />
+        <StartTrainingButton appId={app.id} again={past.length > 0} lang={await trainingLangFor(c, app.id)} />
       </section>
       {shown && (
         <section className="space-y-3">

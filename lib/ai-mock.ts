@@ -8,7 +8,7 @@ import path from "node:path";
  * Der Text zeigt, welche Teile des Materials angekommen sind, damit man den Kontext prüfen kann.
  * Das zuletzt gesendete Material liegt zum Nachsehen in <tmp>/ai-mock-input.txt.
  */
-export function mockJson(schemaName: string, input: string): unknown {
+export function mockJson(schemaName: string, input: string, instructions?: string): unknown {
   void writeFile(path.join(os.tmpdir(), "ai-mock-input.txt"), input).catch(() => {});
   const parts = [...input.matchAll(/^== (.+?) ==$/gm)].map((m) => m[1]);
   const vorhaben = input.match(/^Vorhaben: (.+)$/m)?.[1] ?? "die Gründung";
@@ -127,11 +127,12 @@ export function mockJson(schemaName: string, input: string): unknown {
   }
   if (schemaName === "training_fragen") {
     const tr = /auf Türkisch/.test(input) || /Ipekli|Sat[iı]s/i.test(input);
-    return {
-      questions: tr
-        ? ["Kendinizi kısaca tanıtır mısınız?", "Neden bu pozisyona başvurdunuz?", "Depo yönetiminde hangi deneyimleriniz var?", "Bir ekibi nasıl yönetirsiniz?", "Güçlü ve zayıf yönleriniz nelerdir?", "Ne zaman başlayabilirsiniz?"]
-        : ["Erzählen Sie kurz etwas über sich.", "Warum möchten Sie bei uns arbeiten?", "Welche Erfahrung haben Sie in der Lagerlogistik?", "Wie führen Sie ein Team?", "Was sind Ihre Stärken und Schwächen?", "Wann könnten Sie anfangen?"],
-    };
+    const base = tr
+      ? ["Kendinizi kısaca tanıtır mısınız?", "Neden bu pozisyona başvurdunuz?", "Depo yönetiminde hangi deneyimleriniz var?", "Bir ekibi nasıl yönetirsiniz?", "Güçlü ve zayıf yönleriniz nelerdir?", "Ne zaman başlayabilirsiniz?"]
+      : ["Erzählen Sie kurz etwas über sich.", "Warum möchten Sie bei uns arbeiten?", "Welche Erfahrung haben Sie in der Lagerlogistik?", "Wie führen Sie ein Team?", "Was sind Ihre Stärken und Schwächen?", "Wann könnten Sie anfangen?"];
+    // so viele Fragen wie verlangt („genau N Fragen“), damit die Auswahl 6/10/15 testbar ist
+    const want = Number(/genau (\d+) Fragen/.exec(input + " " + (instructions ?? ""))?.[1]) || 6;
+    return { questions: Array.from({ length: want }, (_, i) => (i < base.length ? base[i] : `${base[i % base.length]} (${i + 1})`)) };
   }
   if (schemaName === "training_auswertung") {
     const n = (input.match(/^Frage \d+:/gm) ?? []).length;

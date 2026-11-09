@@ -68,7 +68,7 @@ export async function jsonResponse<T>(opts: Usage & { instructions: string; inpu
   if (mockAi()) {
     const { mockJson } = await import("./ai-mock");
     await logUsage(opts, "mock");
-    return mockJson(opts.schemaName, opts.input) as T;
+    return mockJson(opts.schemaName, opts.input, opts.instructions) as T;
   }
   const model = MODEL();
   const response = await openai().responses.create({
