@@ -1,7 +1,7 @@
 // E-Mail-Bewerbung zum Anschreiben: kurze Nachricht, die das PDF-Anschreiben und den Lebenslauf begleitet.
 // Ohne Server-Abhängigkeiten, damit Editor (Browser) und Server dieselbe Vorlage nutzen. Das Portal verschickt nichts selbst.
 
-import { DEFAULT_CLOSING, lines, paragraphs, type LetterView } from "./types";
+import { closingFor, lines, paragraphs, type LetterLang, type LetterView } from "./types";
 
 export const EMAIL_FIELDS = ["to", "subject", "body"] as const;
 export type EmailField = (typeof EMAIL_FIELDS)[number];
@@ -20,8 +20,8 @@ export function emailIn(text: string) {
 export const looksLikeEmail = (s: string) => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]{2,}$/.test(s.trim());
 
 /** „Bewerbung als Lagerist – Referenznummer 123 – Stefan Schmidt“ */
-export function emailSubject(letterSubject: string, refnr: string | null | undefined, name: string) {
-  return [letterSubject.trim() || "Bewerbung", refnr?.trim() && `Referenznummer ${refnr.trim()}`, name.trim()].filter(Boolean).join(" – ");
+export function emailSubject(letterSubject: string, refnr: string | null | undefined, name: string, lang: LetterLang = "de") {
+  return [letterSubject.trim() || (lang === "tr" ? "İş Başvurusu" : "Bewerbung"), refnr?.trim() && `${lang === "tr" ? "Referans No" : "Referenznummer"} ${refnr.trim()}`, name.trim()].filter(Boolean).join(" – ");
 }
 
 /** Sätze eines Absatzes; trennt nur, wenn danach ein neuer Satz beginnt (Großbuchstabe oder Anführungszeichen) */
@@ -29,28 +29,31 @@ export const sentences = (text: string) =>
   text
     .replace(/\s+/g, " ")
     .trim()
-    .split(/(?<=[.!?])\s+(?=[A-ZÄÖÜ„"])/)
+    .split(/(?<=[.!?])\s+(?=[A-ZÄÖÜÇĞİŞ„"])/)
     .map((s) => s.trim())
     .filter(Boolean);
 
 /** „(Anschreiben, Lebenslauf und Zeugnisse)“ aus der Anlagenliste des Briefs */
-export function attachmentNames(letterAttachments: string) {
-  const names = ["Anschreiben", ...lines(letterAttachments).map((l) => l.replace(/^[-–•*]\s*/, ""))];
+export function attachmentNames(letterAttachments: string, lang: LetterLang = "de") {
+  const names = [lang === "tr" ? "Ön yazı" : "Anschreiben", ...lines(letterAttachments).map((l) => l.replace(/^[-–•*]\s*/, ""))];
   return names.filter((n, i) => n && names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i);
 }
 
-const listDe = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} und ${xs.at(-1)}` : xs[0] ?? "");
+const list = (xs: string[], and: string) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} ${and} ${xs.at(-1)}` : xs[0] ?? "");
 
-export const ATTACHMENT_SENTENCE = (letterAttachments: string) =>
-  `Im Anhang finden Sie meine Bewerbungsunterlagen (${listDe(attachmentNames(letterAttachments))}) als PDF.`;
+export const ATTACHMENT_SENTENCE = (letterAttachments: string, lang: LetterLang = "de") =>
+  lang === "tr"
+    ? `Başvuru belgelerimi (${list(attachmentNames(letterAttachments, lang), "ve")}) ekte PDF olarak bulabilirsiniz.`
+    : `Im Anhang finden Sie meine Bewerbungsunterlagen (${list(attachmentNames(letterAttachments), "und")}) als PDF.`;
 export const OUTRO_SENTENCE = "Über eine Einladung zu einem persönlichen Gespräch freue ich mich.";
+const OUTRO_TR = "Sizinle yüz yüze bir görüşmede tanışmaktan memnuniyet duyarım.";
 
 /**
  * Kurzfassung des Brieftexts ohne Schreibhilfe: der erste Satz des Einstiegs, die ersten zwei Sätze des Mittelteils
  * (dort stehen die Angaben aus dem Lebenslauf), dann Hinweis auf die Anlagen und der Gesprächswunsch.
  * Nimmt nur Sätze aus dem Brief, erfindet nichts dazu. Zusammen höchstens sechs Sätze.
  */
-export function condenseLetter(letterBody: string, letterAttachments: string) {
+export function condenseLetter(letterBody: string, letterAttachments: string, lang: LetterLang = "de") {
   const ps = paragraphs(letterBody).map((p) => sentences(p.join(" ")));
   const picked: string[] = [];
   if (ps.length >= 2) {
@@ -64,31 +67,32 @@ export function condenseLetter(letterBody: string, letterAttachments: string) {
   // Sehr lange Sätze machen die Mail unübersichtlich; die bleiben im Anschreiben
   const kept = picked.filter((s, i) => i === 0 || s.length <= 260).slice(0, 4);
   // Erster Satz klein, weil er nach der Anrede mit Komma steht
-  if (kept[0]) kept[0] = kept[0].replace(/^(Mit|Ich|Hiermit|Gern|Zurzeit|Zuletzt|Über|Auf|Da|Weil|Seit|Als)\b/, (w) => w.toLowerCase());
-  return [...kept, ATTACHMENT_SENTENCE(letterAttachments), OUTRO_SENTENCE].join(" ");
+  if (kept[0] && lang === "de") kept[0] = kept[0].replace(/^(Mit|Ich|Hiermit|Gern|Zurzeit|Zuletzt|Über|Auf|Da|Weil|Seit|Als)\b/, (w) => w.toLowerCase());
+  return [...kept, ATTACHMENT_SENTENCE(letterAttachments, lang), lang === "tr" ? OUTRO_TR : OUTRO_SENTENCE].join(" ");
 }
 
 /** Nachricht ohne Signatur: Anrede, Kurzfassung in zwei Absätzen, Gruß */
-export function composeEmailBody(salutation: string, text: string, closing: string) {
+export function composeEmailBody(salutation: string, text: string, closing: string, lang: LetterLang = "de") {
   const s = sentences(text);
   // Anlagenhinweis und Gesprächswunsch als eigener kurzer Absatz
-  const tail = s.findIndex((x) => /^Im Anhang/.test(x));
+  const tail = s.findIndex((x) => /^(Im Anhang|Başvuru belgelerimi)/.test(x));
   const parts = tail > 0 ? [s.slice(0, tail).join(" "), s.slice(tail).join(" ")] : [s.join(" ")];
-  return [salutation.trim() || "Sehr geehrte Damen und Herren,", ...parts.filter(Boolean), closing.trim() || DEFAULT_CLOSING].join("\n\n");
+  return [salutation.trim() || (lang === "tr" ? "Sayın Yetkili," : "Sehr geehrte Damen und Herren,"), ...parts.filter(Boolean), closing.trim() || closingFor(lang)].join("\n\n");
 }
 
 /** Automatische E-Mail aus dem aktuellen Stand des Anschreibens */
-export function autoEmail(letter: Pick<LetterView, "subject" | "salutation" | "body" | "closing" | "attachments" | "senderName">, app: { contact: string; refnr: string | null }): EmailValues {
+export function autoEmail(letter: Pick<LetterView, "subject" | "salutation" | "body" | "closing" | "attachments" | "senderName" | "lang">, app: { contact: string; refnr: string | null }): EmailValues {
+  const lang = letter.lang ?? "de";
   return {
     to: emailIn(app.contact),
-    subject: emailSubject(letter.subject, app.refnr, letter.senderName),
-    body: composeEmailBody(letter.salutation, condenseLetter(letter.body, letter.attachments), letter.closing),
+    subject: emailSubject(letter.subject, app.refnr, letter.senderName, lang),
+    body: composeEmailBody(letter.salutation, condenseLetter(letter.body, letter.attachments, lang), letter.closing, lang),
   };
 }
 
 /** Signatur unter der Mail: Name, Telefon, E-Mail aus dem Absender des Anschreibens */
-export function emailSignature(letter: Pick<LetterView, "senderName" | "senderPhone" | "senderEmail">) {
-  return [letter.senderName.trim(), letter.senderPhone.trim() && `Telefon: ${letter.senderPhone.trim()}`, letter.senderEmail.trim() && `E-Mail: ${letter.senderEmail.trim()}`].filter(Boolean).join("\n");
+export function emailSignature(letter: Pick<LetterView, "senderName" | "senderPhone" | "senderEmail" | "lang">) {
+  return [letter.senderName.trim(), letter.senderPhone.trim() && `Telefon: ${letter.senderPhone.trim()}`, letter.senderEmail.trim() && `${letter.lang === "tr" ? "E-posta" : "E-Mail"}: ${letter.senderEmail.trim()}`].filter(Boolean).join("\n");
 }
 
 export const fullEmailText = (body: string, signature: string) => [body.replace(/\r/g, "").trimEnd(), signature].filter(Boolean).join("\n\n");

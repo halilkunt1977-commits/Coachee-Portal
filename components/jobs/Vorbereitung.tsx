@@ -39,10 +39,16 @@ export async function GespraechsVorbereitung({ coachee: c }: { coachee: Coachee 
             {hasFeature(c, "gespraechsvorbereitung_selbst") ? ` ${c.first_name} kann sich Vorbereitungen auch selbst erstellen lassen und sieht jede gespeicherte.` : ""}
           </p>
         </div>
-        <span className="flex items-center gap-2 rounded-xl bg-surface-2/70 px-3 py-2">
-          <span className="text-sm">Für {c.first_name} freigeben</span>
-          <FeatureToggle coacheeId={c.id} feature="gespraechsvorbereitung" on={released} label={`Gesprächsvorbereitung für ${c.first_name}`} showState={false} />
-        </span>
+        <div className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-3 rounded-xl bg-surface-2/70 px-3 py-2">
+            <span className="text-sm">Für {c.first_name} freigeben</span>
+            <FeatureToggle coacheeId={c.id} feature="gespraechsvorbereitung" on={released} label={`Gesprächsvorbereitung für ${c.first_name}`} showState={false} />
+          </span>
+          <span className="flex items-center justify-between gap-3 rounded-xl bg-surface-2/70 px-3 py-2">
+            <span className="text-sm">{c.first_name} darf selbst erstellen</span>
+            <FeatureToggle coacheeId={c.id} feature="gespraechsvorbereitung_selbst" on={hasFeature(c, "gespraechsvorbereitung_selbst")} label={`Gesprächsvorbereitung selbst erstellen für ${c.first_name}`} showState={false} />
+          </span>
+        </div>
       </div>
       {!ai && <p className="card text-sm text-muted">Die KI ist noch nicht eingerichtet. Du kannst die Vorbereitung trotzdem selbst schreiben. Der Zugang zur KI muss auf dem Server hinterlegt werden.</p>}
       {apps.length ? (

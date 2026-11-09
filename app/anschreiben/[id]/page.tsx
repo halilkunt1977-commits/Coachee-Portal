@@ -14,7 +14,7 @@ export const generateMetadata = async () => ({ title: (await getT())("Anschreibe
 export default async function LetterPage({ params, searchParams }: PageProps<"/anschreiben/[id]">) {
   const user = await requireUser();
   const { id } = await params;
-  const { app, coachee, stored, auto, color, email, cvId } = await letterFor(user, id);
+  const { app, coachee, stored, auto, color, email, cvId, lang } = await letterFor(user, id);
   const { ansicht } = await searchParams;
   // Auswahl oben: alle Bewerbungen dieses Coachees, zuletzt bearbeitete zuerst
   const applications = await query<{ id: string; title: string; employer: string }>("SELECT id, title, employer FROM applications WHERE coachee_id = $1 ORDER BY updated_at DESC LIMIT 200", [coachee.id]);
@@ -22,7 +22,8 @@ export default async function LetterPage({ params, searchParams }: PageProps<"/a
   const coach = user.role === "coach";
   return (
     <LetterEditor
-      key={app.id}
+      // neue Sprache: Editor frisch aufbauen
+      key={`${app.id}:${lang}`}
       applicationId={app.id}
       coacheeId={coachee.id}
       job={{ title: app.title, employer: app.employer, refnr: app.refnr, contact: app.contact, salutation: app.salutation }}

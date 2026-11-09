@@ -6,7 +6,7 @@ import { profileForAi } from "@/lib/jobs/store";
 import { notifyCoachee, postToInbox } from "@/lib/coachee-inbox";
 import { SENDER_LOCKED, letterFor } from "@/lib/letter/store";
 import { EMAIL_FIELDS, EMAIL_MAX, sentences, type StoredEmail } from "@/lib/letter/email";
-import { joinContact, normalizeStoredLetter, overridesOf, splitContact, type LetterField, type StoredLetter } from "@/lib/letter/types";
+import { isLetterLang, joinContact, normalizeStoredLetter, overridesOf, splitContact, type LetterField, type StoredLetter } from "@/lib/letter/types";
 
 export type LetterInput = { values: Partial<Record<LetterField, string>>; body: string; adText: string; signature: boolean };
 
@@ -58,7 +58,7 @@ export async function resetLetter(applicationId: string) {
  */
 export async function draftLetterBody(applicationId: string, adText: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
-  const { app, coachee } = await letterFor(user, applicationId);
+  const { app, coachee, lang } = await letterFor(user, applicationId);
   try {
     await assertAiAllowed(user, { feature: "anschreiben", coachee });
     const profile = await profileForAi(coachee);
@@ -75,7 +75,7 @@ export async function draftLetterBody(applicationId: string, adText: string): Pr
       schemaName: "anschreiben",
       schema: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },
       maxTokens: 2500,
-      instructions: `Du schreibst den Brieftext eines deutschen Bewerbungsanschreibens (DIN 5008) in der Ich-Form, den Arbeitgeber siezt du.
+      instructions: (lang === "tr" ? TR_LETTER : "") + `Du schreibst den Brieftext eines deutschen Bewerbungsanschreibens (DIN 5008) in der Ich-Form, den Arbeitgeber siezt du.
 
 Regeln:
 - Nur der Brieftext: keine Anrede, kein Gruß, keine Unterschrift, kein Betreff, keine Anlagen. Der erste Satz beginnt klein, weil er nach der Anrede mit Komma steht.
@@ -137,7 +137,7 @@ export async function saveEmail(applicationId: string, input: StoredEmail): Prom
  */
 export async function draftEmailText(applicationId: string): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const user = await requireUser();
-  const { app, coachee, stored } = await letterFor(user, applicationId);
+  const { app, coachee, stored, lang } = await letterFor(user, applicationId);
   try {
     await assertAiAllowed(user, { feature: "anschreiben", coachee });
     const profile = await profileForAi(coachee);
@@ -155,7 +155,7 @@ export async function draftEmailText(applicationId: string): Promise<{ ok: true;
       schemaName: "bewerbungsmail",
       schema: { type: "object", additionalProperties: false, required: ["text"], properties: { text: { type: "string" } } },
       maxTokens: 1000,
-      instructions: `Du schreibst den kurzen Text einer deutschen E-Mail-Bewerbung in der Ich-Form, den Arbeitgeber siezt du. Anschreiben, Lebenslauf und Zeugnisse hängen als PDF an.
+      instructions: (lang === "tr" ? TR_EMAIL : "") + `Du schreibst den kurzen Text einer deutschen E-Mail-Bewerbung in der Ich-Form, den Arbeitgeber siezt du. Anschreiben, Lebenslauf und Zeugnisse hängen als PDF an.
 
 Regeln:
 - Nur der Text: keine Anrede, kein Gruß, keine Unterschrift, kein Betreff. Der erste Satz beginnt klein, weil er nach der Anrede mit Komma steht.
@@ -178,7 +178,32 @@ Regeln:
 /** Anrede und Gruß entfernen, falls doch mitgeliefert, und Platzhalter tilgen */
 function cleanBody(text: string) {
   const ls = text.replace(/\r/g, "").replace(/\[Name\]\s*/g, "").trim().split("\n");
-  while (ls.length && /^(sehr geehrte|guten tag|hallo)/i.test(ls[0].trim())) ls.shift();
-  const end = ls.findIndex((l) => /^(mit freundlichen grüßen|freundliche grüße|viele grüße)/i.test(l.trim()));
+  while (ls.length && /^(sehr geehrte|guten tag|hallo|sayın|merhaba)/i.test(ls[0].trim())) ls.shift();
+  const end = ls.findIndex((l) => /^(mit freundlichen grüßen|freundliche grüße|viele grüße|saygılarımla|saygılarımızla|iyi çalışmalar)/i.test(l.trim()));
   return (end >= 0 ? ls.slice(0, end) : ls).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+const TR_LETTER = `WICHTIG: Die Stelle ist bei einer türkischen Firma. Schreibe den ganzen Brieftext auf Türkisch (förmliches, natürliches Türkisch, Arbeitgeber in der „siz“-Form, Ich-Form). Der erste Satz beginnt groß, weil die türkische Anrede („Sayın Yetkili,“) in einer eigenen Zeile steht. Alle übrigen Regeln gelten sinngemäß; vermeide auch türkische Floskeln wie „ekte sunduğum özgeçmişimde de görüleceği üzere“.
+
+`;
+const TR_EMAIL = `WICHTIG: Die Stelle ist bei einer türkischen Firma. Schreibe den Text auf Türkisch (förmlich, natürlich, „siz“-Form, Ich-Form). Der erste Satz beginnt groß. Alle übrigen Regeln gelten sinngemäß.
+
+`;
+
+/**
+ * Sprache von Brief und E-Mail umstellen (Deutsch oder Türkisch für türkische Firmen). Text, Anrede, Betreff und Mail
+ * entstehen dann neu in der gewählten Sprache; Anzeigentext und Unterschrift-Einstellung bleiben.
+ */
+export async function setLetterLang(applicationId: string, lang: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireUser();
+  if (!isLetterLang(lang)) return { ok: false, error: "Diese Sprache gibt es nicht." };
+  const { app, coachee, stored } = await letterFor(user, applicationId);
+  const keep = stored ? JSON.stringify({ body: "", adText: stored.adText, signature: stored.signature, fields: {} }) : null;
+  const row = await one(
+    "UPDATE applications SET letter_lang = $3, letter = $4, email_subject = NULL, email_body = NULL, updated_at = now() WHERE coachee_id = $1 AND id = $2 RETURNING id",
+    [coachee.id, app.id, lang, keep],
+  );
+  if (!row) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
+  await audit(user.id, "letter_lang", coachee.id, { application: app.id, lang });
+  return { ok: true };
 }
