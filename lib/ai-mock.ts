@@ -125,6 +125,7 @@ export function mockJson(schemaName: string, input: string): unknown {
     const q = (n: number) => ({ question: `Testfrage ${n}: Wie gehen Sie mit ${wunsch.slice(0, 40) || "Zeitdruck"} um?`, answer: "Ich bleibe ruhig, kläre zuerst, was am dringendsten ist, und spreche mich mit dem Team ab.", tips: "Ein konkretes Beispiel aus deiner letzten Stelle macht die Antwort glaubwürdig.", followups: ["Können Sie ein Beispiel nennen?"] });
     return schemaName === "gespraechsfrage" ? { question: q(0) } : { questions: [q(1), q(2), q(3), q(4)] };
   }
+  if (schemaName === "text_tr") return { text: input.split("\n").map((l) => (l.trim() ? `TR: ${l}` : l)).join("\n") };
   if (schemaName === "gespraechsvorbereitung_tr") {
     // Testübersetzung: jeder Text mit „TR:“ davor, Aufbau bleibt gleich
     const tr = (v: unknown): unknown => (typeof v === "string" ? (v ? `TR: ${v}` : v) : Array.isArray(v) ? v.map(tr) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, tr(x)])) : v);

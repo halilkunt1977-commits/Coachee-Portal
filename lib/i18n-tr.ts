@@ -2148,4 +2148,12 @@ export const TR: Record<string, string> = {
   "Diese Bewerbung gibt es nicht mehr.": "Bu başvuru artık yok.",
   "Diese Hilfe ist gerade nicht verfügbar. Dein Coach hilft dir gern weiter.": "Bu yardım şu an kullanılamıyor. Koçun sana memnuniyetle yardım eder.",
   "Die Hilfe ist für diesen Monat aufgebraucht. Dein Coach hilft dir gern weiter.": "Bu ayın yardım hakkı doldu. Koçun sana memnuniyetle yardım eder.",
+  "Türkische Fassung zeigen": "Türkçesini göster",
+  "Türkische Fassung ausblenden": "Türkçesini gizle",
+  "Wird übersetzt …": "Çevriliyor …",
+  "Text geändert: neu übersetzen": "Metin değişti: yeniden çevir",
+  "Nur zum Verstehen. An den Arbeitgeber geht der deutsche Text.": "Sadece anlaman için. İşverene Almanca metin gider.",
+  "Diese Hilfe gibt es nur mit türkischer Ansicht.": "Bu yardım sadece Türkçe görünümde var.",
+  "Noch kein Text da.": "Henüz metin yok.",
+  "Das geht gerade nicht. Bitte später noch einmal versuchen.": "Bu şu an olmuyor. Lütfen sonra tekrar dene.",
 };
