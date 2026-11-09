@@ -9,7 +9,8 @@ import { inTurkey } from "../turkey";
 import { profileForAi } from "./store";
 import {
   MAX_ANSWER_SECONDS,
-  TRAINING_QUESTIONS,
+  DEFAULT_COUNT,
+  QUESTION_COUNTS,
   metricsText,
   normalizeReport,
   speechStats,
@@ -17,6 +18,7 @@ import {
   type TrainingAnswer,
   type TrainingLang,
   type TrainingRow,
+  type TrainingVoice,
 } from "./training-shared";
 
 /*
@@ -43,6 +45,12 @@ async function interviewLang(c: Coachee, a: AppRow, turkey: boolean): Promise<Tr
   return c.language === "tr" && looksTurkish(a.title, a.employer) ? "tr" : "de";
 }
 
+/** Sprache, in der ein neues Training für diese Stelle laufen würde (für die Namen auf der Startseite) */
+export async function trainingLangFor(c: Coachee, appId: string): Promise<TrainingLang> {
+  const a = await loadApp(c, appId);
+  return a ? interviewLang(c, a, await inTurkey(c)) : "de";
+}
+
 const LANG_NAME: Record<TrainingLang, string> = { de: "Deutsch", tr: "Türkisch" };
 
 const QUESTIONS_SCHEMA = { type: "object", properties: { questions: { type: "array", items: { type: "string" } } }, required: ["questions"], additionalProperties: false };
@@ -65,7 +73,9 @@ async function jobContext(c: Coachee, a: AppRow) {
 }
 
 /** Neues Training anlegen: Fragen bestimmen. Prüfen, ob der Aufruf erlaubt ist, muss der Aufrufer. */
-export async function startTraining(c: Coachee, appId: string, userId: string): Promise<string | null> {
+export async function startTraining(c: Coachee, appId: string, userId: string, opts: { count?: number; voice?: TrainingVoice } = {}): Promise<string | null> {
+  const count = (QUESTION_COUNTS as readonly number[]).includes(Number(opts.count)) ? Number(opts.count) : DEFAULT_COUNT;
+  const voice: TrainingVoice = opts.voice === "m" ? "m" : "f";
   const a = await loadApp(c, appId);
   if (!a) return null;
   const turkey = await inTurkey(c);
@@ -73,25 +83,25 @@ export async function startTraining(c: Coachee, appId: string, userId: string): 
   let questions: string[] = [];
   // Deutsche Gesprächsvorbereitung vorhanden: dieselben Fragen üben
   const prep = a.interview ? normalizeInterview(a.interview) : null;
-  if (lang === "de" && prep && prep.questions.length >= 4) questions = prep.questions.map((q) => q.question).filter(Boolean).slice(0, TRAINING_QUESTIONS);
-  if (questions.length < 4) {
+  if (lang === "de" && prep && prep.questions.length >= count) questions = prep.questions.map((q) => q.question).filter(Boolean).slice(0, count);
+  if (questions.length < Math.min(count, 4)) {
     const r = await jsonResponse<{ questions: string[] }>({
       coacheeId: c.id,
       userId,
       purpose: "interview_training",
       schemaName: "training_fragen",
       schema: QUESTIONS_SCHEMA,
-      maxTokens: 1500,
-      instructions: `Du bist Personaler und führst gleich ein Vorstellungsgespräch für genau diese Stelle. Stelle ${TRAINING_QUESTIONS} Fragen auf ${LANG_NAME[lang]}, in der Reihenfolge eines echten Gesprächs: 1. kurze Vorstellung, 2. Motivation für Stelle und Firma, 3.–4. Erfahrung und fachliche Fragen zu den Aufgaben der Anzeige (gestützt auf das Profil), 5. Stärken/Schwächen oder eine Situation aus dem Berufsalltag, 6. Fragen des Bewerbers oder Eintrittstermin.
+      maxTokens: 3000,
+      instructions: `Du bist Personaler und führst gleich ein Vorstellungsgespräch für genau diese Stelle. Stelle genau ${count} Fragen auf ${LANG_NAME[lang]}, in der Reihenfolge eines echten Gesprächs: kurze Vorstellung, Motivation für Stelle und Firma, Erfahrung und fachliche Fragen zu den Aufgaben der Anzeige (gestützt auf das Profil, auch Lücken oder Wechsel im Lebenslauf), Situationsfragen aus dem Berufsalltag („Was tun Sie, wenn …“), Stärken und Schwächen, Teamarbeit, Arbeitszeiten oder Gehaltsvorstellung, zum Schluss frühester Eintritt oder Fragen des Bewerbers. Bei mehr Fragen mehr fachliche und Situationsfragen.
 Jede Frage kurz und gesprochen, höfliche Form (${lang === "tr" ? "„siz“" : "Sie"}). Keine Fragen zu Gesundheit, Familie, Religion, Herkunft oder Alter. Namen sind durch [Name] ersetzt; schreibe [Name] nie.`,
       input: await jobContext(c, a),
     });
-    questions = (r.questions ?? []).map((q) => String(q).replace(/\[Name\]\s*/g, "").trim().slice(0, 400)).filter(Boolean).slice(0, TRAINING_QUESTIONS);
+    questions = (r.questions ?? []).map((q) => String(q).replace(/\[Name\]\s*/g, "").trim().slice(0, 400)).filter(Boolean).slice(0, count);
   }
   if (!questions.length) return null;
   const row = await one<{ id: string }>(
-    "INSERT INTO interview_trainings (coachee_id, application_id, title, interview_lang, feedback_lang, questions, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
-    [c.id, a.id, [a.title, a.employer].filter(Boolean).join(" · ").slice(0, 300), lang, turkey || c.language === "tr" ? "tr" : "de", JSON.stringify(questions), userId],
+    "INSERT INTO interview_trainings (coachee_id, application_id, title, interview_lang, feedback_lang, questions, created_by, voice) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",
+    [c.id, a.id, [a.title, a.employer].filter(Boolean).join(" · ").slice(0, 300), lang, turkey || c.language === "tr" ? "tr" : "de", JSON.stringify(questions), userId, voice],
   );
   return row?.id ?? null;
 }
@@ -99,14 +109,14 @@ Jede Frage kurz und gesprochen, höfliche Form (${lang === "tr" ? "„siz“" : 
 export async function loadTraining(c: Coachee, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   return one<TrainingRow & { application_id: string | null }>(
-    "SELECT id, application_id, title, interview_lang, feedback_lang, questions, answers, report, created_at, finished_at FROM interview_trainings WHERE id = $1 AND coachee_id = $2",
+    "SELECT id, application_id, voice, title, interview_lang, feedback_lang, questions, answers, report, created_at, finished_at FROM interview_trainings WHERE id = $1 AND coachee_id = $2",
     [id, c.id],
   );
 }
 
 export const trainingsFor = (coacheeId: string, appId?: string) =>
   query<TrainingRow & { application_id: string | null }>(
-    `SELECT id, application_id, title, interview_lang, feedback_lang, questions, answers, report, created_at, finished_at FROM interview_trainings
+    `SELECT id, application_id, voice, title, interview_lang, feedback_lang, questions, answers, report, created_at, finished_at FROM interview_trainings
       WHERE coachee_id = $1 AND ($2::uuid IS NULL OR application_id = $2) AND finished_at IS NOT NULL ORDER BY created_at DESC LIMIT 30`,
     [coacheeId, appId ?? null],
   );

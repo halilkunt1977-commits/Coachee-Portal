@@ -6,6 +6,7 @@ import { audit, requireUser } from "@/lib/auth";
 import { hasFeature } from "@/lib/features";
 import { evaluateTraining, loadTraining, startTraining } from "@/lib/jobs/training";
 import { notify } from "@/lib/push";
+import { isTrainingVoice } from "@/lib/jobs/training-shared";
 
 /*
  * Interview-Training für Coachees mit Freigabe „interview_training“. Ein Training zählt einmal zur Monatsgrenze
@@ -20,13 +21,13 @@ async function coachee() {
   return { user, c };
 }
 
-export async function newTraining(appId: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+export async function newTraining(appId: string, opts: { count?: number; voice?: string } = {}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const s = await coachee();
   if (!s) return { ok: false, error: "Diese Funktion hat dein Coach für dich noch nicht freigeschaltet." };
   if (!/^[0-9a-f-]{36}$/i.test(appId)) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
   try {
     await assertAiAllowed(s.user, { feature: "interview_training", coachee: s.c });
-    const id = await startTraining(s.c, appId, s.user.id);
+    const id = await startTraining(s.c, appId, s.user.id, { count: Number(opts?.count), voice: isTrainingVoice(opts?.voice) ? opts.voice : "f" });
     if (!id) return { ok: false, error: "Diese Bewerbung gibt es nicht mehr." };
     await audit(s.user.id, "training_started", s.c.id, { application: appId, training: id });
     return { ok: true, id };

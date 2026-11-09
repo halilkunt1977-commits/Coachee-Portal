@@ -3,6 +3,32 @@
  * (components/jobs/face.ts), nur Zahlen gehen an den Server; Aufnahmen werden in Text umgewandelt und nicht gespeichert.
  */
 export type TrainingLang = "de" | "tr";
+/** Gegenüber im Training: f = Interviewerin, m = Interviewer */
+export type TrainingVoice = "f" | "m";
+export const isTrainingVoice = (v: unknown): v is TrainingVoice => v === "f" || v === "m";
+
+/** Wie viele Fragen: kurz, normal, ausführlich */
+export const QUESTION_COUNTS = [6, 10, 15] as const;
+export const DEFAULT_COUNT = 10;
+
+/** Name des Gegenübers von Gründarium */
+export const INTERVIEWER: Record<TrainingVoice, Record<TrainingLang, string>> = {
+  f: { de: "Lena Berger", tr: "Elif Yılmaz" },
+  m: { de: "Jonas Keller", tr: "Emre Kaya" },
+};
+
+/** Begrüßung vor der ersten Frage und Abschied nach der letzten */
+export function welcomeText(lang: TrainingLang, voice: TrainingVoice) {
+  const name = INTERVIEWER[voice][lang];
+  return lang === "tr"
+    ? `Merhaba, hoş geldiniz. Benim adım ${name}. Zaman ayırdığınız için teşekkür ederim. Şimdi size pozisyonla ilgili birkaç soru soracağım. Gerçek bir mülakattaki gibi, sakin bir şekilde cevap verin.`
+    : `Guten Tag und herzlich willkommen. Mein Name ist ${name}. Schön, dass Sie sich Zeit nehmen. Ich stelle Ihnen gleich einige Fragen zur Stelle. Antworten Sie ganz in Ruhe, so wie im echten Gespräch.`;
+}
+export function goodbyeText(lang: TrainingLang) {
+  return lang === "tr"
+    ? "Görüşme için çok teşekkür ederim. Cevaplarınıza şimdi bakıyorum, birazdan değerlendirmenizi alacaksınız."
+    : "Vielen Dank für das Gespräch. Ich schaue mir Ihre Antworten jetzt an, gleich bekommen Sie Ihre Auswertung.";
+}
 
 /** Messwerte einer Antwort aus dem Browser, Anteile 0–1 */
 export type FaceMetrics = {
@@ -35,6 +61,7 @@ export type TrainingReport = {
 
 export type TrainingRow = {
   id: string;
+  voice: TrainingVoice;
   title: string;
   interview_lang: TrainingLang;
   feedback_lang: TrainingLang;
@@ -46,7 +73,6 @@ export type TrainingRow = {
 };
 
 export const MAX_ANSWER_SECONDS = 150;
-export const TRAINING_QUESTIONS = 6;
 
 const FILLERS: Record<TrainingLang, RegExp> = {
   de: /\b(äh|ähm|öhm|ehm|hm|halt|sozusagen|quasi|irgendwie)\b/gi,
