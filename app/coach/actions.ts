@@ -32,7 +32,7 @@ function readCoachee(fd: FormData) {
     units_total: numberOrNull(fd, "units_total"),
     foerderart: ["gruendungszuschuss", "einstiegsgeld", "sonstiges"].includes(text(fd, "foerderart", 30)) ? text(fd, "foerderart", 30) : null,
     birth_date: dateOrNull(fd, "birth_date"),
-    traeger: ["erfolgspfad", "avocons", "sonstige"].includes(text(fd, "traeger", 20)) ? text(fd, "traeger", 20) : null,
+    traeger: ["erfolgspfad", "avocons", "genialstart", "sonstige"].includes(text(fd, "traeger", 20)) ? text(fd, "traeger", 20) : null,
     language: fd.get("language") === "tr" ? "tr" : "de",
     goal: optional(fd, "goal", 2000),
     internal_note: optional(fd, "internal_note", 10000),

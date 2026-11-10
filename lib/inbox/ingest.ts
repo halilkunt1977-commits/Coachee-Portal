@@ -5,7 +5,7 @@ import { vaultRead, vaultWrite } from "../vault";
 import { namesMatch } from "../attendance/parse";
 import { notify } from "../push";
 import { afterFormFiled } from "../doku/store";
-import { classify, findCoachee, foerderartOf, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
+import { classify, findCoachee, isProvider, foerderartOf, isReply, ownPart, parseBookings, parseContact, parseGrant, parseLocation, sourceOf, type Booking, type Category, type Contact, type Grant } from "./classify";
 
 /*
  * Mails von Erfolgspfad und AVOCONS aufnehmen und umsetzen:
@@ -90,7 +90,7 @@ const plusMinutes = (hm: string, min: number) => {
 };
 
 const TITLE: Record<string, string> = { projektvertrag: "Projektvertrag", coachbericht: "Bericht" };
-const TRAEGER: Record<string, string> = { avocons: "AVOCONS", erfolgspfad: "Erfolgspfad" };
+const TRAEGER: Record<string, string> = { avocons: "AVOCONS", erfolgspfad: "Erfolgspfad", genialstart: "genialstart" };
 const berlin = (day: string, time: string) => `${day} ${time}`;
 const dayLabel = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}.`;
 
@@ -132,7 +132,7 @@ export async function applyMail(mailId: string) {
     const art = foerderartOf(`${m.subject}\n${ownPart(m.body)}`);
     if (art) await query("UPDATE coachees SET foerderart = $2 WHERE id = $1 AND foerderart IS NULL AND coaching_type = 'gruendung'", [coachee.id, art]);
   }
-  if (coachee && !coachee.traeger && (m.source === "avocons" || m.source === "erfolgspfad")) {
+  if (coachee && !coachee.traeger && isProvider(m.source)) {
     await query("UPDATE coachees SET traeger = $2 WHERE id = $1 AND traeger IS NULL", [coachee.id, m.source]);
   }
   // Bewilligte UE, Zeitraum und Gutscheinnummer übernehmen, wo in der Akte noch nichts steht
@@ -171,7 +171,7 @@ export async function applyMail(mailId: string) {
   await pushFor(m, coachee, applied);
 }
 
-const SOURCE: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", regus: "Regus" };
+const SOURCE: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", genialstart: "genialstart", regus: "Regus" };
 
 /** Eine Sofort-Meldung pro neuer Mail, nur Name und Anlass; alte Mails (erster Abruf, Nachholen) melden nichts */
 async function pushFor(m: MailRecord, coachee: Person | null, applied: Applied) {
@@ -204,7 +204,7 @@ async function autoCoachee(m: MailRecord, applied: Applied): Promise<string | nu
   const leadRow = lead ? await one<{ email: string | null; phone: string | null; coaching_type: string | null; city: string | null }>("SELECT email, phone, coaching_type, city FROM leads WHERE id = $1", [lead.id]) : null;
   const email = (c.email ?? leadRow?.email ?? "").toLowerCase();
   const type = c.coaching_type ?? leadRow?.coaching_type ?? "job";
-  const traeger = m.source === "avocons" || m.source === "erfolgspfad" ? m.source : null;
+  const traeger = isProvider(m.source) ? m.source : null;
   const id = await transaction(async (db) => {
     // Zugang vorbereiten (ohne Mail), damit „Einladung mailen“ in der Akte sofort geht
     const taken = email ? await db.query("SELECT 1 FROM users WHERE lower(email) = $1", [email]) : null;

@@ -30,7 +30,7 @@ type Lead = {
   created_at: string;
 };
 
-const SOURCE: Record<string, string> = { avocons: "AVOCONS", erfolgspfad: "Erfolgspfad", telefon: "Telefon", empfehlung: "Empfehlung", sonstige: "Sonstige" };
+const SOURCE: Record<string, string> = { avocons: "AVOCONS", erfolgspfad: "Erfolgspfad", genialstart: "genialstart", telefon: "Telefon", empfehlung: "Empfehlung", sonstige: "Sonstige" };
 const STATUS: Record<Lead["status"], [string, string]> = {
   neu: ["Neu", "bg-gold/15 text-[#8a6410]"],
   kontaktiert: ["Kontaktiert", "bg-accent/10 text-accent"],

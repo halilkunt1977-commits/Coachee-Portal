@@ -31,7 +31,7 @@ export type Coachee = {
   start_date: string | null;
   end_date: string | null;
   units_total: number | null;
-  traeger: "erfolgspfad" | "avocons" | "sonstige" | null;
+  traeger: "erfolgspfad" | "avocons" | "genialstart" | "sonstige" | null;
   city: string | null;
   status: "aktiv" | "pausiert" | "abgeschlossen";
   goal: string | null;

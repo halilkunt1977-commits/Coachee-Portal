@@ -41,6 +41,7 @@ export function CoacheeFields({ c }: { c?: Partial<Coachee> }) {
           <option value="">–</option>
           <option value="erfolgspfad">Erfolgspfad (Anwesenheit kommt per Mail)</option>
           <option value="avocons">AVOCONS (Anwesenheit selbst eintragen)</option>
+          <option value="genialstart">genialstart</option>
           <option value="sonstige">Anderer Träger</option>
         </Select>
         <Field label="Beginn" name="start_date" type="date" defaultValue={c?.start_date ?? ""} />

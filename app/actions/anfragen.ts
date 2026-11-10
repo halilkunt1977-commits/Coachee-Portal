@@ -59,7 +59,7 @@ export async function saveLead(id: string | null, _prev: FormState, fd: FormData
     await query(
       `INSERT INTO leads (coach_id, source, first_name, last_name, email, phone, city, coaching_type, note, follow_up_on, log)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10, CURRENT_DATE), jsonb_build_array(jsonb_build_object('at', now(), 'what', 'Anfrage selbst erfasst')))`,
-      [coach.id, ["avocons", "erfolgspfad", "telefon", "empfehlung", "sonstige"].includes(source) ? source : "sonstige", ...vals],
+      [coach.id, ["avocons", "erfolgspfad", "genialstart", "telefon", "empfehlung", "sonstige"].includes(source) ? source : "sonstige", ...vals],
     );
   }
   refresh();

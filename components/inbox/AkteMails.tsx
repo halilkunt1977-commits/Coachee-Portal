@@ -12,10 +12,10 @@ export async function AkteMails({ coacheeId }: { coacheeId: string }) {
        FROM inbox_mails m WHERE m.coachee_id = $1 ORDER BY m.received_at DESC LIMIT 100`,
     [coacheeId],
   );
-  if (!mails.length) return <Empty>Noch keine Mails von Erfolgspfad oder AVOCONS zu diesem Coachee.</Empty>;
+  if (!mails.length) return <Empty>Noch keine Mails von Erfolgspfad, AVOCONS oder genialstart zu diesem Coachee.</Empty>;
   return (
     <section className="card">
-      <p className="mb-2 text-xs text-muted">Alle Mails mit AVOCONS und Erfolgspfad zu diesem Coachee, auch die von dir gesendeten. Antippen zeigt den Text. Nachrichten mit dem Coachee selbst stehen unter „Nachrichten“.</p>
+      <p className="mb-2 text-xs text-muted">Alle Mails mit AVOCONS, Erfolgspfad und genialstart zu diesem Coachee, auch die von dir gesendeten. Antippen zeigt den Text. Nachrichten mit dem Coachee selbst stehen unter „Nachrichten“.</p>
       <ul className="divide-y divide-line-soft">
         {mails.map((m) => {
           const out = m.direction === "out";

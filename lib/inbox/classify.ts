@@ -3,11 +3,14 @@ import { namesMatch } from "../attendance/parse";
 /*
  * Mails der Bildungsträger erkennen und auslesen. Bewusst mit Regeln statt KI: Die Mails enthalten Namen,
  * Telefonnummern und Termine von Coachees, und der Coach kann jede Einordnung mit einem Klick korrigieren.
- * Die Muster sind tolerant, weil AVOCONS und Erfolgspfad ihre Texte ändern können.
+ * Die Muster sind tolerant, weil AVOCONS, Erfolgspfad und genialstart ihre Texte ändern können.
  */
 
 export type Category = "anfrage" | "projektvertrag" | "buerobuchung" | "coachbericht" | "anwesenheit" | "nachricht";
-export type Source = "erfolgspfad" | "avocons" | "sonstige";
+export type Source = "erfolgspfad" | "avocons" | "genialstart" | "sonstige";
+/** Bildungsträger, deren Mails das Portal umsetzt */
+export const PROVIDERS = ["erfolgspfad", "avocons", "genialstart"] as const;
+export const isProvider = (v: string | null | undefined): v is (typeof PROVIDERS)[number] => (PROVIDERS as readonly string[]).includes(v ?? "");
 
 export const CATEGORIES: Record<Category, { label: string; plural: string; chip: string; dot: string }> = {
   anfrage: { label: "Neue Anfrage", plural: "Anfragen", chip: "bg-danger-soft text-danger border-danger/20", dot: "bg-danger" },
@@ -19,18 +22,22 @@ export const CATEGORIES: Record<Category, { label: string; plural: string; chip:
 };
 export const isCategory = (v: string): v is Category => v in CATEGORIES;
 
-export const SOURCES: Record<Source, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", sonstige: "Sonstige" };
+export const SOURCES: Record<Source, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", genialstart: "genialstart", sonstige: "Sonstige" };
 
-/** Absender, die ins Portal gehören (Teil der Adresse oder des Namens), änderbar über INBOX_FROM. Regus: Besprechungsräume, die AVOCONS bucht */
-export const senders = () => (process.env.INBOX_FROM || "erfolgspfad,avocons,avgs-coaching,regus").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+/** Absender, die ins Portal gehören (Teil der Adresse oder des Namens), erweiterbar über INBOX_FROM. Regus: Besprechungsräume, die AVOCONS bucht */
+const BUILTIN_SENDERS = ["erfolgspfad", "avocons", "avgs-coaching", "regus", "genialstart", "genial-start"];
+export const senders = () => [...new Set([...BUILTIN_SENDERS, ...(process.env.INBOX_FROM || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)])];
+const GENIAL = /genial[- ]?start/i;
 
 export function sourceOf(from: string, body = ""): Source {
   const f = from.toLowerCase();
   if (f.includes("erfolgspfad")) return "erfolgspfad";
   if (f.includes("avocons") || f.includes("avgs-coaching")) return "avocons";
+  if (GENIAL.test(f)) return "genialstart";
   // z. B. Regus-Bestätigung mit „Gastgeber Firma: AVOCONS GmbH“
   if (/avocons/i.test(body)) return "avocons";
   if (/erfolgspfad/i.test(body)) return "erfolgspfad";
+  if (GENIAL.test(body)) return "genialstart";
   return "sonstige";
 }
 
@@ -174,7 +181,7 @@ export function parseContact(body: string, subject: string): Contact {
   }
   first = first.replace(salutation, "").trim();
   last = last.replace(salutation, "").trim();
-  const emails = [...text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map((m) => m[0]).filter((e) => !/avocons|erfolgspfad|avgs-coaching|regus|gruendarium|kuntsolutions|noreply|no-reply/i.test(e));
+  const emails = [...text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)].map((m) => m[0]).filter((e) => !/avocons|erfolgspfad|genial-?start|avgs-coaching|regus|gruendarium|kuntsolutions|noreply|no-reply/i.test(e));
   const email = field(text, "E-?Mail(?:-Adresse)?")?.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0] ?? emails[0] ?? null;
   const phoneField = field(text, "Telefon(?:nummer)?|Tel\\.?|Mobil(?:nummer)?|Handy(?:nummer)?|Rufnummer");
   const phoneRaw = phoneField ?? text.match(/(?:\+49|0049|\b0)[1-9][\d\s/()-]{6,18}\d/)?.[0] ?? null;

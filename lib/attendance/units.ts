@@ -6,5 +6,5 @@
 export const unitsUsedSql = (col: string) =>
   `COALESCE((SELECT sum(a.units) FROM attendance a WHERE a.coachee_id = ${col}), (SELECT sum(m.units) FROM meetings m WHERE m.coachee_id = ${col}), 0)`;
 
-export const SOURCE_LABEL: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", manuell: "Selbst eingetragen" };
-export const TRAEGER_LABEL: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", sonstige: "Anderer Träger" };
+export const SOURCE_LABEL: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", genialstart: "genialstart", manuell: "Selbst eingetragen" };
+export const TRAEGER_LABEL: Record<string, string> = { erfolgspfad: "Erfolgspfad", avocons: "AVOCONS", genialstart: "genialstart", sonstige: "Anderer Träger" };
