@@ -42,6 +42,47 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
     [],
   );
 
+  /*
+   * Schutz vor versehentlichem Verlassen: Solange das Gespräch läuft, fragt ein Klick auf einen Link, die
+   * Zurück-Taste oder Neu laden/Schließen erst nach. Bereits gegebene Antworten bleiben gespeichert.
+   */
+  const guard = phase === "ready" || phase === "recording" || phase === "sending";
+  const [leave, setLeave] = useState<null | (() => void)>(null);
+  const leaving = useRef(false);
+  useEffect(() => {
+    if (!guard) return;
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (leaving.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      if (leaving.current || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.href === window.location.href) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeave(() => () => (url.origin === window.location.origin ? router.push(url.pathname + url.search + url.hash) : window.location.assign(url.href)));
+    };
+    // Zurück-Taste: einen Eintrag vorschieben, damit „Zurück“ erst die Nachfrage zeigt
+    window.history.pushState(window.history.state, "", window.location.href);
+    const onPop = () => {
+      if (leaving.current) return;
+      window.history.pushState(window.history.state, "", window.location.href);
+      setLeave(() => () => window.history.go(-2));
+    };
+    window.addEventListener("beforeunload", onUnload);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("beforeunload", onUnload);
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("popstate", onPop);
+    };
+  }, [guard, router]);
+
   // Laufende Antwort: Sekunden zählen, nach der Höchstdauer von selbst beenden
   useEffect(() => {
     if (phase !== "recording") return;
@@ -545,6 +586,28 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
           </div>
         )}
       </section>
+      {leave && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="leave-title">
+          <div className="card w-full max-w-sm space-y-3">
+            <p id="leave-title" className="text-lg font-semibold">{t("Willst du das Training wirklich beenden?")}</p>
+            <p className="text-sm text-muted">{t("Deine bisherigen Antworten bleiben gespeichert. Eine Auswertung bekommst du erst, wenn du alle Fragen beantwortet hast.")}</p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" className="btn-ghost" onClick={() => {
+                const go = leave;
+                setLeave(null);
+                leaving.current = true;
+                stopVoice();
+                if (rec.current?.state === "recording") {
+                  rec.current.onstop = null;
+                  rec.current.stop();
+                }
+                go();
+              }}>{t("Ja, beenden")}</button>
+              <button type="button" className="btn" autoFocus onClick={() => setLeave(null)}>{t("Weiter üben")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
