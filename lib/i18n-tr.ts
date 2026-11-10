@@ -2214,4 +2214,8 @@ export const TR: Record<string, string> = {
   "Gespräch beginnen": "Görüşmeyi başlat",
   "Die Stimme lässt sich auf diesem Gerät gerade nicht abspielen. Prüfe den Ton (Lautlos-Schalter am Handy) oder lies die Frage mit.": "Bu cihazda ses şu an çalınamıyor. Sesi kontrol et (telefondaki sessiz düğmesi) ya da soruyu okuyarak takip et.",
   "Verbindung wird aufgebaut …": "Bağlantı kuruluyor …",
+  "Willst du das Training wirklich beenden?": "Provayı gerçekten bitirmek istiyor musun?",
+  "Deine bisherigen Antworten bleiben gespeichert. Eine Auswertung bekommst du erst, wenn du alle Fragen beantwortet hast.": "Şimdiye kadarki cevapların kayıtlı kalır. Değerlendirmeyi ancak tüm soruları cevapladığında alırsın.",
+  "Ja, beenden": "Evet, bitir",
+  "Weiter üben": "Devam et",
 };

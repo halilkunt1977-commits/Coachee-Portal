@@ -107,7 +107,7 @@ export function normalizeReport(raw: unknown): TrainingReport | null {
     improve: list(r.improve),
     body: s(r.body),
     speech: s(r.speech),
-    answers: (Array.isArray(r.answers) ? r.answers : []).slice(0, 12).map((a) => {
+    answers: (Array.isArray(r.answers) ? r.answers : []).slice(0, 20).map((a) => {
       const o = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
       return { score: score(o.score), good: s(o.good, 1200), improve: s(o.improve, 1200), better: s(o.better, 2500) };
     }),

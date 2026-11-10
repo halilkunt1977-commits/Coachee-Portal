@@ -182,7 +182,7 @@ export async function evaluateTraining(c: Coachee, t: TrainingRow & { applicatio
     purpose: "interview_training",
     schemaName: "training_auswertung",
     schema: REPORT_SCHEMA,
-    maxTokens: 7000,
+    maxTokens: 12000,
     instructions: `Du bist erfahrener Jobcoach und wertest ein Probe-Vorstellungsgespräch aus, das dein Coachee vor der Kamera geübt hat. Das Gespräch lief auf ${LANG_NAME[t.interview_lang]}.
 Schreibe die ganze Auswertung auf ${fb}, in der Du-Form (${t.feedback_lang === "tr" ? "„sen“, einfaches Alltagstürkisch" : "einfache, klare Sprache"}), ermutigend und ehrlich, konkret statt allgemein. Nur „better“ steht auf ${LANG_NAME[t.interview_lang]}, weil der Coachee diese Antwort im echten Gespräch so sagen kann.
 - score: 0–100 für das ganze Gespräch (Inhalt zählt am meisten, dann Sprechweise, dann Auftreten).

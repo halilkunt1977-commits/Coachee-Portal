@@ -4,6 +4,7 @@ import { AiError } from "@/lib/ai";
 import { getSession } from "@/lib/auth";
 import { hasFeature } from "@/lib/features";
 import { loadTraining, normalizeMetrics, saveAnswer } from "@/lib/jobs/training";
+import { notify } from "@/lib/push";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 
@@ -30,6 +31,15 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/trainin
   }
   try {
     const text = await saveAnswer(c, t, index, file, Number(form?.get("seconds")) || 0, metrics, session.user.id);
+    // erste Antwort: Coach sofort melden, dass geübt wird (die Auswertung kommt am Ende als eigene Meldung)
+    if (!(t.answers ?? []).some((x) => x && (x.text || x.seconds))) {
+      await notify([c.coach_id], {
+        title: `${c.first_name} ${c.last_name} übt gerade ein Vorstellungsgespräch`,
+        body: `Interview-Training: ${t.title}`,
+        url: `/coach/coachees/${c.id}?tab=bewerbungen#training`,
+        tag: `training-${t.id}`,
+      }).catch(() => undefined);
+    }
     return NextResponse.json({ text });
   } catch (error) {
     console.error("[ai] training antwort", error instanceof Error ? error.message : error);
