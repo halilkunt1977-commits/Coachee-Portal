@@ -96,7 +96,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
   if (art === "neu") filters.push("m.read_at IS NULL");
   else if (art === "offen") filters.push("m.done_at IS NULL");
   else if (art && isCategory(art)) filters.push(`m.category = '${art}'`);
-  if (quelle === "avocons" || quelle === "erfolgspfad") filters.push(`m.source = '${quelle}'`);
+  if (quelle === "avocons" || quelle === "erfolgspfad" || quelle === "genialstart") filters.push(`m.source = '${quelle}'`);
 
   const [rows, counts, coachees] = await Promise.all([
     query<Row>(
@@ -143,7 +143,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
       <PageHeader
         eyebrow="Coachees und Bildungsträger"
         title="Posteingang"
-        description="Das Portal liest alle Mails von AVOCONS und Erfolgspfad und erledigt sie selbst: Buchungen in die Kalender, Verträge und Berichte in die Akte, neue Coachees werden angelegt, Anfragen landen unter „Anfragen“. Hier siehst du, was passiert ist."
+        description="Das Portal liest alle Mails von AVOCONS, Erfolgspfad und genialstart und erledigt sie selbst: Buchungen in die Kalender, Verträge und Berichte in die Akte, neue Coachees werden angelegt, Anfragen landen unter „Anfragen“. Hier siehst du, was passiert ist."
         actions={
           <>
             {unread > 0 && (
@@ -169,7 +169,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
         })}
       </nav>
       <nav className="mb-5 flex gap-1 text-sm" aria-label="Absender">
-        {([null, "avocons", "erfolgspfad"] as const).map((q) => (
+        {([null, "avocons", "erfolgspfad", "genialstart"] as const).map((q) => (
           <Link key={q ?? "alle"} href={href({ quelle: q, mail: null })} className={`inline-flex min-h-11 items-center rounded-lg px-3 py-1 font-semibold transition sm:min-h-0 ${quelle === q ? "bg-surface text-accent shadow-sm" : "text-muted hover:text-ink"}`}>
             {q ? SOURCES[q] : "Alle Absender"}
           </Link>
@@ -177,7 +177,7 @@ export default async function Inbox({ searchParams }: PageProps<"/coach/posteing
       </nav>
 
       {total === 0 ? (
-        <Empty>Noch keine Mails von AVOCONS oder Erfolgspfad abgerufen. Der Abruf läuft alle 15 Minuten, oder oben „Postfach jetzt abrufen“.</Empty>
+        <Empty>Noch keine Mails von AVOCONS, Erfolgspfad oder genialstart abgerufen. Der Abruf läuft alle 15 Minuten, oder oben „Postfach jetzt abrufen“.</Empty>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,440px)_1fr]">
           <ul className={`card divide-y divide-line-soft self-start overflow-hidden !p-0 ${mail ? "order-2 xl:order-none" : ""}`}>

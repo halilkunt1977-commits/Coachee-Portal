@@ -32,7 +32,7 @@ export default async function NewCoacheePage({ searchParams }: PageProps<"/coach
                 phone: lead.phone,
                 city: lead.city,
                 coaching_type: lead.coaching_type ?? undefined,
-                traeger: lead.source === "avocons" || lead.source === "erfolgspfad" ? lead.source : null,
+                traeger: lead.source === "avocons" || lead.source === "erfolgspfad" || lead.source === "genialstart" ? lead.source : null,
                 ...(lead.details.voucher_number ? { voucher_number: lead.details.voucher_number, funding: "avgs" as const } : {}),
                 ...(lead.details.units_total ? { units_total: lead.details.units_total } : {}),
                 ...(lead.details.start_date ? { start_date: lead.details.start_date } : {}),

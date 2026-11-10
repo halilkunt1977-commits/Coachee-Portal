@@ -122,7 +122,7 @@ export default async function CoachDashboard() {
   const alerts: Alert[] = [];
   for (const l of leads)
     alerts.push({ tone: "danger", text: l.status === "neu" ? `Neue Anfrage: ${l.name || "ohne Namen"}, jetzt melden` : `Anfrage ${l.name || "ohne Namen"}: heute nachfassen`, href: `/coach/anfragen?anfrage=${l.id}#a-${l.id}` });
-  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Träger-Mail${inbox!.n > 1 ? "s" : ""} (AVOCONS oder Erfolgspfad)`, href: "/coach/posteingang?art=neu" });
+  if ((inbox?.n ?? 0) > 0) alerts.push({ tone: "accent", text: `${inbox?.n} neue Träger-Mail${inbox!.n > 1 ? "s" : ""} (AVOCONS, Erfolgspfad oder genialstart)`, href: "/coach/posteingang?art=neu" });
   if ((inbox?.open ?? 0) > 0) alerts.push({ tone: "gold", text: `${inbox?.open} Mail${inbox!.open > 1 ? "s" : ""} ohne erkennbaren Coachee`, href: "/coach/posteingang?art=offen" });
   if ((openMails?.n ?? 0) > 0) alerts.push({ tone: "gold", text: `${openMails?.n} Anwesenheits-Mail${openMails!.n > 1 ? "s" : ""} nicht zugeordnet`, href: "/coach/anwesenheit" });
   for (const { c, p } of items) {
