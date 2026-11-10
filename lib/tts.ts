@@ -18,6 +18,8 @@ const EL_VOICES: Record<VoiceGender, string> = {
   f: process.env.ELEVENLABS_VOICE_F || "EXAVITQu4vr4xnSDxMaL",
   m: process.env.ELEVENLABS_VOICE_M || "JBFqnCBsd6RMkjVDRZzb",
 };
+// Sprechtempo: Halil fand die Interviewer zu langsam (1 = Standard, ElevenLabs erlaubt bis 1.2)
+const SPEED = Math.min(1.2, Math.max(0.8, Number(process.env.TTS_SPEED) || 1.12));
 const EL_MODEL = () => process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
 // OpenAI: erst das neuere Modell mit Sprechanweisung, sonst das ältere
 const OA_TRIES: Record<VoiceGender, { model: string; voice: string }[]> = {
@@ -36,7 +38,7 @@ async function elevenlabs(text: string, gender: VoiceGender): Promise<Buffer | n
     method: "POST",
     headers: { "xi-api-key": key, "Content-Type": "application/json", Accept: "audio/mpeg" },
     // etwas lebendiger als die Standardwerte, damit es wie ein Gesprächspartner klingt
-    body: JSON.stringify({ text, model_id: EL_MODEL(), voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.25, use_speaker_boost: true } }),
+    body: JSON.stringify({ text, model_id: EL_MODEL(), voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.25, use_speaker_boost: true, speed: SPEED } }),
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
@@ -52,17 +54,17 @@ async function openaiVoice(text: string, lang: VoiceLang, gender: VoiceGender): 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const style =
     lang === "tr"
-      ? `Bir mülakatta soru soran, sıcak ve profesyonel bir ${gender === "f" ? "kadın" : "erkek"} insan kaynakları uzmanı gibi konuş. Doğal Türkçe, sakin tempo.`
+      ? `Bir mülakatta soru soran, sıcak ve profesyonel bir ${gender === "f" ? "kadın" : "erkek"} insan kaynakları uzmanı gibi konuş. Doğal Türkçe, normal ve akıcı bir konuşma hızında, gereksiz duraklama yapma.`
       : gender === "f"
-        ? "Sprich wie eine freundliche, professionelle Personalerin im Vorstellungsgespräch. Natürliches Hochdeutsch, ruhiges Tempo."
-        : "Sprich wie ein freundlicher, professioneller Personaler im Vorstellungsgespräch. Natürliches Hochdeutsch, ruhiges Tempo."
+        ? "Sprich wie eine freundliche, professionelle Personalerin im Vorstellungsgespräch. Natürliches Hochdeutsch in normalem, flüssigem Gesprächstempo, ohne lange Pausen."
+        : "Sprich wie ein freundlicher, professioneller Personaler im Vorstellungsgespräch. Natürliches Hochdeutsch in normalem, flüssigem Gesprächstempo, ohne lange Pausen."
   for (const t of OA_TRIES[gender]) {
     try {
       const res = await client.audio.speech.create({
         model: t.model,
         voice: t.voice,
         input: text,
-        ...(t.model.startsWith("gpt-") ? { instructions: style } : {}),
+        ...(t.model.startsWith("gpt-") ? { instructions: style } : { speed: SPEED }),
         response_format: "mp3",
       } as Parameters<typeof client.audio.speech.create>[0]);
       const data = Buffer.from(await res.arrayBuffer());
@@ -80,7 +82,7 @@ export const voiceEnabled = () => Boolean(process.env.ELEVENLABS_API_KEY || proc
 export async function speech(text: string, lang: VoiceLang, gender: VoiceGender = "f"): Promise<Buffer | null> {
   const clean = text.trim().slice(0, 600);
   if (!clean || !voiceEnabled()) return null;
-  const engine = process.env.ELEVENLABS_API_KEY ? `el|${EL_VOICES[gender]}|${EL_MODEL()}` : `oa|${OA_TRIES[gender][0].model}|${OA_TRIES[gender][0].voice}`;
+  const engine = process.env.ELEVENLABS_API_KEY ? `el|${EL_VOICES[gender]}|${EL_MODEL()}|${SPEED}` : `oa2|${OA_TRIES[gender][0].model}|${OA_TRIES[gender][0].voice}|${SPEED}`;
   const name = `${sha256(`${engine}|${lang}|${clean}`).slice(0, 32)}.bin`;
   const file = path.join(dir(), name);
   const stored = await readFile(file).then(decryptBuffer).catch(() => null);
