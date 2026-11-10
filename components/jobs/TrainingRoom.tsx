@@ -339,7 +339,7 @@ export function TrainingRoom({ trainingId, questions, lang, voice, startAt }: { 
       const v = synth.getVoices().filter((x) => x.lang.toLowerCase().startsWith(lang));
       const pick = v.find((x) => /natural|online|premium|enhanced|neural/i.test(x.name)) ?? v[0];
       if (pick) u.voice = pick;
-      u.rate = 0.95;
+      u.rate = 1.08;
       u.volume = loud.current.volume;
       let began = false;
       const end = () => {
