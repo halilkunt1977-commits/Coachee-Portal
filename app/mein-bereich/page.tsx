@@ -13,12 +13,10 @@ import { progressFor, type Links } from "@/lib/dashboard/progress";
 import { setCoacheeCity } from "@/app/actions/dashboard";
 import { ChaptersCard, JobsFunnel, MilestonesCard, PartsGrid, UnitsCard } from "@/components/dashboard/ProgressBoard";
 import { CityForm, NewsBox, NewsSkeleton, WeatherBox, WeatherSkeleton } from "@/components/dashboard/Widgets";
-import { greeting, todayLong } from "@/components/dashboard/Hero";
-import { Ring } from "@/components/dashboard/Charts";
 import { Icon } from "@/components/shell/icons";
 import { TeamsMark } from "@/components/calendar/AppointmentDetail";
 import { dayMedium, KINDS, msUntil, relativeDay, todayBerlin } from "@/lib/calendar/dates";
-import { upcomingAppointments, type Appointment } from "@/lib/calendar/store";
+import { upcomingAppointments } from "@/lib/calendar/store";
 import { MoreSection } from "@/components/dashboard/MoreSection";
 import { JobTips, JobTipsSkeleton } from "@/components/dashboard/JobTips";
 import { FoerderCard, FoerderWahl } from "@/components/handbuch/FoerderCard";
@@ -28,6 +26,7 @@ import { VideoTeaser } from "@/components/erklaervideo/VideoTeaser";
 import { hasFeature } from "@/lib/features";
 import type { T } from "@/lib/i18n";
 import { getT, serverLang } from "@/lib/i18n-server";
+import { ActivityCard, DoneItem, Feature, Panel, StatTile, StepCard, SummitArt } from "@/components/dashboard/Home";
 
 const INBOX_LABEL: Record<InboxEntry["kind"], string> = { aufgabe: "Aufgabe", stelle: "Stelle", anschreiben: "Anschreiben", dokument: "Dokument", termin: "Termin", lebenslauf: "Lebenslauf", businessplan: "Businessplan", finanzplan: "Finanzplan", vorbereitung: "Gesprächsvorbereitung" };
 const entryTitle = (e: InboxEntry) =>
@@ -69,19 +68,6 @@ function InboxTeaser({ t, unread, items }: { t: T; unread: number; items: { id: 
   );
 }
 
-function NextStep({ t, label, hint, href }: { t: T; label: string; hint: string; href: string }) {
-  return (
-    <Link href={href} className="group flex max-w-xl items-center gap-4 rounded-2xl bg-gradient-to-r from-[#f3d9a6] to-[#d6a35b] p-4 text-night shadow-[0_18px_40px_-20px_rgba(214,163,91,.9)] transition hover:brightness-105">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night/90 text-[#f3d9a6]"><Icon name="flag" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-night/60">{t("Dein nächster Schritt")}</span>
-        <span className="block font-[family-name:var(--font-display)] text-lg leading-tight font-bold">{label}</span>
-        <span className="block truncate text-xs text-night/70">{hint}</span>
-      </span>
-      <span className="transition group-hover:translate-x-1"><Icon name="arrow" /></span>
-    </Link>
-  );
-}
 
 /** Einstieg ins Handbuch: wie ein Buchrücken, mit dem Hinweis, dass es auch nach dem Coaching bleibt */
 function HandbookTeaser({ t, closed, gruendung }: { t: T; closed: boolean; gruendung: boolean }) {
@@ -101,32 +87,43 @@ function HandbookTeaser({ t, closed, gruendung }: { t: T; closed: boolean; gruen
   );
 }
 
-function NextAppointment({ t, lang, a }: { t: T; lang: "de" | "tr"; a: Appointment }) {
-  const today = todayBerlin();
-  const soon = msUntil(a.starts_at) < 30 * 60_000;
-  return (
-    <div className="glass space-y-3 p-4">
-      <Link href={`/mein-bereich/kalender?datum=${a.day}&termin=${a.id}`} className="flex items-center gap-3">
-        <span className={`grid w-14 shrink-0 place-items-center rounded-xl py-1.5 text-center leading-none ${a.day === today ? "bg-gradient-to-br from-[#e2bd7d] to-gold text-night" : "bg-white/10"}`}>
-          <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{relativeDay(a.day, today, lang).split(" ")[0].replace(",", "")}</span>
-          <span className="mt-1 text-lg font-bold tabular-nums">{a.start}</span>
-        </span>
-        <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">{t("Nächster Termin")}</span>
-          <span className="block truncate font-semibold">{a.title}</span>
-          <span className="block truncate text-xs text-white/60">{t(KINDS[a.kind].label)}{a.day !== today ? ` · ${dayMedium(a.day, lang)}` : ""}</span>
-        </span>
-      </Link>
-      {a.join_url && (
-        <a href={a.join_url} target="_blank" rel="noreferrer" className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition hover:brightness-110 ${soon ? "bg-[#5b5fc7] shadow-[0_8px_20px_-8px_#5b5fc7]" : "bg-white/10"}`}>
-          <TeamsMark /> {soon ? t("Jetzt teilnehmen") : t("Teams-Link")}
-        </a>
-      )}
-    </div>
-  );
-}
 
 export const generateMetadata = async () => ({ title: (await getT())("Mein Bereich") });
+
+const ymd = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(d);
+const DAY_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const DAY_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+
+/** Aktive Tage: laufende Woche (Mo–So), Tage in Folge bis heute (gestern zählt mit, wenn heute noch nichts war) und längste Serie */
+function streakOf(days: Set<string>, lang: "de" | "tr") {
+  const now = new Date();
+  const todayStr = ymd(now);
+  const dow = (new Date(`${todayStr}T12:00:00Z`).getUTCDay() + 6) % 7;
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = ymd(new Date(now.getTime() + (i - dow) * 86400_000));
+    return { label: (lang === "tr" ? DAY_TR : DAY_DE)[i], active: days.has(d), today: d === todayStr, future: d > todayStr };
+  });
+  let streak = 0;
+  for (let k = days.has(todayStr) ? 0 : 1; days.has(ymd(new Date(now.getTime() - k * 86400_000))); k++) streak++;
+  const sorted = [...days].sort();
+  let best = 0;
+  let run = 0;
+  let prev = "";
+  for (const d of sorted) {
+    run = prev && ymd(new Date(new Date(`${prev}T12:00:00Z`).getTime() + 86400_000)) === d ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  return { week, streak, best: Math.max(best, streak) };
+}
+
+const ago = (iso: string, lang: "de" | "tr", t: T) => {
+  const h = Math.round((Date.now() - new Date(iso).getTime()) / 3600_000);
+  if (h < 1) return t("gerade eben");
+  if (h < 24) return t("vor {n} Std.", { n: h });
+  const d = Math.round(h / 24);
+  return d === 1 ? t("gestern") : d < 14 ? t("vor {n} Tagen", { n: d }) : new Date(iso).toLocaleDateString(lang === "tr" ? "tr-TR" : "de-DE", { day: "2-digit", month: "2-digit" });
+};
 
 type SharedMeeting = { id: string; held_on: string; units: number; title: string; notes: string; results: string; next_steps: string };
 
@@ -141,7 +138,9 @@ export default async function MyArea() {
   const [t, lang] = await Promise.all([getT(), serverLang()]);
   if (!c) return <Empty>{t("Für deinen Zugang ist noch keine Coaching-Akte angelegt. Bitte melde dich bei deinem Coach.")}</Empty>;
 
-  const [meetings, tasks, coach, profile, docs, progress, [nextAppt], inbox, thread, unread] = await Promise.all([
+  // Besuch heute einmal merken (für „Tage in Folge aktiv“)
+  await query("INSERT INTO audit_log (user_id, coachee_id, action) SELECT $1, $2, 'besuch' WHERE NOT EXISTS (SELECT 1 FROM audit_log WHERE user_id = $1 AND action = 'besuch' AND created_at >= date_trunc('day', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin')", [user.id, c.id]).catch(() => undefined);
+  const [meetings, tasks, coach, profile, docs, progress, [nextAppt], inbox, thread, unread, activeDays, doneTasks] = await Promise.all([
     // Nur freigegebene Gespräche, interne Notizen werden gar nicht erst geladen
     query<SharedMeeting>("SELECT id, held_on, units, title, notes, results, next_steps FROM meetings WHERE coachee_id = $1 AND shared ORDER BY held_on DESC, created_at DESC", [c.id]),
     query<Task>("SELECT id, title, details, due_on, done_at FROM tasks WHERE coachee_id = $1 AND done_at IS NULL ORDER BY due_on NULLS LAST, created_at", [c.id]),
@@ -155,7 +154,10 @@ export default async function MyArea() {
     inboxEntries(c.id, 3),
     inboxThread(c.id, user.id, t),
     inboxUnread(c.id, user.id),
+    query<{ day: string }>("SELECT DISTINCT to_char(created_at AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD') AS day FROM audit_log WHERE user_id = $1 AND created_at > now() - interval '400 days'", [user.id]),
+    query<{ title: string; done_at: string }>("SELECT title, done_at FROM tasks WHERE coachee_id = $1 AND done_at IS NOT NULL ORDER BY done_at DESC LIMIT 5", [c.id]),
   ]);
+  const activity = streakOf(new Set(activeDays.map((d) => d.day)), lang);
   // Nachrichten werden erst im Posteingang als gelesen markiert
   const teaser = [
     ...(thread ? [{ id: "nachrichten", label: t("Nachrichten"), title: thread.unread ? t(thread.unread === 1 ? "{n} neue Nachricht" : "{n} neue Nachrichten", { n: thread.unread }) : `${thread.mine ? `${t("Du:")} ` : ""}${thread.preview}`, unread: thread.unread > 0, at: thread.at }] : []),
@@ -183,84 +185,132 @@ export default async function MyArea() {
   const nextHref = next ? STEP_LINK[next.key] ?? "#etappen" : "#etappen";
   const groups = categoriesFor(c.coaching_type).map((cat) => ({ cat, list: profile.filter((p) => p.category === cat.key) })).filter((g) => g.list.length);
 
+  const recent = [
+    ...progress.milestones.filter((m) => m.done && m.done_on).map((m) => ({ title: t(m.label), sub: t("Etappe erreicht"), at: m.done_on! })),
+    ...doneTasks.map((d) => ({ title: d.title, sub: t("Aufgabe erledigt"), at: d.done_at })),
+  ].sort((x, y) => y.at.localeCompare(x.at)).slice(0, 4);
+  const headline = closed
+    ? [t("Gut gemacht."), t("Dein Portal bleibt.")]
+    : gruendung
+      ? [t("Heute planen."), t("Morgen gründen.")]
+      : [t("Heute dranbleiben."), t("Morgen im neuen Job.")];
+  const third = gruendung
+    ? { icon: "chart" as const, value: `${progress.sections.filter((x) => x.done).length}/${progress.sections.length}`, label: t("Kapitel"), href: links.plan }
+    : { icon: "briefcase" as const, value: String(progress.jobs?.applied ?? 0), label: t("Bewerbungen"), href: links.jobs };
+
   return (
     <div className="space-y-6">
-      <section className="rise night relative -mx-4 -mt-6 overflow-hidden px-5 pt-7 pb-6 sm:mx-0 sm:mt-0 sm:rounded-[28px] sm:px-9 sm:py-9">
-        <div className="night-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative grid gap-5 lg:grid-cols-[1fr_320px] lg:items-center lg:gap-8">
-          <div className="min-w-0 space-y-4">
-            <div className="space-y-1.5">
-              <p className="text-sm text-white/60">{todayLong(lang)}</p>
-              <h1 className="font-[family-name:var(--font-display)] text-[32px] leading-[1.05] font-bold tracking-tight text-balance sm:text-5xl">
-                {greeting(lang)}, <span className="text-gradient-gold">{c.first_name}</span>!
-              </h1>
-              <p className="text-white/70">
-                {t(c.coaching_type === "job" ? "Jobcoaching mit {coach}" : "Gründungscoaching mit {coach}", { coach: coach?.name ?? t("deinem Coach") })}
-                {closed ? ` · ${t("abgeschlossen")}` : c.end_date ? ` · ${t("bis {datum}", { datum: formatDate(c.end_date) })}` : ""}
-              </p>
-              {closed && <p className="max-w-xl text-sm text-white/70">{gruendung ? t("Dein Portal bleibt für dich da: Lebenslauf, Businessplan, Finanzplan, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.") : t("Dein Portal bleibt für dich da: Lebenslauf, Stellen, Bewerbungen, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.")}</p>}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+        <div className="min-w-0 space-y-6">
+          {/* Begrüßung */}
+          <section className="rise card relative overflow-hidden !p-0">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-surface via-surface to-tint/70" aria-hidden />
+            <div className="relative grid items-center gap-4 p-5 sm:p-8 md:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="min-w-0 space-y-4">
+                <p className="text-sm text-muted">{t("Schön, dass du da bist, {name}!", { name: c.first_name })} <span aria-hidden>👋</span></p>
+                <h1 className="font-[family-name:var(--font-display)] text-[34px] leading-[1.02] font-extrabold tracking-tight text-balance sm:text-5xl">
+                  <span className="block text-night">{headline[0]}</span>
+                  <span className="block text-accent">{headline[1]}</span>
+                </h1>
+                <p className="max-w-xl text-muted">
+                  {t(c.coaching_type === "job" ? "Jobcoaching mit {coach}" : "Gründungscoaching mit {coach}", { coach: coach?.name ?? t("deinem Coach") })}
+                  {closed ? ` · ${t("abgeschlossen")}` : c.end_date ? ` · ${t("bis {datum}", { datum: formatDate(c.end_date) })}` : ""}
+                  {closed && <span className="block text-sm">{gruendung ? t("Dein Portal bleibt für dich da: Lebenslauf, Businessplan, Finanzplan, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.") : t("Dein Portal bleibt für dich da: Lebenslauf, Stellen, Bewerbungen, Rechner und dein Handbuch kannst du weiter kostenlos nutzen.")}</span>}
+                </p>
+                <div className="flex flex-wrap gap-2 text-sm">
+                  {unread > 0 && (
+                    <Link href={newMessages ? "/mein-bereich/posteingang?offen=nachrichten" : "/mein-bereich/posteingang"} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-danger px-3.5 py-1.5 font-semibold text-white transition hover:brightness-110">
+                      <Icon name="mail" className="size-4" />
+                      {newMessages === unread ? t(unread === 1 ? "{n} neue Nachricht im Posteingang" : "{n} neue Nachrichten im Posteingang", { n: unread }) : t("{n} Neues im Posteingang", { n: unread })}
+                    </Link>
+                  )}
+                  {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="inline-flex min-h-10 items-center rounded-full bg-gold px-3.5 py-1.5 font-semibold text-night transition hover:brightness-110">{t(progress.jobs?.proposals === 1 ? "{n} neue Stelle für dich" : "{n} neue Stellen für dich", { n: progress.jobs?.proposals ?? 0 })}</Link>}
+                  {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="inline-flex min-h-10 items-center rounded-full border border-danger/30 bg-danger-soft px-3.5 py-1.5 font-semibold text-danger">{t("Heute nachfassen: {n}", { n: progress.jobs?.due ?? 0 })}</Link>}
+                </div>
+                <div className="hidden gap-3 border-t border-line-soft pt-4 sm:grid sm:grid-cols-3">
+                  <Feature icon="users" title={t("Persönlich")} hint={coach?.name ?? t("Dein Coach")} />
+                  <Feature icon="flag" title={t("Strukturiert")} hint={t("Schritt für Schritt")} />
+                  <Feature icon="shield" title={t("Begleitet")} hint={t("Bis zu deinem Ziel")} />
+                </div>
+              </div>
+              <SummitArt className="mx-auto hidden w-full max-w-[260px] md:block" />
             </div>
-            {next && !closed && <NextStep t={t} label={next.action} hint={next.hint} href={nextHref} />}
-            {/* Erklärvideo: in den ersten Tagen hier oben, bis gesehen oder weggeklickt */}
-            {hasFeature(c, "erklaervideo") && !c.video_seen_at && !c.video_card_hidden_at && <VideoTeaser coacheeId={c.id} firstName={c.first_name} type={c.coaching_type} lang={c.language} />}
-            <div className="flex flex-wrap gap-2 text-sm">
-              {unread > 0 && (
-                <Link href={newMessages ? "/mein-bereich/posteingang?offen=nachrichten" : "/mein-bereich/posteingang"} className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-danger px-3.5 py-1.5 font-semibold text-white transition hover:brightness-110">
-                  <Icon name="mail" className="size-4" />
-                  {newMessages === unread ? t(unread === 1 ? "{n} neue Nachricht im Posteingang" : "{n} neue Nachrichten im Posteingang", { n: unread }) : t("{n} Neues im Posteingang", { n: unread })}
-                </Link>
+          </section>
+
+          {hasFeature(c, "erklaervideo") && !c.video_seen_at && !c.video_card_hidden_at && (
+            <div className="night rounded-2xl p-3"><VideoTeaser coacheeId={c.id} firstName={c.first_name} type={c.coaching_type} lang={c.language} /></div>
+          )}
+          {closed && <HandbookTeaser t={t} closed gruendung={gruendung} />}
+
+          {/* Nächste Schritte */}
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="h2">{t("Deine nächsten Schritte")}</h2>
+              <Link href="#etappen" className="text-sm font-semibold text-accent hover:underline">{t("Alle anzeigen")}</Link>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {next && !closed ? (
+                <StepCard t={t} eyebrow={t("Nächste Etappe")} title={next.action} hint={next.hint} href={nextHref} pct={progress.overall} cta={t("Fortsetzen")} />
+              ) : (
+                <StepCard t={t} eyebrow={t("Dein Stand")} title={t("{n} von {m} Etappen", { n: doneSteps, m: progress.milestones.length })} hint={t("Etappen, Stunden und Bausteine ansehen")} href="#etappen" pct={progress.overall} cta={t("Ansehen")} />
               )}
-              {openTasks > 0 && <Link href="/mein-bereich/aufgaben" className="inline-flex min-h-10 items-center rounded-full bg-white/10 px-3.5 py-1.5 font-medium transition hover:bg-white/20">{t(openTasks > 1 ? "{n} offene Aufgaben" : "{n} offene Aufgabe", { n: openTasks })}</Link>}
-              {(progress.jobs?.proposals ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="inline-flex min-h-10 items-center rounded-full bg-gold px-3.5 py-1.5 font-semibold text-night transition hover:brightness-110">{t(progress.jobs?.proposals === 1 ? "{n} neue Stelle für dich" : "{n} neue Stellen für dich", { n: progress.jobs?.proposals ?? 0 })}</Link>}
-              {(progress.jobs?.due ?? 0) > 0 && <Link href="/mein-bereich/bewerbungen" className="inline-flex min-h-10 items-center rounded-full bg-white px-3.5 py-1.5 font-semibold text-danger">{t("Heute nachfassen: {n}", { n: progress.jobs?.due ?? 0 })}</Link>}
+              <div className="flex min-w-0 flex-col gap-4">
+                <Panel title={t("Nächster Termin")} icon="calendar" action={<Link href="/mein-bereich/kalender" className="text-sm font-semibold text-accent hover:underline">{t("Kalender")}</Link>}>
+                  {nextAppt ? (
+                    <Link href={`/mein-bereich/kalender?datum=${nextAppt.day}&termin=${nextAppt.id}`} className="flex items-center gap-3">
+                      <span className={`grid w-16 shrink-0 place-items-center rounded-xl py-2 text-center leading-none ${nextAppt.day === todayBerlin() ? "bg-gradient-to-br from-[#e2bd7d] to-gold text-night" : "bg-tint text-accent"}`}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{relativeDay(nextAppt.day, todayBerlin(), lang).split(" ")[0].replace(",", "")}</span>
+                        <span className="mt-1 text-lg font-bold tabular-nums">{nextAppt.start}</span>
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{nextAppt.title}</span>
+                        <span className="block truncate text-sm text-muted">{t(KINDS[nextAppt.kind].label)}{nextAppt.day !== todayBerlin() ? ` · ${dayMedium(nextAppt.day, lang)}` : ""}</span>
+                      </span>
+                    </Link>
+                  ) : (
+                    <p className="text-sm text-muted">{t("Kein Termin geplant.")}</p>
+                  )}
+                  {nextAppt?.join_url && (
+                    <a href={nextAppt.join_url} target="_blank" rel="noreferrer" className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-white transition hover:brightness-110 ${msUntil(nextAppt.starts_at) < 30 * 60_000 ? "bg-[#5b5fc7]" : "bg-accent"}`}>
+                      <TeamsMark /> {msUntil(nextAppt.starts_at) < 30 * 60_000 ? t("Jetzt teilnehmen") : t("Teams-Link")}
+                    </a>
+                  )}
+                </Panel>
+                <Panel title={t("Meine Aufgaben")} icon="check" action={openTasks > 0 ? <span className="rounded-full bg-tint px-2.5 py-0.5 text-xs font-bold text-accent">{t("{n} offen", { n: openTasks })}</span> : undefined} className="flex-1">
+                  {openTasks ? <TaskList coacheeId={c.id} tasks={tasks.slice(0, 3)} coach={false} /> : <p className="text-sm text-muted">{t("Gerade ist nichts offen.")}</p>}
+                  <Link href="/mein-bereich/aufgaben" className="inline-flex items-center gap-1 text-sm font-semibold text-accent hover:underline">{openTasks > 3 ? t("Alle {n} Aufgaben", { n: openTasks }) : t("Zu den Aufgaben")} <Icon name="arrow" className="size-4" /></Link>
+                </Panel>
+              </div>
             </div>
-          </div>
-          <div className="space-y-2">
-            {nextAppt ? (
-              <NextAppointment t={t} lang={lang} a={nextAppt} />
-            ) : (
-              <Link href="/mein-bereich/kalender" className="glass flex min-h-11 items-center gap-3 px-4 py-3 text-sm text-white/75 transition hover:text-white">
-                <Icon name="calendar" className="size-4" /> {t("Kein Termin geplant · zum Kalender")}
-              </Link>
-            )}
-            {nextAppt && <Link href="/mein-bereich/kalender" className="inline-flex min-h-11 items-center px-1 text-sm text-white/60 transition hover:text-white">{t("Alle Termine im Kalender →")}</Link>}
-            {/* Wetter im dunklen Kopfband: weiße Schrift, deshalb nicht in einer hellen Karte */}
-            <div className="glass p-4">
-              <Suspense fallback={<WeatherSkeleton />}>
-                <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder={t("Dein Wohnort")} />} />
-              </Suspense>
-            </div>
-          </div>
+            <InboxTeaser t={t} unread={unread} items={teaser} />
+          </section>
         </div>
-      </section>
 
-      {closed && <HandbookTeaser t={t} closed gruendung={gruendung} />}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section id="aufgaben" className="card min-w-0 scroll-mt-24 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="h2">{t("Meine Aufgaben")}</h2>
-            {openTasks > 0 && <span className="text-sm text-muted">{t("{n} offen", { n: openTasks })}</span>}
+        {/* Rechte Spalte */}
+        <aside className="min-w-0 space-y-6">
+          <ActivityCard t={t} lang={lang} days={activity.week} streak={activity.streak} best={activity.best} />
+          <Panel title={t("Mein Fortschritt")} icon="chart">
+            <div className="grid grid-cols-3 gap-2">
+              <StatTile icon="clock" value={formatHours(progress.units.used, lang)} label={t("Coaching")} tone="accent" href={links.attendance} />
+              <StatTile icon="flag" value={`${doneSteps}/${progress.milestones.length}`} label={t("Etappen")} tone="gold" href="#etappen" />
+              <StatTile icon={third.icon} value={third.value} label={third.label} tone="ok" href={third.href} />
+            </div>
+            {progress.units.rest != null && !closed && <p className="text-sm text-muted">{t("Noch {h} Coaching für dich", { h: formatHours(progress.units.rest, lang) })}</p>}
+          </Panel>
+          {recent.length > 0 && (
+            <Panel title={t("Kürzlich erledigt")} action={<span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-xs font-bold text-ok"><Icon name="check" className="size-3" />{recent.length}</span>}>
+              <ul className="-my-2.5 divide-y divide-line-soft">
+                {recent.map((r, i) => <DoneItem key={i} title={r.title} sub={r.sub} when={ago(r.at, lang, t)} />)}
+              </ul>
+            </Panel>
+          )}
+          <div className="night rounded-[22px] p-4">
+            <Suspense fallback={<WeatherSkeleton />}>
+              <WeatherBox city={progress.city} edit={<CityForm action={setCoacheeCity.bind(null, c.id)} city={c.city} placeholder={t("Dein Wohnort")} />} />
+            </Suspense>
           </div>
-          {openTasks ? <TaskList coacheeId={c.id} tasks={tasks.slice(0, 3)} coach={false} /> : <Empty>{t("Gerade ist nichts offen.")}</Empty>}
-          <Link href="/mein-bereich/aufgaben" className="btn-ghost btn-sm tap w-full justify-center sm:w-auto">{openTasks > 3 ? t("Alle {n} Aufgaben", { n: openTasks }) : t("Zu den Aufgaben")}</Link>
-        </section>
-        <InboxTeaser t={t} unread={unread} items={teaser} />
+        </aside>
       </div>
-
-      {/* Kurzer Stand; Einzelheiten unter „Mehr anzeigen“ */}
-      <Link href="#etappen" className="card card-hover flex items-center gap-4 !p-4">
-        <Ring pct={progress.overall} size={56} stroke={7} tone="accent">
-          <span className="text-sm font-bold">{progress.overall}%</span>
-        </Ring>
-        <span className="min-w-0 flex-1">
-          <span className="block font-semibold">{t("Dein Fortschritt: {n} von {m} Etappen", { n: doneSteps, m: progress.milestones.length })}</span>
-          <span className="block text-sm text-muted">
-            {progress.units.rest != null && !closed ? t("Noch {h} Coaching für dich", { h: formatHours(progress.units.rest, lang) }) : t("Etappen, Stunden und Bausteine ansehen")}
-          </span>
-        </span>
-        <Icon name="arrow" className="size-4 shrink-0 text-accent" />
-      </Link>
 
       <AppSetup publicKey={await pushPublicKey()} what={t("bei Nachrichten, Aufgaben und Terminen von deinem Coach")} compact />
 
