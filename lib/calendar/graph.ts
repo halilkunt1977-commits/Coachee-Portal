@@ -13,39 +13,79 @@ export const graphEnabled = () => Boolean(process.env.MS_TENANT_ID && process.en
 
 let token: { value: string; until: number } | null = null;
 
+/** Zeitüberschreitung oder Netzfehler (kein Fehler, den Microsoft selbst gemeldet hat) */
+const transient = (e: unknown) =>
+  e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || /fetch failed|network|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket/i.test(`${e.message} ${(e as { cause?: { code?: string } }).cause?.code ?? ""}`));
+
+/**
+ * Anfrage an Microsoft mit großzügiger Zeitgrenze. Antwortet Microsoft nicht rechtzeitig oder reißt die Verbindung ab,
+ * wird es nach einer kurzen Pause genau einmal wiederholt (nur bei Anfragen, die doppelt nichts anrichten).
+ */
+async function send(url: string, init: RequestInit, retry: boolean) {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
+  } catch (e) {
+    if (!retry || !transient(e)) throw e;
+    await new Promise((r) => setTimeout(r, 800));
+    return fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
+  }
+}
+
+/** Technische Fehler in eine verständliche deutsche Meldung übersetzen */
+export function graphErrorText(e: unknown): string {
+  if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "Microsoft hat nicht rechtzeitig geantwortet. Das passiert gelegentlich, wenn die Microsoft-Server ausgelastet sind. Bitte die Seite in ein paar Minuten neu laden.";
+  if (transient(e)) return "Microsoft ist gerade nicht erreichbar (Netzwerkfehler). Bitte die Seite in ein paar Minuten neu laden.";
+  return e instanceof Error ? e.message : "Unbekannter Fehler bei Microsoft.";
+}
+
 async function accessToken() {
   if (token && token.until > Date.now() + 60_000) return token.value;
-  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(process.env.MS_TENANT_ID!)}/oauth2/v2.0/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: process.env.MS_CLIENT_ID!,
-      client_secret: process.env.MS_CLIENT_SECRET!,
-      scope: "https://graph.microsoft.com/.default",
-      grant_type: "client_credentials",
-    }),
-    signal: AbortSignal.timeout(10_000),
-  });
+  const res = await send(
+    `https://login.microsoftonline.com/${encodeURIComponent(process.env.MS_TENANT_ID!)}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.MS_CLIENT_ID!,
+        client_secret: process.env.MS_CLIENT_SECRET!,
+        scope: "https://graph.microsoft.com/.default",
+        grant_type: "client_credentials",
+      }),
+    },
+    true,
+  );
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Microsoft-Anmeldung fehlgeschlagen: ${data.error_description ?? data.error ?? res.status}`);
+  if (!res.ok) throw new Error(`Anmeldung bei Microsoft fehlgeschlagen: ${loginReason(data.error, data.error_description) ?? res.status}`);
   token = { value: data.access_token, until: Date.now() + Number(data.expires_in ?? 3000) * 1000 };
   return token.value;
 }
 
-async function graph(path: string, init: RequestInit & { prefer?: string } = {}) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(process.env.MS_CALENDAR_USER!)}${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${await accessToken()}`,
-      "content-type": "application/json",
-      ...(init.prefer ? { prefer: init.prefer } : {}),
+function loginReason(code?: string, desc?: string) {
+  if (code === "invalid_client" || /AADSTS7000215|AADSTS7000222/.test(desc ?? "")) return "Das Client-Geheimnis (MS_CLIENT_SECRET) ist falsch oder abgelaufen. Bitte in Microsoft Entra ein neues anlegen und in Coolify eintragen.";
+  if (/AADSTS700016/.test(desc ?? "")) return "Die App-ID (MS_CLIENT_ID) ist im Mandanten nicht bekannt.";
+  if (/AADSTS90002/.test(desc ?? "")) return "Die Mandanten-ID (MS_TENANT_ID) ist nicht bekannt.";
+  return desc ?? code;
+}
+
+async function graph(path: string, init: RequestInit & { prefer?: string; retry?: boolean } = {}) {
+  const { prefer, retry, ...rest } = init;
+  const method = (rest.method ?? "GET").toUpperCase();
+  const res = await send(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(process.env.MS_CALENDAR_USER!)}${path}`,
+    {
+      ...rest,
+      headers: {
+        authorization: `Bearer ${await accessToken()}`,
+        "content-type": "application/json",
+        ...(prefer ? { prefer } : {}),
+      },
+      cache: "no-store",
     },
-    signal: AbortSignal.timeout(15_000),
-    cache: "no-store",
-  });
+    retry ?? (method === "GET" || method === "PATCH" || method === "DELETE"),
+  );
   if (res.status === 204 || res.status === 202) return null;
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Microsoft Graph ${res.status}: ${data?.error?.message ?? data?.error?.code ?? "unbekannter Fehler"}`);
+  if (!res.ok) throw new Error(`Microsoft meldet einen Fehler (${res.status}): ${data?.error?.message ?? data?.error?.code ?? "unbekannt"}`);
   return data;
 }
 
@@ -79,7 +119,8 @@ function payload(e: GraphInput) {
 
 /** Termin im Outlook-Kalender anlegen; Microsoft verschickt die Einladung an den Coachee selbst. */
 export async function createGraphEvent(e: GraphInput) {
-  const data = await graph("/events", { method: "POST", body: JSON.stringify({ ...payload(e), transactionId: e.id }) });
+  // transactionId verhindert doppelte Termine, deshalb darf hier wiederholt werden
+  const data = await graph("/events", { method: "POST", body: JSON.stringify({ ...payload(e), transactionId: e.id }), retry: true });
   return { id: String(data.id), joinUrl: (data.onlineMeeting?.joinUrl as string | undefined) ?? null };
 }
 
@@ -97,16 +138,35 @@ export async function cancelGraphEvent(eventId: string, comment: string) {
   }
 }
 
-/** Verbindung prüfen (für die Kalenderseite): Anmeldung bei Microsoft und Zugriff auf den Kalender des Postfachs */
-export async function graphCheck(): Promise<{ ok: boolean; message: string }> {
+let lastOk: { at: number; message: string } | null = null;
+
+async function runCheck(): Promise<{ ok: boolean; message: string }> {
   try {
     const cal = await graph("/calendar?$select=name,canEdit,allowedOnlineMeetingProviders");
     const teams = (cal?.allowedOnlineMeetingProviders ?? []).includes("teamsForBusiness");
     if (!cal?.canEdit) return { ok: false, message: "Der Kalender ist nur lesbar. Bitte die Berechtigung Calendars.ReadWrite (Anwendung) mit Administratorzustimmung erteilen." };
-    return teams ? { ok: true, message: `Kalender „${cal.name}“ erreichbar, Teams-Besprechungen möglich.` } : { ok: false, message: "Kalender erreichbar, aber für dieses Postfach sind keine Teams-Besprechungen erlaubt. Hat das Postfach eine Teams-Lizenz?" };
+    if (!teams) return { ok: false, message: "Kalender erreichbar, aber für dieses Postfach sind keine Teams-Besprechungen erlaubt. Hat das Postfach eine Teams-Lizenz?" };
+    const message = `Kalender „${cal.name}“ erreichbar, Teams-Besprechungen möglich.`;
+    lastOk = { at: Date.now(), message };
+    return { ok: true, message };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "Unbekannter Fehler" };
+    console.warn("[graph] Verbindungsprüfung:", error instanceof Error ? `${error.name}: ${error.message}` : error);
+    // Hat es vor Kurzem noch geklappt, ist ein einzelner Aussetzer von Microsoft keine gestörte Verbindung
+    if (transient(error) && lastOk && Date.now() - lastOk.at < 24 * 3600_000) return { ok: true, message: `${lastOk.message} Microsoft antwortet gerade langsam, Termine werden trotzdem übertragen.` };
+    return { ok: false, message: graphErrorText(error) };
   }
+}
+
+/**
+ * Verbindung prüfen (für die Kalenderseite): Anmeldung bei Microsoft und Zugriff auf den Kalender des Postfachs.
+ * Die Seite wartet höchstens 8 Sekunden; ein gutes Ergebnis gilt 10 Minuten.
+ */
+export async function graphCheck(): Promise<{ ok: boolean; message: string }> {
+  if (lastOk && Date.now() - lastOk.at < 10 * 60_000) return { ok: true, message: lastOk.message };
+  const slow = new Promise<{ ok: boolean; message: string }>((r) =>
+    setTimeout(() => r(lastOk ? { ok: true, message: `${lastOk.message} Microsoft antwortet gerade langsam.` } : { ok: false, message: "Microsoft antwortet gerade langsam. Die Prüfung läuft im Hintergrund weiter, bitte die Seite gleich neu laden." }), 8_000),
+  );
+  return Promise.race([runCheck(), slow]);
 }
 
 export type OutlookEvent = { id: string; title: string; start: string; end: string; allDay: boolean; location: string | null; joinUrl: string | null; webLink: string | null };
@@ -142,7 +202,7 @@ export async function outlookEvents(from: string, to: string): Promise<OutlookEv
     viewCache = { key, at: Date.now(), value };
     return value;
   } catch (e) {
-    console.warn("[graph] Outlook-Kalender nicht lesbar:", e instanceof Error ? e.message : e);
+    console.warn("[graph] Outlook-Kalender nicht lesbar:", graphErrorText(e));
     return [];
   }
 }
