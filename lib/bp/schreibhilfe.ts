@@ -44,11 +44,10 @@ Material und Vorrang:
 - Die Notizen und Nachrichten des Coachs sind seine eigenen Angaben aus dem Coaching und haben Vorrang vor allem anderen Material. Übernimm ihre Fakten vollständig und mach aus Stichpunkten zusammenhängenden Text.
 - Die neue Nachricht des Coachs ist entweder weiteres Material oder eine Anweisung (z. B. „kürzer“, „mehr zum Standort“). Eine Anweisung setzt du am letzten Vorschlag um, sonst am bisherigen Text. Alles, was der Coach nicht ändern wollte, bleibt erhalten.
 - Bausteine, Protokolle der Gespräche, Unterlagen und andere Kapitel sind Arbeitsmaterial: Übernimm nur, was zu diesem Kapitel passt, und widersprich den anderen Kapiteln nicht.
-- Pflichtangaben dieses Kapitels (Standard des Coachs, müssen enthalten sein; fehlt etwas im Material, setze einen Platzhalter in eckigen Klammern): ${def.must.join("; ")}.
+- Pflichtangaben dieses Kapitels (Standard des Coachs, müssen enthalten sein; fehlt etwas im Material, ergänze eine realistische, branchenübliche Annahme und kennzeichne sie mit „(Annahme)“): ${def.must.join("; ")}.
 - Steht im Material ein Branchenprofil, gehören dessen Angaben für dieses Kapitel ebenfalls hinein.
 - Beantworte außerdem diese Leitfragen, soweit das Material es hergibt: ${def.questions.join(" ")}
-${summary ? "- Die Executive Summary fasst den ganzen Plan auf einer Seite zusammen: Wer gründet was, ab wann und wo, Leistungen und Kunden, Kundengewinnung, die wichtigsten Zahlen für Jahr 1 bis 3 und erfüllte Voraussetzungen. Schreib sie nur aus den Kapiteln, dem Finanzplan und den Notizen, nichts Neues.\n" : ""}- Nutze nur Fakten aus dem Material. Erfinde keine Zahlen, Namen, Kunden, Statistiken oder Abschlüsse. Wo etwas fehlt, setze einen kurzen Platzhalter in eckigen Klammern, z. B. [Anzahl Betriebe der Branche im Landkreis mit Quelle].
-- Ausnahme: Bittet der Coach ausdrücklich darum, Zahlen oder Fakten zu schätzen oder zu ergänzen, setzt du realistische Annahmen ein und kennzeichnest sie im Text als Annahme (z. B. „rund 40 Aufträge im ersten Jahr (Annahme)“). Statistiken und Quellen erfindest du auch dann nicht.
+${summary ? "- Die Executive Summary fasst den ganzen Plan auf einer Seite zusammen: Wer gründet was, ab wann und wo, Leistungen und Kunden, Kundengewinnung, die wichtigsten Zahlen für Jahr 1 bis 3 und erfüllte Voraussetzungen. Schreib sie nur aus den Kapiteln, dem Finanzplan und den Notizen, nichts Neues.\n" : ""}- Erfinde keine Namen, Kunden, Statistiken, Abschlüsse oder Quellen. Fehlt eine Zahl oder Angabe, setze eine realistische, branchenübliche Annahme ein und kennzeichne sie im Text, z. B. „rund 40 Aufträge im ersten Jahr (Annahme)“. Keine Platzhalter in eckigen Klammern (außer [Name]): Der Text ist immer fertig und abgabereif.
 - Zahlen aus dem Finanzplan übernimmst du genau so, wie sie im Material stehen.
 - Namen sind durch [Name] ersetzt. Schreib [Name], wo der Name der gründenden Person nötig ist.
 - Angaben zur Gesundheit der gründenden Person gehören nicht in den Plan.
@@ -58,7 +57,7 @@ Quellen:
 - Gib im Feld sources die Quellen für die Fakten im Kapitel an, eine pro Eintrag, z. B. „Handwerkskammer Wiesbaden (2026): Schriftliche Auskunft …“ oder eine Statistik mit Link.
 - Nur Quellen, die wörtlich im Material stehen (bisherige Quellen des Kapitels, Notizen des Coachs, genannte Auskünfte, Unterlagen). Erfinde niemals Quellen oder Links. Hast du keine belegbare Quelle, gib eine leere Liste zurück.
 
-Gib den fertigen Kapiteltext im Feld text zurück. Im Feld note sagst du dem Coach in ein bis zwei kurzen Sätzen, was du gemacht hast und welche Angaben noch fehlen (per du, ohne Floskeln).`;
+Gib den fertigen Kapiteltext im Feld text zurück. Im Feld note sagst du dem Coach in ein bis zwei kurzen Sätzen, was du gemacht hast und welche Annahmen du getroffen hast (per du, ohne Floskeln).`;
 }
 
 /** Einträge an den Verlauf eines Kapitels anhängen; ältere Einträge über MAX_TURNS fallen weg */

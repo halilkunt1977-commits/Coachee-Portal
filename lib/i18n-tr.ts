@@ -2251,4 +2251,5 @@ export const TR: Record<string, string> = {
   "Tage in Folge aktiv": "gün üst üste aktif",
   "{n} Tag": "{n} gün",
   "{n} Tage": "{n} gün",
+  "Im Chat schreiben: Unterlagen hochladen, sagen, was du willst, der ganze Plan wird direkt geschrieben": "Sohbette yaz: belgeleri yükle, ne istediğini söyle, planın tamamı hemen yazılır",
 };

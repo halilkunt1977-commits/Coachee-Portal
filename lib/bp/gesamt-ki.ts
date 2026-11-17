@@ -56,14 +56,11 @@ const CHECK_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["key", "action", "todo", "rating", "assessment", "questions"],
+        required: ["key", "action", "todo"],
         properties: {
           key: { type: "string", enum: SECTIONS.map((s) => s.key) },
           action: { type: "string", enum: ["neu", "anpassen", "lassen"] },
           todo: { type: "string" },
-          rating: { type: "string", enum: ["gut", "ausbaufaehig", "fehlt"] },
-          assessment: { type: "string" },
-          questions: { type: "array", items: { type: "string" } },
         },
       },
     },
@@ -72,24 +69,25 @@ const CHECK_SCHEMA = {
 
 const CHECK_INSTRUCTIONS = `Du bist erfahrene Gründungsberaterin und betreust zusammen mit dem Gründungscoach den kompletten Businessplan einer Gründung in Deutschland (Vorlage des Coachs, 14 Kapitel, eingereicht bei der fachkundigen Stelle für den Gründungszuschuss und bei Banken). Ihr arbeitet in einem Chat: Der Coach schreibt oder spricht dir Nachrichten. Das können Fragen sein (Analyse, Bewertung, Plausibilität, „was fehlt?“), neue Angaben, Zahlen, Daten und Fakten, Antworten auf deine Rückfragen, oder Aufträge („schreib Kapitel 5 neu“, „gleiche alles mit dem Finanzplan ab“, „schätze realistische Zahlen“).
 
+Ihr arbeitet wie in einem Chat: Der Coach schreibt dir, was er will, und gibt dir Unterlagen (z. B. einen vorhandenen Businessplan, Notizen, Fotos). Du lieferst sofort ein fertiges Ergebnis. Du stellst KEINE Rückfragen und lässt nichts offen.
+
 Entscheide zuerst, was der Coach will:
-- Eine reine Frage oder Bitte um Bewertung: Beantworte sie im Feld answer und setze alle Kapitel auf "lassen". Ändere den Plan nur, wenn der Coach es will.
-- Neue Angaben, Antworten auf Rückfragen, Zahlen, Fakten oder ein Auftrag: Prüfe den ganzen Plan und entscheide für JEDES der 14 Kapitel, ob es geändert wird. Neue Angaben gelten für alle Kapitel, die sie direkt oder indirekt berühren (z. B. neuer Preis betrifft Leistungen, Marketing, Finanzen und Summary).
-- Eine leere Nachricht heißt: alles mit dem aktuellen Material abgleichen und verbessern.
+- Eine reine Frage oder Bitte um Einschätzung: Beantworte sie im Feld answer und setze alle Kapitel auf "lassen".
+- Alles andere (neue Angaben, Zahlen, Unterlagen, ein Auftrag wie „schreib den Plan“, „mach es überzeugender“, „kürzer“): Setze es direkt im ganzen Plan um. Neue Angaben gelten für alle Kapitel, die sie direkt oder indirekt berühren.
+- Hat der Coach Unterlagen mitgegeben (z. B. einen Businessplan aus einem anderen Programm), übernimm deren Inhalte vollständig in die passenden Kapitel; leere, dünne oder abweichende Kapitel werden "neu" geschrieben.
+- Will der Coach den Plan neu, komplett oder fertig haben, oder ist der Plan noch weitgehend leer: alle Kapitel auf "neu".
+- Eine leere Nachricht heißt: alles mit dem aktuellen Material abgleichen und den Plan fertig und abgabereif machen.
 
 Für jedes Kapitel:
-- action: "neu" (leer, sehr dünn oder veraltet), "anpassen" (im Kern gut, aber etwas stimmt nicht mehr, fehlt, widerspricht dem Finanzplan oder anderen Kapiteln, oder das Material beantwortet inzwischen einen Platzhalter in eckigen Klammern), "lassen" (stimmig oder keine Änderung gewünscht).
-- todo: bei "neu"/"anpassen" ein konkreter Schreibauftrag (was genau, welche Zahlen und Fakten gelten, was ergänzt wird), sonst ein kurzer Grund.
-- rating und assessment: deine ehrliche Bewertung des Kapitels in seinem Stand NACH deinen Änderungen, gemessen an den Pflichtangaben des Standards und des Branchenprofils und daran, wie die fachkundige Stelle es sehen würde: "gut" (alle Pflichtangaben konkret erfüllt), "ausbaufaehig" oder "fehlt"; assessment in einem Satz, der die fehlenden Pflichtangaben nennt.
-- questions: Vor allem fehlende Pflichtangaben. Was im Kapitel noch fehlt und nur der Coach oder die gründende Person beantworten kann, als konkrete, kurze Rückfragen (höchstens drei, z. B. „Wie viele Malerbetriebe gibt es im Landkreis Fürth und woher stammt die Zahl?“). Keine Fragen, deren Antwort schon im Material steht. Bei einem guten Kapitel eine leere Liste.
+- action: "neu" (leer, sehr dünn, veraltet oder durch Unterlagen ersetzt), "anpassen" (im Kern gut, aber etwas stimmt nicht mehr, fehlt, widerspricht dem Finanzplan oder anderen Kapiteln, oder enthält Platzhalter in eckigen Klammern), "lassen" (stimmig und vollständig).
+- todo: bei "neu"/"anpassen" ein konkreter Schreibauftrag (was genau, welche Zahlen und Fakten gelten, was ergänzt wird, welche Annahmen getroffen werden), sonst ein kurzer Grund.
 
 Regeln:
+- Fehlt etwas, triff realistische, branchenübliche Annahmen und sag im todo, dass sie im Text mit „(Annahme)“ gekennzeichnet werden. Statistiken, Namen und Quellen erfindest du nie.
 - Zahlen im Plan müssen mit dem Finanzplan übereinstimmen. Weicht ein Kapitel ab, ist es "anpassen".
 - Die Executive Summary (summary) wird angepasst, sobald ein anderes Kapitel geändert wird.
 - glance = true, wenn sich Angaben für „Auf einen Blick“ ändern (Start, Standort, Rechtsform, Investitionen, Finanzierung, Personal …).
-- Ändere nichts ohne Grund: Ein stimmiges Kapitel bleibt.
-- Bittet der Coach ausdrücklich darum, Zahlen, Daten oder Fakten zu schätzen oder zu ergänzen, darfst du realistische Annahmen vorschlagen; sag im todo, dass sie im Text als Annahme gekennzeichnet werden. Sonst erfindest du nichts.
-- answer: Antwort an den Coach, per du, auf Deutsch, ohne Floskeln. Bei einer Frage ausführlich und konkret mit Bezug auf Kapitel (mit Nummer) und Zahlen aus dem Finanzplan; gliedere mit kurzen Absätzen, „- “-Listen und **fett**. Bei Änderungen zwei bis drei Sätze: was du änderst und was noch fehlt. Die Rückfragen stehen schon bei den Kapiteln, wiederhole sie nicht einzeln.
+- answer: Antwort an den Coach, per du, auf Deutsch, ohne Floskeln und ohne Rückfragen. Bei einer Frage konkret mit Bezug auf Kapitel und Zahlen aus dem Finanzplan, gegliedert mit kurzen Absätzen, „- “-Listen und **fett**. Bei Änderungen zwei bis vier Sätze: was du geändert hast und welche Annahmen du getroffen hast.
 - Beziehe dich auf das bisherige Gespräch, wenn der Coach etwa „mach das so“ schreibt.
 - Namen sind durch [Name] ersetzt. Keine Angaben zur Gesundheit.`;
 
@@ -182,7 +180,6 @@ async function saveAfter(runId: string, key: string, value: unknown) {
   await query("UPDATE bp_runs SET after = after || jsonb_build_object($2::text, $3::jsonb) WHERE id = $1", [runId, key, JSON.stringify(value)]);
 }
 
-const RATINGS = new Set(["gut", "ausbaufaehig", "fehlt"]);
 
 /** Läuft im Hintergrund; Fehler landen im Durchgang, nicht beim Aufrufer */
 export async function executeRun(runId: string, user: User, c: Coachee, message: string) {
@@ -193,7 +190,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     const earlier = (await query<{ message: string }>("SELECT message FROM bp_runs WHERE coachee_id = $1 AND id <> $2 AND kind = 'aendern' AND message <> '' AND undone_at IS NULL ORDER BY created_at", [c.id, runId])).map((r) => r.message);
     const files = (await one<{ files: string[] }>("SELECT files FROM bp_runs WHERE id = $1", [runId]))?.files ?? [];
     const attached = await attachedDocs(c.id, files);
-    const check = await jsonResponse<{ answer: string; glance: boolean; chapters: { key: string; action: RunAction; todo: string; rating: string; assessment: string; questions: string[] }[] }>({
+    const check = await jsonResponse<{ answer: string; glance: boolean; chapters: { key: string; action: RunAction; todo: string }[] }>({
       coacheeId: c.id,
       userId: user.id,
       purpose: "businessplan",
@@ -204,11 +201,6 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
       input: await checkInput(c, runId, message, earlier, attached),
     });
     const byKey = new Map(check.chapters.map((x) => [x.key, x]));
-    const review: ChapterReview[] = SECTIONS.flatMap((s) => {
-      const x = byKey.get(s.key);
-      if (!x) return [];
-      return [{ key: s.key, rating: (RATINGS.has(x.rating) ? x.rating : "ausbaufaehig") as ChapterReview["rating"], text: fill(x.assessment ?? "").slice(0, 600), questions: (x.questions ?? []).map(fill).filter(Boolean).slice(0, 3).map((q) => q.slice(0, 400)) }];
-    });
     progress.chapters = SECTIONS.map((s) => {
       const x = byKey.get(s.key);
       const action: RunAction = x?.action ?? "lassen";
@@ -220,7 +212,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     // Nur eine Frage: antworten, nichts ändern
     if (!changing && !check.glance) {
       progress.phase = "fertig";
-      const result: RunResult = { note, glance: 0, review };
+      const result: RunResult = { note, glance: 0 };
       await query("UPDATE bp_runs SET status = 'fertig', kind = 'frage', progress = $2, result = $3, finished_at = now() WHERE id = $1", [runId, JSON.stringify(progress), JSON.stringify(result)]);
       return;
     }
@@ -295,7 +287,7 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
     }
 
     progress.phase = "fertig";
-    const result: RunResult = { note, glance, review };
+    const result: RunResult = { note, glance };
     await query("UPDATE bp_runs SET status = 'fertig', progress = $2, result = $3, finished_at = now() WHERE id = $1", [runId, JSON.stringify(progress), JSON.stringify(result)]);
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Businessplan-KI", e);

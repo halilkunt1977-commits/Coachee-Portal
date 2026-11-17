@@ -48,6 +48,8 @@ type Props = {
   /** Fassung fürs Amt oder für die Bank, mit Abgabe und Bankangaben */
   mode: "amt" | "bank";
   onBack: () => void;
+  /** Text des Zurück-Knopfs (Standard „Zur Übersicht“) */
+  backLabel?: string;
   bankState: BankState;
   abgaben: AbgabenState;
   excelHref: string;
@@ -194,7 +196,7 @@ export function PlanEditor(p: Props) {
     <div className="space-y-4">
       <section className="card overflow-hidden !p-0">
         <div className="space-y-3 bg-accent px-4 py-4 text-white sm:px-6">
-          <button type="button" className="text-sm text-white/80 hover:text-white" onClick={p.onBack}>← {t("Zur Übersicht")}</button>
+          <button type="button" className="text-sm text-white/80 hover:text-white" onClick={p.onBack}>← {p.backLabel ?? t("Zur Übersicht")}</button>
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-soft">{bank ? t("Businessplan für die Bank") : t("Businessplan fürs Amt")}</p>
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold leading-tight text-balance">{title || p.name}</h2>
