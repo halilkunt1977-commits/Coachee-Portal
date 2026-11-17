@@ -19,6 +19,70 @@ const refresh = (coacheeId: string) => {
 };
 const aiMessage = (e: unknown) => (e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen.");
 
+// ---------- Ganzen Lebenslauf mit KI ändern (nur Coach) ----------
+
+const s = { type: "string" };
+const obj = (properties: Record<string, unknown>) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
+const CV_EDIT_SCHEMA = obj({
+  note: s,
+  cv: obj({
+    headline: s,
+    summary: s,
+    experience: { type: "array", items: obj({ title: s, company: s, location: s, start: s, end: s, current: { type: "boolean" }, bullets: s }) },
+    education: { type: "array", items: obj({ degree: s, school: s, location: s, start: s, end: s, detail: s }) },
+    skills: { type: "array", items: obj({ name: s, level: { type: "integer" } }) },
+    languages: { type: "array", items: obj({ name: s, level: s }) },
+    certificates: { type: "array", items: obj({ name: s, institution: s, year: s }) },
+    interests: s,
+  }),
+});
+
+/**
+ * Coach: den ganzen Lebenslauf per Anweisung ändern lassen („auf zwei Seiten kürzen“, „Aufgaben knapper“ …).
+ * Zurück kommt der geänderte Inhalt; Kontaktdaten, Foto, Design und Unterschrift bleiben unberührt.
+ * Der Editor übernimmt ihn sofort (mit „Rückgängig“) und speichert wie bei jeder Eingabe.
+ */
+export async function changeCvWithAi(cvId: string, current: unknown, message: string, pages: number, earlier: { message: string; note: string }[]): Promise<{ ok: true; data: CvData; note: string } | { ok: false; error: string }> {
+  const user = await requireUser();
+  if (user.role !== "coach") return { ok: false, error: "Nur für den Coach." };
+  const { cv, coachee } = await cvFor(user, cvId);
+  const text = message.trim().slice(0, 4000);
+  if (!text) return { ok: false, error: "Bitte schreib, was geändert werden soll." };
+  try {
+    await assertAiAllowed(user, { coachOnly: true });
+    const data = normalizeCv(current);
+    const names = [coachee.first_name, coachee.last_name];
+    const content = { headline: data.personal.headline, summary: data.summary, experience: data.experience, education: data.education, skills: data.skills, languages: data.languages, certificates: data.certificates, interests: data.interests };
+    const talk = (Array.isArray(earlier) ? earlier : []).slice(-6).map((t) => `Coach: ${String(t?.message ?? "").slice(0, 1500)}\nDu: ${String(t?.note ?? "").slice(0, 800)}`).join("\n");
+    const res = await jsonResponse<{ note: string; cv: typeof content }>({
+      coacheeId: cv.coachee_id,
+      userId: user.id,
+      purpose: "cv_ai_edit",
+      instructions: `Du überarbeitest einen ${data.language === "tr" ? "türkischen Lebenslauf (alle Texte auf Türkisch)" : "deutschen Lebenslauf"} im Auftrag des Coachs. Der Coach schreibt, was er will (z. B. „auf zwei Seiten kürzen“, „Aufgaben je Station auf drei Punkte“, „Kurzprofil knapper“, „ältere Stationen zusammenfassen“). Du setzt es sofort um und gibst den kompletten geänderten Inhalt zurück. Keine Rückfragen.
+
+Regeln:
+- Ändere nur, was der Auftrag verlangt oder was daraus folgt. Alles andere bleibt wörtlich gleich.
+- Kürzen heißt: Aufgaben als knappe Stichpunkte (je Zeile ein Punkt mit „- “), Wiederholungen streichen, Unwichtiges und sehr alte Details zusammenfassen, Kurzprofil auf zwei bis drei Sätze. Für eine Seite gelten grob 350 bis 450 Wörter, für zwei Seiten 700 bis 900 Wörter (der Lebenslauf hat gerade ${pages} ${pages === 1 ? "Seite" : "Seiten"}).
+- Stationen, Daten, Firmen und Abschlüsse bleiben erhalten und werden nicht erfunden. Streichen darfst du nur, wenn der Coach es will; beim Kürzen kürzt du Texte, nicht den Werdegang.
+- Neue Tatsachen erfindest du nie. Sachlich, ohne „ich“, ohne Floskeln.
+- level bei Kenntnissen: 0 bis 5 wie bisher.
+- note: ein bis zwei kurze Sätze an den Coach (per du), was du geändert hast.
+- Namen sind durch [Name] ersetzt.`,
+      input: pseudonymize(`${talk ? `Bisher in diesem Gespräch:\n${talk}\n\n` : ""}Aktueller Inhalt (JSON):\n${JSON.stringify(content)}\n\nAuftrag des Coachs: ${text}`, names),
+      schemaName: "cv_edit",
+      schema: CV_EDIT_SCHEMA,
+      maxTokens: 16000,
+    });
+    const fill = (v: string) => v.replaceAll("[Name]", `${coachee.first_name} ${coachee.last_name}`);
+    const next = normalizeCv(JSON.parse(fill(JSON.stringify({ ...data, ...res.cv, personal: { ...data.personal, headline: res.cv.headline } }))));
+    await audit(user.id, "cv_ai_edit", coachee.id, { cv: cv.id });
+    return { ok: true, data: { ...next, photo: data.photo, signature: data.signature, signatureImage: data.signatureImage, language: data.language, place: data.place }, note: fill(String(res.note ?? "")).slice(0, 800) || "Geändert." };
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("Lebenslauf mit KI ändern", e);
+    return { ok: false, error: aiMessage(e) };
+  }
+}
+
 // ---------- Anlegen, kopieren, löschen ----------
 
 /** Vorgabe für neue Lebensläufe, damit sich mehrere auseinanderhalten lassen: „Lebenslauf 22.10.2026“ */

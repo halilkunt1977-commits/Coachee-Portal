@@ -17,6 +17,13 @@ export function mockJson(schemaName: string, input: string, instructions?: strin
     const nrs = [...input.matchAll(/^(\d+)\. (.+)$/gm)];
     return { bewertungen: nrs.map((m, i) => ({ nr: Number(m[1]), prozent: [92, 84, 65, 40][i % 4], grund: `Testeinschätzung ohne KI für „${m[2].slice(0, 40)}“.` })) };
   }
+  if (schemaName === "cv_edit") {
+    // Testkürzung ohne KI: jede Station behält höchstens drei Stichpunkte, Kurzprofil nur der erste Satz
+    const json = input.match(/^Aktueller Inhalt \(JSON\):\n(.+)$/m)?.[1] ?? "{}";
+    const cv = JSON.parse(json) as { summary?: string; experience?: { bullets?: string }[] } & Record<string, unknown>;
+    const exp = (cv.experience ?? []).map((e) => ({ ...e, bullets: String(e.bullets ?? "").split("\n").filter((l) => l.trim()).slice(0, 3).join("\n") }));
+    return { note: "Teständerung ohne KI: Aufgaben auf drei Punkte je Station, Kurzprofil auf einen Satz gekürzt.", cv: { ...cv, summary: String(cv.summary ?? "").split(/(?<=\.)\s/)[0] ?? "", experience: exp } };
+  }
   if (schemaName === "businessplan_chat") {
     const neu = input.match(/^Neue Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
     const keys = [...new Set([...input.matchAll(/\[key: (\w+)\]/g)].map((m) => m[1]))];
