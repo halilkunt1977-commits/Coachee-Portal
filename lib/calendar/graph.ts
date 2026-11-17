@@ -1,4 +1,5 @@
 import "server-only";
+import { MsNetError, msDiagnose, msRequest } from "./msnet";
 
 /*
  * Anbindung an Microsoft 365 (Outlook-Kalender und Teams) über Microsoft Graph.
@@ -14,33 +15,35 @@ export const graphEnabled = () => Boolean(process.env.MS_TENANT_ID && process.en
 let token: { value: string; until: number } | null = null;
 
 /** Zeitüberschreitung oder Netzfehler (kein Fehler, den Microsoft selbst gemeldet hat) */
-const transient = (e: unknown) =>
-  e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || /fetch failed|network|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket/i.test(`${e.message} ${(e as { cause?: { code?: string } }).cause?.code ?? ""}`));
+const transient = (e: unknown) => e instanceof MsNetError;
 
 /**
- * Anfrage an Microsoft mit großzügiger Zeitgrenze. Antwortet Microsoft nicht rechtzeitig oder reißt die Verbindung ab,
+ * Anfrage an Microsoft (immer über IPv4, siehe msnet.ts). Antwortet Microsoft nicht rechtzeitig oder reißt die Verbindung ab,
  * wird es nach einer kurzen Pause genau einmal wiederholt (nur bei Anfragen, die doppelt nichts anrichten).
  */
-async function send(url: string, init: RequestInit, retry: boolean) {
+async function send(url: string, init: { method?: string; headers?: Record<string, string>; body?: string }, retry: boolean) {
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
+    return await msRequest(url, init, 15_000);
   } catch (e) {
     if (!retry || !transient(e)) throw e;
     await new Promise((r) => setTimeout(r, 800));
-    return fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
+    return msRequest(url, init, 15_000);
   }
 }
 
 /** Technische Fehler in eine verständliche deutsche Meldung übersetzen */
 export function graphErrorText(e: unknown): string {
-  if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "Microsoft hat nicht rechtzeitig geantwortet. Das passiert gelegentlich, wenn die Microsoft-Server ausgelastet sind. Bitte die Seite in ein paar Minuten neu laden.";
-  if (transient(e)) return "Microsoft ist gerade nicht erreichbar (Netzwerkfehler). Bitte die Seite in ein paar Minuten neu laden.";
+  if (e instanceof MsNetError) {
+    if (e.step === "zeit") return `Microsoft hat nicht rechtzeitig geantwortet. ${e.message}`;
+    if (e.step === "dns") return `Microsoft ist vom Server aus nicht auffindbar. ${e.message}`;
+    return `Microsoft ist vom Server aus gerade nicht erreichbar. ${e.message}`;
+  }
   return e instanceof Error ? e.message : "Unbekannter Fehler bei Microsoft.";
 }
 
 async function accessToken() {
   if (token && token.until > Date.now() + 60_000) return token.value;
-  const res = await send(
+  const { status, data } = await send(
     `https://login.microsoftonline.com/${encodeURIComponent(process.env.MS_TENANT_ID!)}/oauth2/v2.0/token`,
     {
       method: "POST",
@@ -50,13 +53,12 @@ async function accessToken() {
         client_secret: process.env.MS_CLIENT_SECRET!,
         scope: "https://graph.microsoft.com/.default",
         grant_type: "client_credentials",
-      }),
+      }).toString(),
     },
     true,
   );
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Anmeldung bei Microsoft fehlgeschlagen: ${loginReason(data.error, data.error_description) ?? res.status}`);
-  token = { value: data.access_token, until: Date.now() + Number(data.expires_in ?? 3000) * 1000 };
+  if (status < 200 || status >= 300) throw new Error(`Anmeldung bei Microsoft fehlgeschlagen: ${loginReason(data.error as string | undefined, data.error_description as string | undefined) ?? status}`);
+  token = { value: String(data.access_token), until: Date.now() + Number(data.expires_in ?? 3000) * 1000 };
   return token.value;
 }
 
@@ -67,10 +69,11 @@ function loginReason(code?: string, desc?: string) {
   return desc ?? code;
 }
 
-async function graph(path: string, init: RequestInit & { prefer?: string; retry?: boolean } = {}) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function graph(path: string, init: { method?: string; body?: string; prefer?: string; retry?: boolean } = {}): Promise<any> {
   const { prefer, retry, ...rest } = init;
   const method = (rest.method ?? "GET").toUpperCase();
-  const res = await send(
+  const { status, data } = await send(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(process.env.MS_CALENDAR_USER!)}${path}`,
     {
       ...rest,
@@ -79,13 +82,14 @@ async function graph(path: string, init: RequestInit & { prefer?: string; retry?
         "content-type": "application/json",
         ...(prefer ? { prefer } : {}),
       },
-      cache: "no-store",
     },
     retry ?? (method === "GET" || method === "PATCH" || method === "DELETE"),
   );
-  if (res.status === 204 || res.status === 202) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Microsoft meldet einen Fehler (${res.status}): ${data?.error?.message ?? data?.error?.code ?? "unbekannt"}`);
+  if (status === 204 || status === 202) return null;
+  if (status < 200 || status >= 300) {
+    const err = data?.error as { message?: string; code?: string } | undefined;
+    throw new Error(`Microsoft meldet einen Fehler (${status}): ${err?.message ?? err?.code ?? "unbekannt"}`);
+  }
   return data;
 }
 
@@ -161,12 +165,16 @@ async function runCheck(): Promise<{ ok: boolean; message: string }> {
  * Verbindung prüfen (für die Kalenderseite): Anmeldung bei Microsoft und Zugriff auf den Kalender des Postfachs.
  * Die Seite wartet höchstens 8 Sekunden; ein gutes Ergebnis gilt 10 Minuten.
  */
-export async function graphCheck(): Promise<{ ok: boolean; message: string }> {
+export async function graphCheck(): Promise<{ ok: boolean; message: string; details?: string[] }> {
   if (lastOk && Date.now() - lastOk.at < 10 * 60_000) return { ok: true, message: lastOk.message };
   const slow = new Promise<{ ok: boolean; message: string }>((r) =>
     setTimeout(() => r(lastOk ? { ok: true, message: `${lastOk.message} Microsoft antwortet gerade langsam.` } : { ok: false, message: "Microsoft antwortet gerade langsam. Die Prüfung läuft im Hintergrund weiter, bitte die Seite gleich neu laden." }), 8_000),
   );
-  return Promise.race([runCheck(), slow]);
+  const r = await Promise.race([runCheck(), slow]);
+  if (r.ok) return r;
+  // Bei Netzproblemen gleich mitprüfen, welcher Weg zu Microsoft hängt, damit die Ursache sichtbar ist
+  const details = await msDiagnose().catch(() => []);
+  return { ...r, details };
 }
 
 export type OutlookEvent = { id: string; title: string; start: string; end: string; allDay: boolean; location: string | null; joinUrl: string | null; webLink: string | null };

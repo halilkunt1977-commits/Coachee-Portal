@@ -122,7 +122,7 @@ function Legend({ outlook }: { outlook: boolean }) {
   );
 }
 
-function MicrosoftCard({ on, check }: { on: boolean; check: { ok: boolean; message: string } | null }) {
+function MicrosoftCard({ on, check }: { on: boolean; check: { ok: boolean; message: string; details?: string[] } | null }) {
   return (
     <section className={`card space-y-2 ${on ? "" : "border-dashed"}`}>
       <div className="flex items-center gap-2.5">
@@ -140,6 +140,12 @@ function MicrosoftCard({ on, check }: { on: boolean; check: { ok: boolean; messa
           : "Teams-Termine funktionieren schon: Link aus Teams einfügen, das Portal schickt die Einladung. Nach der Anbindung erstellt es Teams-Links selbst und zeigt deine Outlook-Termine hier."}
       </p>
       {check && <p className={`text-xs ${check.ok ? "text-muted" : "text-danger"}`}>{check.message}</p>}
+      {check?.details?.length ? (
+        <details className="text-xs text-muted">
+          <summary className="cursor-pointer font-semibold">Technische Prüfung vom Server aus</summary>
+          <ul className="mt-1.5 space-y-0.5 break-words">{check.details.map((d) => <li key={d}>{d}</li>)}</ul>
+        </details>
+      ) : null}
     </section>
   );
 }
