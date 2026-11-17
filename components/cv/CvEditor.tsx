@@ -4,6 +4,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, ty
 import { cvJobs, improveWithAi, removePhoto, saveCv, skillsFromProfile, uploadPhoto, type AiField } from "@/app/actions/lebenslauf";
 import { renderCvHtml } from "@/lib/cv/render";
 import { COLORS, TEMPLATES, TIPS, type CvData, type CvLanguageKey, type CvPhoto, type PersonalLock, type TemplateKey } from "@/lib/cv/types";
+import { CvKi } from "./CvKi";
 import { CvPreview } from "./CvPreview";
 import { PhotoDialog } from "./PhotoDialog";
 import { SignatureField } from "./SignatureField";
@@ -201,6 +202,8 @@ export function CvEditor({ cvId, coacheeId, signName, signatureId: initialSignat
           <button type="button" className="tap px-1 text-xs font-semibold" onClick={() => setNotice(null)}>{t("Schließen")}</button>
         </div>
       )}
+
+      {ai && <CvKi cvId={cvId} data={data} pages={layout.pages} onApply={setData} beforeSend={flush} />}
 
       {designOpen && <DesignPicker data={data} photo={photoUrl} template={template} color={color} onTemplate={setTemplate} onColor={setColor} onLanguage={(l) => set("language", l)} onClose={() => setDesignOpen(false)} />}
 
