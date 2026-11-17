@@ -23,11 +23,12 @@ export default async function CoachLayout({ children }: LayoutProps<"/coach">) {
               (SELECT CASE WHEN EXISTS (SELECT 1 FROM backup_runs WHERE status = 'ok' AND finished_at > now() - interval '26 hours') THEN 0 ELSE 1 END)::int AS backup`,
       [user.id],
     ),
+    // Alle laufenden Coachings, alphabetisch (früher nur die acht zuletzt geänderten, dadurch fehlten Coachees)
     query<{ id: string; name: string; type: string; unread: number }>(
       `SELECT c.id, c.first_name || ' ' || c.last_name AS name, c.coaching_type AS type,
               (SELECT count(*) FROM messages m WHERE m.coachee_id = c.id AND m.read_at IS NULL AND m.author_id IS DISTINCT FROM $1)::int AS unread
          FROM coachees c WHERE c.coach_id = $1 AND c.status = 'aktiv' AND c.archived_at IS NULL
-        ORDER BY c.updated_at DESC LIMIT 8`,
+        ORDER BY c.first_name, c.last_name`,
       [user.id],
     ),
     presenceFor(user.id),
