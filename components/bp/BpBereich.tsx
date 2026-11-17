@@ -1,6 +1,8 @@
 "use client";
 import { useSearchParams } from "next/navigation";
-import { useRef, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { PlanChat } from "./PlanChat";
 import type { BankInfo } from "@/lib/bp/bank";
 import type { Sections } from "@/lib/bp/sections";
 import { BUNDESWEIT, FOERDER_STAND, landOf } from "@/lib/bp/foerderung";
@@ -33,8 +35,18 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
   const bank = useBank(p.bankHref, p.bank, p.cityLand, !p.coach);
   const abgaben = useAbgaben(p.abgabeHref, p.abgaben);
   const top = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  // Businessplan: Chat mit dem ganzen Plan als Dokument, „Selbst bearbeiten“ öffnet die Kapitel
+  const [plan, setPlan] = useState({ sections: p.sections, glance: p.glance });
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    // neuer Stand vom Server (nach dem Bearbeiten)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPlan({ sections: p.sections, glance: p.glance });
+  }, [p.sections, p.glance]);
 
   function go(next: Area | null) {
+    setEditing(false);
     const url = new URL(window.location.href);
     if (next) url.searchParams.set("bereich", next);
     else url.searchParams.delete("bereich");
@@ -71,7 +83,36 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
       </>
     );
   }
-  if (area === "amt" || area === "bank") return <>{anchor}<PlanEditor {...editor} sections={area === "bank" ? bankSections : editor.sections} key={area} mode={area} onBack={() => go(null)} bankState={bank} abgaben={abgaben} /></>;
+  if (area === "amt" && !editing)
+    return (
+      <>
+        {anchor}
+        <PlanChat
+          coacheeId={p.coacheeId}
+          name={p.name}
+          title={p.title}
+          sections={plan.sections}
+          glance={plan.glance}
+          figures={p.figures}
+          runs={p.runs}
+          href={p.gesamtHref}
+          pdfHref={p.pdfHref}
+          wordHref={p.wordHref}
+          ai={p.ai}
+          onBack={() => go(null)}
+          onEdit={() => setEditing(true)}
+          onChange={(sections, glance) => setPlan({ sections, glance })}
+        />
+      </>
+    );
+  if (area === "amt")
+    return (
+      <>
+        {anchor}
+        <PlanEditor {...editor} sections={plan.sections} glance={plan.glance} ai={false} backLabel="Zurück zum Chat" key="amt-edit" mode="amt" onBack={() => { setEditing(false); router.refresh(); }} bankState={bank} abgaben={abgaben} />
+      </>
+    );
+  if (area === "bank") return <>{anchor}<PlanEditor {...editor} sections={bankSections} key={area} mode={area} onBack={() => go(null)} bankState={bank} abgaben={abgaben} /></>;
 
   if (area === "foerderung" || area === "kredite") {
     return (
@@ -109,7 +150,7 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     {anchor}
     <div className="grid gap-4 sm:grid-cols-2">
       {fragenTile}
-      <Tile icon={<IconAmt />} title={t("Businessplan fürs Amt")} text={p.coach ? t("Für Jobcenter und Agentur für Arbeit: Gründungszuschuss, Einstiegsgeld") : t("Dein Plan für Jobcenter und Agentur für Arbeit zum Lesen")} onClick={() => go("amt")}
+      <Tile icon={<IconAmt />} title={p.coach ? t("Businessplan") : t("Businessplan fürs Amt")} text={p.coach ? t("Im Chat schreiben: Unterlagen hochladen, sagen, was du willst, der ganze Plan wird direkt geschrieben") : t("Dein Plan für Jobcenter und Agentur für Arbeit zum Lesen")} onClick={() => go("amt")}
         foot={<><span>{t("{a} von {b} Kapiteln fertig", { a: p.doneCount, b: p.chapterCount })}</span><span className={lastOf("fachstelle") ? "text-ok" : ""}>{when(lastOf("fachstelle"))}</span></>} />
       <Tile icon={<IconBank />} title={t("Businessplan für die Bank")} text={p.coach ? t("Für Kreditantrag und KfW: mit Kapitaldienst, Tilgungsplan und Fragen fürs Bankgespräch") : t("Dein Plan für den Kreditantrag bei der Bank zum Lesen")} onClick={() => go("bank")}
         foot={p.coach ? <><span>{t("{a} von {b} Kapiteln fertig", { a: p.bankDone, b: p.bankCount })} · {t("{a} von {b} Bankfragen beantwortet", { a: answered, b: bank.b.fragen.length })}</span><span className={lastOf("bank") ? "text-ok" : ""}>{when(lastOf("bank"))}</span></> : <><span>{t("{a} von {b} Kapiteln fertig", { a: p.bankDone, b: p.bankCount })}</span><span className={lastOf("bank") ? "text-ok" : ""}>{when(lastOf("bank"))}</span></>} />
