@@ -267,3 +267,53 @@ export async function keepCurrentFinance(coacheeId: string, reason: string) {
   if (row) await saveSnapshot(c.id, normalizeFinance(row.finance), reason, coach.id);
   await audit(coach.id, "finance_restored", c.id, { reason: reason.slice(0, 120) });
 }
+
+// ---------- Finanzplan als Chat (nur Coach) ----------
+
+export type FinanceChatResult = { ok: true; finance: FinanceInput; version: number; note: string; before: FinanceInput | null } | { ok: false; error: string };
+
+/**
+ * Finanzplan im Chat: Der Coach schreibt, was hinein soll (gern auch „fertigstellen“), und gibt Unterlagen mit.
+ * Die KI trägt alles in die Blätter ein, der neue Stand wird sofort gespeichert. Der Stand davor wird als Fassung
+ * abgelegt und kommt für „Rückgängig“ mit zurück.
+ */
+export async function financeChat(coacheeId: string, message: string, files: string[], earlier: FinanceTurn[]): Promise<FinanceChatResult> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const text = message.trim().slice(0, 8000) || "Stell den Finanzplan komplett fertig.";
+  try {
+    await assertAiAllowed(coach, { coachOnly: true });
+    const plan = await planFor(c);
+    const ids = (Array.isArray(files) ? files : []).filter((x) => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)).slice(0, 10);
+    const docs = ids.length ? await query<{ title: string; extracted_text: string | null }>("SELECT title, extracted_text FROM documents WHERE coachee_id = $1 AND id = ANY($2::uuid[])", [c.id, ids]) : [];
+    const attached = docs.map((d) => `### ${d.title}\n${d.extracted_text ?? ""}`).join("\n\n");
+    const turns = (Array.isArray(earlier) ? earlier : []).slice(-8).map((t) => ({ message: String(t?.message ?? "").slice(0, 2000), note: String(t?.note ?? "").slice(0, 1500) }));
+    const res = await changeFinance(coach, c, plan.finance, text, turns, attached);
+    const changed = JSON.stringify(res.finance) !== JSON.stringify(plan.finance);
+    if (!changed) return { ok: true, finance: plan.finance, version: plan.finance_version, note: res.note || "Nichts geändert.", before: null };
+    await saveSnapshot(c.id, plan.finance, "Vor einer Änderung im Chat", coach.id);
+    const row = await one<{ finance_version: number }>(
+      "UPDATE business_plans SET finance = $2, finance_version = finance_version + 1, finance_updated_by = $3, updated_at = now() WHERE coachee_id = $1 RETURNING finance_version",
+      [c.id, JSON.stringify(res.finance), coach.id],
+    );
+    await auditThrottled(coach, "finance_ai", c.id);
+    revalidatePath(`/coach/coachees/${c.id}`);
+    return { ok: true, finance: res.finance, version: row!.finance_version, note: res.note || "Eingetragen.", before: plan.finance };
+  } catch (e) {
+    if (!(e instanceof AiError)) console.error("Finanzplan-Chat", e);
+    return { ok: false, error: e instanceof AiError ? e.message : "Das hat gerade nicht geklappt. Bitte gleich noch einmal versuchen." };
+  }
+}
+
+/** „Rückgängig“ im Finanzplan-Chat: den Stand vor der Antwort wieder einsetzen */
+export async function financeChatUndo(coacheeId: string, before: unknown): Promise<{ ok: true; finance: FinanceInput; version: number } | { ok: false; error: string }> {
+  const coach = await requireCoach();
+  const c = await gruendungCoachee(coach, coacheeId);
+  const f = normalizeFinance(before);
+  const row = await one<{ finance_version: number }>(
+    "UPDATE business_plans SET finance = $2, finance_version = finance_version + 1, finance_updated_by = $3, updated_at = now() WHERE coachee_id = $1 RETURNING finance_version",
+    [c.id, JSON.stringify(f), coach.id],
+  );
+  revalidatePath(`/coach/coachees/${c.id}`);
+  return row ? { ok: true, finance: f, version: row.finance_version } : { ok: false, error: "Das hat nicht geklappt." };
+}

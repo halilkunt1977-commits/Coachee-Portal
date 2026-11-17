@@ -83,12 +83,11 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
       </>
     );
   }
-  if (area === "amt" && !editing)
+  if (p.coach && (area === "amt" || area === null) && !editing)
     return (
       <>
         {anchor}
         <PlanChat
-          coacheeId={p.coacheeId}
           name={p.name}
           title={p.title}
           sections={plan.sections}
@@ -99,13 +98,18 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
           pdfHref={p.pdfHref}
           wordHref={p.wordHref}
           ai={p.ai}
-          onBack={() => go(null)}
+          more={[
+            { label: "Fassung für die Bank", onClick: () => go("bank") },
+            { label: "Förderungen", onClick: () => go("foerderung") },
+            { label: "Kredite", onClick: () => go("kredite") },
+            { label: p.fragen.beantwortet ? `Fragen an ${p.vorname} (${p.fragen.beantwortet} neue Antworten)` : `Fragen an ${p.vorname}`, onClick: () => go("fragen") },
+          ]}
           onEdit={() => setEditing(true)}
           onChange={(sections, glance) => setPlan({ sections, glance })}
         />
       </>
     );
-  if (area === "amt")
+  if (p.coach && (area === "amt" || area === null))
     return (
       <>
         {anchor}
