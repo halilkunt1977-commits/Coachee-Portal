@@ -38,6 +38,8 @@ type Props = {
   branche: string;
   /** Businessplan-KI: Kapitel an die Zahlen anpassen (nur Coach mit KI) */
   gesamtHref: string | null;
+  /** KI-Kasten ausblenden (der Chat übernimmt das) */
+  hideAi?: boolean;
   /** Bundesland (Förderprogramme) */
   land: string;
 };
@@ -146,7 +148,7 @@ export function FinanceEditor(p: Props) {
         </div>
       )}
 
-      {p.coach && <FinanzKi coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} request={kiRequest} onApply={(next) => { setF(next); schedule(); }} />}
+      {p.coach && !p.hideAi && <FinanzKi coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} request={kiRequest} onApply={(next) => { setF(next); schedule(); }} />}
       {p.coach && <FinanzFassungen coacheeId={p.coacheeId} finance={f} blocked={state.kind === "conflict"} onApply={(next) => { setF(next); schedule(); }} />}
 
       <Summary f={f} r={r} branche={branche} />

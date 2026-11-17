@@ -17,6 +17,17 @@ export function mockJson(schemaName: string, input: string, instructions?: strin
     const nrs = [...input.matchAll(/^(\d+)\. (.+)$/gm)];
     return { bewertungen: nrs.map((m, i) => ({ nr: Number(m[1]), prozent: [92, 84, 65, 40][i % 4], grund: `Testeinschätzung ohne KI für „${m[2].slice(0, 40)}“.` })) };
   }
+  if (schemaName === "businessplan_chat") {
+    const neu = input.match(/^Neue Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
+    const keys = [...new Set([...input.matchAll(/\[key: (\w+)\]/g)].map((m) => m[1]))];
+    const att = input.includes("gerade mitgegebene Dateien") ? " (mit Anhang gelesen)" : "";
+    if (neu.trim().endsWith("?")) return { reply: `**Testantwort ohne KI**${att} zur Frage „${neu}“.`, chapters: [], glance: [] };
+    return {
+      reply: `Testplan ohne KI${att}: alle Kapitel geschrieben. Annahme: Stundensatz 55 €.`,
+      chapters: keys.map((key) => ({ key, text: `[Name] plant: ${vorhaben}. Testtext für ${key}.\n\n### Leistungen\n- Leistung A (Annahme)\n- Leistung B\n\nAuftrag: ${neu.slice(0, 120)}` })),
+      glance: [{ label: "Start", value: "01.03.2027 (Annahme)" }],
+    };
+  }
   if (schemaName === "bp_pruefung") {
     const neu = input.match(/^Neue Nachricht des Coachs: (.+)$/m)?.[1] ?? "";
     const frage = neu.trim().endsWith("?");

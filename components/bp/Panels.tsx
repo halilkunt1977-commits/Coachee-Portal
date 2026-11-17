@@ -8,7 +8,7 @@ import { CHAT_KEY, recentRuns } from "@/lib/bp/gesamt-ki";
 import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { guessLand } from "@/lib/bp/foerderung";
-import { FinanceEditor } from "./FinanceEditor";
+import { FinanceArea } from "./FinanceArea";
 import { Suspense } from "react";
 import { BpBereich } from "./BpBereich";
 import { FinanceReader } from "./Reader";
@@ -106,7 +106,10 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
   // Der Coachee liest den Finanzplan nur, bearbeiten kann ihn allein der Coach
   if (!coach) return <FinanceReader figures={financeIsEmpty(plan.finance) ? null : keyFigures(plan.finance)} pdfHref={files(c.id).pdf} excelHref={files(c.id).excel} />;
   return (
-    <FinanceEditor
+    <FinanceArea
+      name={fullName(c)}
+      uploadHref={`${files(c.id).gesamt}/datei`}
+      ai={aiEnabled()}
       coacheeId={c.id}
       coach={coach}
       initial={plan.finance}

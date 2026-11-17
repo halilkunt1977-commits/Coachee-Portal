@@ -70,33 +70,39 @@ Aufbau (alle Beträge netto in Euro):
 - living: private Lebenshaltungskosten des Haushalts im Monat (Miete privat, Lebensmittel, Kranken- und Pflegeversicherung, Altersvorsorge …). Sie belegen, dass privateDraw den Lebensunterhalt deckt; sie fließen nicht in die Rentabilität.
 
 Regeln:
-- Ändere nur, was der Coach sagt oder was daraus zwingend folgt. Alles andere gibst du unverändert zurück, Zahl für Zahl und Text für Text, auch Herleitungen und Hinweise.
+- Ihr arbeitet wie in einem Chat bei ChatGPT: Du stellst KEINE Rückfragen und lieferst immer ein fertiges Ergebnis.
+- Sagt der Coach „fertigstellen“, „komplett“, „mach den Finanzplan“ oder ist der Plan noch weitgehend leer: Stell den ganzen Finanzplan fertig. Fülle alle Blätter (Umsätze mit Mengen für alle 36 Monate inkl. Anlauf, laufende Kosten, Anschaffungen, Personal falls passend, Finanzierung, Lebenshaltung, Privatentnahme, Steuerrücklage, Anfangsliquidität, Reserve) und die Herleitungen in notes, passend zum Vorhaben, zum Businessplan und zu den Unterlagen.
+- Fehlt eine Zahl, setze einen realistischen, branchenüblichen Wert für eine kleine Gründung in Deutschland ein und schreibe „Annahme“ in note bzw. reason des Postens. Die Finanzierung soll den Kapitalbedarf decken und der Kontostand soll nicht dauerhaft negativ sein.
+- Ansonsten ändere nur, was der Coach sagt oder was daraus zwingend folgt. Alles andere gibst du unverändert zurück, Zahl für Zahl und Text für Text, auch Herleitungen und Hinweise.
 - Neue Posten bekommen einen kurzen, klaren Namen. Steht im Text eine Begründung oder Quelle, gehört sie in note bzw. reason.
 - Mengen über die Zeit: Sagt der Coach z. B. „ab Monat 3 je 80 Stunden, ab Jahr 2 je 100“, setzt du die Monate genau so. Ein Anlauf („steigt in sechs Monaten auf …“) wird gleichmäßig verteilt.
 - „Monat 1“ des Coachs ist Index 0. Nennt er ein Datum, rechnest du den Index aus der Monatsliste aus.
-- Ist eine Branche angegeben, nutze ihr Profil: typische Posten, Kennzahlen und übliche Quoten. Bittet der Coach ausdrücklich um eine Schätzung, setze realistische Werte für eine kleine Gründung in Deutschland ein und schreibe „Schätzung, bitte prüfen“ in note bzw. reason des Postens.
-- Erfinde sonst keine Zahlen. Fehlt eine Angabe, die du für eine Änderung brauchst, ändere diesen Teil nicht und frag in note danach.
+- Ist eine Branche angegeben, nutze ihr Profil: typische Posten, Kennzahlen und übliche Quoten.
+- Unterlagen des Coachs (z. B. Angebote, Preislisten, ein Finanzplan aus einem anderen Programm, Fotos) übernimmst du mit ihren Zahlen.
 - Ist die Nachricht eine Frage zum Plan, beantworte sie in note und gib den Finanzplan unverändert zurück.
-- note: ein bis drei kurze Sätze an den Coach (per du): was du geändert hast, mit den wichtigsten Zahlen, und was noch fehlt.
+- note: zwei bis vier kurze Sätze an den Coach (per du): was du eingetragen oder geändert hast, mit den wichtigsten Zahlen (Kapitalbedarf, Umsatz und Ergebnis Jahr 1), und welche wichtigen Annahmen du getroffen hast.
 - Namen sind durch [Name] ersetzt. Angaben zur Gesundheit gehören nicht in den Finanzplan.`;
 
 /** Angaben des Coachs in den Finanzplan eintragen */
-export async function changeFinance(user: User, c: Coachee, current: FinanceInput, message: string, earlier: FinanceTurn[]) {
+export async function changeFinance(user: User, c: Coachee, current: FinanceInput, message: string, earlier: FinanceTurn[], attached = "") {
   const [vorhaben, plan] = await Promise.all([
     one<{ history: unknown }>("SELECT history FROM bp_notes WHERE coachee_id = $1 AND section = $2", [c.id, VORHABEN]),
-    one<{ branche: string }>("SELECT branche FROM business_plans WHERE coachee_id = $1", [c.id]),
+    one<{ branche: string; sections: Record<string, { text?: string }> | null }>("SELECT branche, sections FROM business_plans WHERE coachee_id = $1", [c.id]),
   ]);
   const r = calculate(current);
   const months = Array.from({ length: MONTHS }, (_, i) => `${i}=${monthLabel(current.start, i)}`).join(", ");
   const notes = normalizeTurns(vorhaben?.history ?? []).filter((t) => t.role === "coach").map((t) => `- ${t.text}`).join("\n").slice(0, 4000);
   const names = [c.first_name, c.last_name];
+  const planText = Object.values(plan?.sections ?? {}).map((x) => String(x?.text ?? "").trim()).filter(Boolean).join("\n\n").slice(0, 12000);
   // Die Zahlen selbst gehen unverändert hinaus, damit Bezeichnungen nicht verfälscht zurückkommen; Freitexte werden pseudonymisiert
   const input = [
     `Monatsindizes: ${months}`,
     `Ergebnis bisher je Jahr: Umsatz ${r.years.map((y) => eur(y.revenue)).join(" / ")}, Ergebnis vor Steuern ${r.years.map((y) => eur(y.profit)).join(" / ")}, Kontostand am Jahresende ${r.years.map((y) => eur(y.balance)).join(" / ")}`,
     brancheBlock(brancheOf(plan?.branche ?? "")),
     notes ? pseudonymize(`Notizen des Coachs zum Vorhaben:\n${notes}`, names) : "",
+    planText ? pseudonymize(`Businessplan (Auszug, Zahlen im Finanzplan sollen dazu passen):\n${planText}`, names) : "",
     earlier.length ? pseudonymize(`Bisher in diesem Gespräch:\n${earlier.slice(-6).map((t) => `Coach: ${t.message}\nDu: ${t.note}`).join("\n")}`, names) : "",
+    attached ? pseudonymize(`Vom Coach mitgegebene Unterlagen (wichtig, gehören zu seiner Nachricht):\n${attached.slice(0, 30000)}`, names) : "",
     `Aktueller Finanzplan (JSON):\n${JSON.stringify(current)}`,
     pseudonymize(`Nachricht des Coachs: ${message}`, names),
   ].filter(Boolean).join("\n\n");
@@ -108,7 +114,7 @@ export async function changeFinance(user: User, c: Coachee, current: FinanceInpu
     input,
     schemaName: "finanzplan",
     schema: SCHEMA,
-    maxTokens: 16000,
+    maxTokens: 32000,
   });
   return { finance: normalizeFinance({ ...(res.finance as object), v: 2 }), note: String(res.note ?? "").trim().slice(0, 1000) };
 }
