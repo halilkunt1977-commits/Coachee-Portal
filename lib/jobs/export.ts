@@ -1,6 +1,6 @@
 import "server-only";
 import ExcelJS from "exceljs";
-import { APPLIED, channelLabel, jobUrl, publicRefnr, statusLabel, type Application } from "./shared";
+import { APPLIED, channelLabel, jobUrlExternal, publicRefnr, statusLabel, type Application } from "./shared";
 
 /*
  * Nachweis der Eigenbemühungen: alle Bewerbungen mit Datum, Arbeitgeber, Stelle, Art der Bewerbung und Ergebnis,
@@ -30,7 +30,7 @@ export async function applicationsWorkbook(apps: Application[], meta: Meta) {
   ws.getRow(4).eachCell((c) => (c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3A5F" } }));
   appliedOnly(apps).forEach((a, i) => {
     const row = ws.getRow(5 + i);
-    row.values = [i + 1, a.applied_on ? new Date(`${a.applied_on}T12:00:00Z`) : "", a.employer, a.title, a.location, channelLabel(a.channel), RESULT[a.status] ?? statusLabel(a.status), publicRefnr(a.refnr) ?? "", a.url ? { text: jobUrl(a.url), hyperlink: jobUrl(a.url) } : ""];
+    row.values = [i + 1, a.applied_on ? new Date(`${a.applied_on}T12:00:00Z`) : "", a.employer, a.title, a.location, channelLabel(a.channel), RESULT[a.status] ?? statusLabel(a.status), publicRefnr(a.refnr) ?? "", a.url ? { text: jobUrlExternal(a.url), hyperlink: jobUrlExternal(a.url) } : ""];
     row.getCell(2).numFmt = "dd.mm.yyyy";
     row.alignment = { vertical: "top", wrapText: true };
   });

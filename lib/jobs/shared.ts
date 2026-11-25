@@ -30,14 +30,29 @@ export type Job = {
   source?: JobSource;
 };
 
-/** Link zur Anzeige bei der Arbeitsagentur. Die alte Adresse /jobsuche/jobdetail/<refnr> lädt nicht mehr (Zeitüberschreitung), die Jobsuche öffnet Anzeigen jetzt über /jobsuche/suche?id=<refnr>. */
+/** Link zur Anzeige auf der Seite der Arbeitsagentur */
 export const baJobUrl = (refnr: string) => `https://www.arbeitsagentur.de/jobsuche/suche?id=${encodeURIComponent(refnr)}`;
 
-/** Gespeicherte Links mit der alten Arbeitsagentur-Adresse auf die neue umschreiben, andere Links bleiben wie sie sind */
+/** Referenznummer aus einem Arbeitsagentur-Link (alte Form /jobsuche/jobdetail/<refnr> oder neue /jobsuche/suche?id=<refnr>) */
+export function baRefnr(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = /^https?:\/\/(?:www\.)?arbeitsagentur\.de\/jobsuche\/(?:jobdetail\/([^/?#]+)|suche\?(?:[^#]*&)?id=([^&#]+))/.exec(url);
+  const raw = m?.[1] ?? m?.[2];
+  if (!raw) return null;
+  try { return decodeURIComponent(raw); } catch { return raw; }
+}
+
+/** Gespeicherte Arbeitsagentur-Links auf die aktuelle Adresse bringen (für Export), andere Links bleiben */
+export function jobUrlExternal<T extends string | null | undefined>(url: T): T {
+  const r = baRefnr(url);
+  return (r ? baJobUrl(r) : url) as T;
+}
+
+/** Link zum Anklicken im Portal: Anzeigen der Arbeitsagentur öffnen die Ansicht im Portal (/stelle/<refnr>), weil die Seite
+ *  der Arbeitsagentur in manchen Netzen (z. B. Handy-Hotspot) nicht lädt. Andere Links bleiben wie sie sind. */
 export function jobUrl<T extends string | null | undefined>(url: T): T {
-  if (!url) return url;
-  const m = /^https?:\/\/(?:www\.)?arbeitsagentur\.de\/jobsuche\/jobdetail\/([^/?#]+)/.exec(url);
-  return (m ? baJobUrl(decodeURIComponent(m[1])) : url) as T;
+  const r = baRefnr(url);
+  return (r ? `/stelle/${encodeURIComponent(r)}` : url) as T;
 }
 
 /** Referenznummer zum Vorzeigen: nur die der Arbeitsagentur, die anderen Börsen haben interne Kennungen („adzuna:…“) */
