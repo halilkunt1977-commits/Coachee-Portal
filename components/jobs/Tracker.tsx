@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { addApplication, deleteApplication, updateApplication } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
 import { useT } from "../i18n/LangProvider";
-import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
+import { APPLIED, CHANNELS, SALUTATIONS, STATUSES, STATUS_TONE, channelLabel, jobUrl, publicRefnr, statusLabel, today, type Application, type Status } from "@/lib/jobs/shared";
 
 /** prepHref: Adresse der Gesprächsvorbereitung, „{id}“ steht für die Bewerbung. prepAll: jede gespeicherte zeigen (Coach oder Freigabe), sonst nur geschickte */
 type Props = { coacheeId: string; coach: boolean; firstName: string; initial: Application[]; searchHref: string; exportHref: { pdf: string; excel: string }; focus?: string | null; prepHref?: string | null; prepAll?: boolean; prepSelf?: boolean; trainHref?: string | null };
@@ -200,7 +200,7 @@ export function Tracker(p: Props) {
               <div className="flex flex-wrap items-start gap-3 p-4">
                 <div className="min-w-0 flex-1 basis-64">
                   <div className="flex flex-wrap items-center gap-2">
-                    {a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{a.title}</a> : <span className="font-semibold">{a.title}</span>}
+                    {a.url ? <a href={jobUrl(a.url)} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{a.title}</a> : <span className="font-semibold">{a.title}</span>}
                   </div>
                   <p className="text-sm">{[a.employer, a.location].filter(Boolean).join(" · ")}</p>
                   <p className="text-xs text-muted">

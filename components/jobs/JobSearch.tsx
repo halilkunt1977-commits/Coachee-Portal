@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { addSearch, deleteSearch, findMatchingJobs, hideJob, rateJobs, runSearch, saveJob, setAutoJobs, suggestSearches, type SearchIdea, type SearchResult } from "@/app/actions/stellen";
 import { ShareButton } from "../teilen/ShareButton";
 import { SetupHint } from "../coach/SetupHint";
-import { ANGEBOTSART, ARBEITSZEIT, LAENDER, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, jobKey, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
+import { ANGEBOTSART, ARBEITSZEIT, LAENDER, SOURCE_LABEL, STATUS_TONE, UMKREIS, boardLinks, describeQuery, jobKey, jobUrl, statusLabel, type Fit, type Job, type JobQuery, type JobSource, type SavedSearch, type Status } from "@/lib/jobs/shared";
 import type { SourceInfo } from "@/lib/jobs/sources";
 import type { T } from "@/lib/i18n";
 import { useLocale, useT } from "../i18n/LangProvider";
@@ -374,7 +374,7 @@ export function JobSearch(p: Props) {
                 <li key={j.refnr} className="card !p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 basis-72">
-                      <a href={j.url} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{j.title}</a>
+                      <a href={jobUrl(j.url)} target="_blank" rel="noopener noreferrer" className="font-semibold hover:text-accent hover:underline">{j.title}</a>
                       <p className="text-sm">{[j.employer, j.location && `${j.location}${j.distance != null ? ` (${Math.round(j.distance)} km)` : ""}`].filter(Boolean).join(" · ")}</p>
                       <p className="text-xs text-muted">{[j.source && j.source !== "ba" ? t("über {quelle}", { quelle: SOURCE_LABEL[j.source] }) : "", j.beruf && j.beruf !== j.title ? j.beruf : "", j.published && t("veröffentlicht {wann}", { wann: ago(j.published, t) }), j.start && t("ab {datum}", { datum: new Date(j.start).toLocaleDateString("de-DE") })].filter(Boolean).join(" · ")}</p>
                       {fit && (

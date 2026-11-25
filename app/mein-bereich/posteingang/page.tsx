@@ -14,7 +14,7 @@ import { dayMedium, isKind, KINDS } from "@/lib/calendar/dates";
 import { inboxEntries, inboxThread, type InboxEntry, type InboxThread } from "@/lib/coachee-inbox";
 import { one, query } from "@/lib/db";
 import { categoryLabel } from "@/lib/documents";
-import { statusLabel, STATUS_TONE, type Status } from "@/lib/jobs/shared";
+import { jobUrl, statusLabel, STATUS_TONE, type Status } from "@/lib/jobs/shared";
 import { localeOf, type Lang, type T } from "@/lib/i18n";
 import { getT, serverLang } from "@/lib/i18n-server";
 
@@ -221,7 +221,7 @@ function Entry({ e, when, open, t, lang }: { e: InboxEntry; when: string; open: 
           ) : (
             j.status === "gemerkt" && <Link href={`/anschreiben/${j.id}`} className="btn btn-sm">{t("Bewerben")}</Link>
           )}
-          {j.url && <a href={j.url} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">{t("Anzeige ansehen")} ↗</a>}
+          {j.url && <a href={jobUrl(j.url)} target="_blank" rel="noopener noreferrer" className="btn-ghost btn-sm">{t("Anzeige ansehen")} ↗</a>}
           <Link href={`/mein-bereich/bewerbungen?stelle=${j.id}`} className="btn-ghost btn-sm">{t("In Bewerbungen")}</Link>
           {proposal && (
             <form action={inboxJobStatus.bind(null, e.id, j.id, "verworfen")}><SubmitButton className="btn-ghost btn-sm text-muted" pendingText={t("Einen Moment …")}>{t("Passt nicht")}</SubmitButton></form>
