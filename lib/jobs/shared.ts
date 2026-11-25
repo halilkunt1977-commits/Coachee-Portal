@@ -30,6 +30,16 @@ export type Job = {
   source?: JobSource;
 };
 
+/** Link zur Anzeige bei der Arbeitsagentur. Die alte Adresse /jobsuche/jobdetail/<refnr> lädt nicht mehr (Zeitüberschreitung), die Jobsuche öffnet Anzeigen jetzt über /jobsuche/suche?id=<refnr>. */
+export const baJobUrl = (refnr: string) => `https://www.arbeitsagentur.de/jobsuche/suche?id=${encodeURIComponent(refnr)}`;
+
+/** Gespeicherte Links mit der alten Arbeitsagentur-Adresse auf die neue umschreiben, andere Links bleiben wie sie sind */
+export function jobUrl<T extends string | null | undefined>(url: T): T {
+  if (!url) return url;
+  const m = /^https?:\/\/(?:www\.)?arbeitsagentur\.de\/jobsuche\/jobdetail\/([^/?#]+)/.exec(url);
+  return (m ? baJobUrl(decodeURIComponent(m[1])) : url) as T;
+}
+
 /** Referenznummer zum Vorzeigen: nur die der Arbeitsagentur, die anderen Börsen haben interne Kennungen („adzuna:…“) */
 export const publicRefnr = (refnr: string | null) => (refnr && !/^(adzuna|jooble|careerjet):/.test(refnr) ? refnr : null);
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Coachee } from "@/lib/access";
 import { jobTips } from "@/lib/jobs/empfehlungen";
-import { SOURCE_LABEL, describeQuery } from "@/lib/jobs/shared";
+import { SOURCE_LABEL, describeQuery, jobUrl } from "@/lib/jobs/shared";
 import { getT } from "@/lib/i18n-server";
 import { JobTipSave } from "./JobTipSave";
 
@@ -24,7 +24,7 @@ export async function JobTips({ c }: { c: Coachee }) {
         {tips.map((j) => (
           <li key={j.refnr} className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3 first:pt-0">
             <div className="min-w-0 flex-1 basis-52">
-              <a href={j.externalUrl ?? j.url} target="_blank" rel="noreferrer" className="font-semibold leading-snug hover:text-accent hover:underline">{j.title}</a>
+              <a href={j.externalUrl ?? jobUrl(j.url)} target="_blank" rel="noreferrer" className="font-semibold leading-snug hover:text-accent hover:underline">{j.title}</a>
               <p className="truncate text-sm text-muted">{[j.employer, j.location, j.distance != null ? `${j.distance.toLocaleString("de-DE")} km` : ""].filter(Boolean).join(" · ")}</p>
               <p className="text-xs text-muted">{t("passt zu „{term}“", { term: j.term })}{j.source && j.source !== "ba" ? ` · ${t("über {quelle}", { quelle: SOURCE_LABEL[j.source] })}` : ""}</p>
             </div>

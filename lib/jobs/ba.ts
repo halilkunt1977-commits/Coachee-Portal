@@ -1,5 +1,5 @@
 import "server-only";
-import type { Job, JobQuery } from "./shared";
+import { baJobUrl, type Job, type JobQuery } from "./shared";
 
 /*
  * Jobbörse der Bundesagentur für Arbeit (öffentliche Schnittstelle, siehe github.com/bundesAPI/jobsuche-api).
@@ -111,7 +111,7 @@ export function parseResult(data: unknown): { jobs: Job[]; total: number } {
       distance: rawDist && Number.isFinite(dist) ? dist : null,
       published: period("veroeffentlichungszeitraum") || str(x.aktuelleVeroeffentlichungsdatum) || str(x.datumErsteVeroeffentlichung) || str(x.veroeffentlichungsdatum) || null,
       start: period("eintrittszeitraum") || str(x.eintrittsdatum) || null,
-      url: `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(refnr)}`,
+      url: baJobUrl(refnr),
       externalUrl: /^https?:\/\//.test(external) ? external : null,
       homeoffice: typeof x.homeofficemoeglich === "boolean" ? x.homeofficemoeglich : undefined,
     });
