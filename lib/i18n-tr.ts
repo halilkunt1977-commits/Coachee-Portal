@@ -2442,4 +2442,8 @@ export const TR: Record<string, string> = {
   "Noch einmal an Coach schicken": "Koça tekrar gönder",
   "– bitte wählen –": "– lütfen seç –",
   "Noch keine Antworten.": "Henüz cevap yok.",
+  "Die Zahlen aus dem Fragebogen ersetzen im Finanzplan die passenden Bereiche, danach wird der ganze Businessplan neu geschrieben. Der bisherige Stand wird als Fassung gesichert. Weiter?": "Anketteki rakamlar finans planındaki ilgili bölümlerin yerine geçer, ardından iş planının tamamı yeniden yazılır. Önceki durum bir sürüm olarak saklanır. Devam edilsin mi?",
+  "Übernehmen und Businessplan schreiben": "Aktar ve iş planını yaz",
+  "Nur Zahlen in den Finanzplan übernehmen": "Sadece rakamları finans planına aktar",
+  "Zum Businessplan": "İş planına",
 };

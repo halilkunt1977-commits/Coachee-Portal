@@ -2,7 +2,8 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { PlanChat } from "./PlanChat";
+import { PlanStudio } from "./PlanStudio";
+import type { PlanStand } from "@/lib/bp/stand";
 import type { BankInfo } from "@/lib/bp/bank";
 import type { Sections } from "@/lib/bp/sections";
 import { BUNDESWEIT, FOERDER_STAND, landOf } from "@/lib/bp/foerderung";
@@ -29,7 +30,7 @@ export type FragebogenKurz = { gestartet: boolean; submitted_at: string | null; 
 
 type EditorProps = Omit<ComponentProps<typeof PlanEditor>, "mode" | "onBack" | "bankState" | "abgaben">;
 
-export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number; bankSections: Sections; bankDone: number; bankCount: number; fragenHref: string; vorname: string; fragen: FragenStand; fragebogenHref: string; fragebogen: FragebogenKurz }) {
+export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number; bankSections: Sections; bankDone: number; bankCount: number; fragenHref: string; vorname: string; fragen: FragenStand; fragebogenHref: string; fragebogen: FragebogenKurz; stand: PlanStand; financeDa: boolean }) {
   const t = useT();
   const sp = useSearchParams();
   const raw = sp.get("bereich");
@@ -40,12 +41,17 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
   const router = useRouter();
   // Businessplan: Chat mit dem ganzen Plan als Dokument, „Selbst bearbeiten“ öffnet die Kapitel
   const [plan, setPlan] = useState({ sections: p.sections, glance: p.glance });
+  const [bankSections, setBankSections] = useState(p.bankSections);
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     // neuer Stand vom Server (nach dem Bearbeiten)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlan({ sections: p.sections, glance: p.glance });
   }, [p.sections, p.glance]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBankSections(p.bankSections);
+  }, [p.bankSections]);
 
   function go(next: Area | null) {
     setEditing(false);
@@ -60,8 +66,8 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     });
   }
 
-  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, bankSections, bankDone: _bd, bankCount: _bc, fragenHref: _f, vorname: _v, fragen: _fs, fragebogenHref: _fbh, fragebogen: _fb, ...editor } = p;
-  void [_b, _c, _h, _a, _l, _z, _d, _n, _bd, _bc, _f, _v, _fs, _fbh, _fb];
+  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, bankSections: _bs, bankDone: _bd, bankCount: _bc, fragenHref: _f, vorname: _v, fragen: _fs, fragebogenHref: _fbh, fragebogen: _fb, stand: _st, financeDa: _fd, ...editor } = p;
+  void [_b, _c, _h, _a, _l, _z, _d, _n, _bs, _bd, _bc, _f, _v, _fs, _fbh, _fb, _st, _fd];
 
   const anchor = <div ref={top} className="h-0" aria-hidden />;
   if (area === "fragebogen") return <>{anchor}<Fragebogen href={p.fragebogenHref} coach={p.coach} vorname={p.vorname} financeHref={p.financeHref} onBack={() => go(null)} /></>;
@@ -86,30 +92,33 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
       </>
     );
   }
-  if (p.coach && (area === "amt" || area === null) && !editing)
+  if (p.coach && (area === "amt" || area === "bank" || area === null) && !editing)
     return (
       <>
         {anchor}
-        <PlanChat
+        <PlanStudio
+          fassung={area === "bank" ? "bank" : "amt"}
+          onFassung={(f) => go(f === "bank" ? "bank" : null)}
           name={p.name}
+          vorname={p.vorname}
           title={p.title}
           sections={plan.sections}
           glance={plan.glance}
+          bankSections={bankSections}
           figures={p.figures}
           runs={p.runs}
+          stand={p.stand}
+          fragebogenDa={Boolean(p.fragebogen.submitted_at || p.fragebogen.gestartet)}
+          financeDa={p.financeDa}
           href={p.gesamtHref}
+          bankHref={p.bankHref}
           pdfHref={p.pdfHref}
           wordHref={p.wordHref}
           ai={p.ai}
-          more={[
-            { label: "Fassung für die Bank", onClick: () => go("bank") },
-            { label: "Förderungen", onClick: () => go("foerderung") },
-            { label: "Kredite", onClick: () => go("kredite") },
-            { label: p.fragebogen.submitted_at && !p.fragebogen.uebernommen_at ? `Gründungsfragebogen von ${p.vorname} (neu)` : `Gründungsfragebogen von ${p.vorname}`, onClick: () => go("fragebogen") },
-            { label: p.fragen.beantwortet ? `Fragen an ${p.vorname} (${p.fragen.beantwortet} neue Antworten)` : `Fragen an ${p.vorname}`, onClick: () => go("fragen") },
-          ]}
+          bank={bank}
           onEdit={() => setEditing(true)}
           onChange={(sections, glance) => setPlan({ sections, glance })}
+          onBankChange={setBankSections}
         />
       </>
     );
@@ -117,10 +126,10 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     return (
       <>
         {anchor}
-        <PlanEditor {...editor} sections={plan.sections} glance={plan.glance} ai={false} backLabel="Zurück zum Chat" key="amt-edit" mode="amt" onBack={() => { setEditing(false); router.refresh(); }} bankState={bank} abgaben={abgaben} />
+        <PlanEditor {...editor} sections={plan.sections} glance={plan.glance} ai={false} backLabel="Zurück zum Plan" key="amt-edit" mode="amt" onBack={() => { setEditing(false); router.refresh(); }} bankState={bank} abgaben={abgaben} />
       </>
     );
-  if (area === "bank") return <>{anchor}<PlanEditor {...editor} sections={bankSections} key={area} mode={area} onBack={() => go(null)} bankState={bank} abgaben={abgaben} /></>;
+  if (area === "bank") return <>{anchor}<PlanEditor {...editor} sections={bankSections} key={area} mode={area} backLabel={p.coach ? "Zurück zum Plan" : undefined} onBack={() => { setEditing(false); router.refresh(); }} bankState={bank} abgaben={abgaben} /></>;
 
   if (area === "foerderung" || area === "kredite") {
     return (

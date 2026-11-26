@@ -4,7 +4,7 @@ import { jsonResponse, pseudonymize } from "../ai";
 import type { User } from "../auth";
 import { query } from "../db";
 import { categoryLabel } from "../profile";
-import { kapitaldienst } from "./bank";
+import { BANK_ZWECKE, kapitaldienst, type BankInfo } from "./bank";
 import { BANK_SECTIONS } from "./bank-sections";
 import { Budget, loadChats } from "./context";
 import { calculate, eur, financeIsEmpty, financeSummary } from "./finance";
@@ -29,6 +29,17 @@ async function write(coacheeId: string, userId: string, texts: Record<string, st
       [coacheeId, key, text.slice(0, 60000), userId],
     );
   }
+}
+
+/** Wofür und für wen die Bankfassung geschrieben wird (vom Coach gewählt) */
+export function zweckText(b: BankInfo) {
+  const z = BANK_ZWECKE.find((x) => x.key === b.zweck) ?? BANK_ZWECKE[0];
+  const an = b.empfaenger.trim() || (b.zweck === "foerderung" ? "" : b.hausbank.trim());
+  if (b.zweck === "foerderung")
+    return `Du schreibst eine Fassung des Businessplans für einen ${z.text}${an ? ` bei: ${an}` : ""}. Leser ist die Förderstelle bzw. Förderbank: Sie prüft, ob das Vorhaben die Voraussetzungen des Programms erfüllt, tragfähig ist und die Förderung sinnvoll eingesetzt wird (Verwendungszweck, Arbeitsplätze, regionaler Nutzen, Eigenbeitrag).`;
+  if (b.zweck === "foerderkredit")
+    return `Du schreibst die Bankfassung eines Businessplans für einen ${z.text}${an ? `, eingereicht bei: ${an}` : ""}. Leser ist die Firmenkundenberatung der Hausbank, die den Förderkredit durchleitet, und die Förderbank: Kreditwürdigkeit, Rückzahlbarkeit, Sicherheiten, Risiken.`;
+  return `Du schreibst die Bankfassung eines Businessplans für einen ${z.text}${an ? ` (${an})` : ""}. Leser ist die Firmenkundenberatung der Bank: Kreditwürdigkeit, Rückzahlbarkeit, Sicherheiten, Risiken.`;
 }
 
 const todo = (bank: Sections, all: boolean) => BANK_SECTIONS.filter((s) => all || !bank[s.key]?.text.trim());
@@ -97,7 +108,7 @@ export async function draftBankPlan(user: User, c: Coachee, all = false) {
         schemaName: "bank_plan",
         schema: SCHEMA,
         maxTokens: 9000,
-        instructions: `Du schreibst die Bankfassung eines Businessplans für einen Kreditantrag bei der Hausbank (Förderkredit, z. B. KfW StartGeld). Leser ist die Firmenkundenberatung einer Bank: sachlich, knapp, zahlenorientiert, in der dritten Person. Grundlage sind der Plan fürs Amt, der Finanzplan und die Angaben für die Bank. Schreibe die Kapitel nicht einfach ab, sondern stelle sie auf die Sicht der Bank um: Kreditwürdigkeit, Rückzahlbarkeit, Sicherheiten, Risiken. Nutze die konkreten Zahlen aus dem Finanzplan, erfinde keine Zahlen; fehlt etwas, setze es in eckige Klammern, z. B. [Angebot ergänzen]. Markdown: Absätze, „### “ für Zwischenüberschriften, „- “ für Aufzählungen, Tabellen nur wenn nötig. key genau wie in eckigen Klammern angegeben. Namen sind durch [Name] ersetzt; keine Gesundheitsangaben.`,
+        instructions: `${zweckText(bank)} Sachlich, knapp, zahlenorientiert, in der dritten Person. Grundlage sind der Plan fürs Amt, der Finanzplan und die Angaben für die Bank. Schreibe die Kapitel nicht einfach ab, sondern stelle sie auf die Sicht dieses Lesers um. Nutze die konkreten Zahlen aus dem Finanzplan, erfinde keine Zahlen; fehlt etwas, setze es in eckige Klammern, z. B. [Angebot ergänzen]. Markdown: Absätze, „### “ für Zwischenüberschriften, „- “ für Aufzählungen, Tabellen nur wenn nötig. key genau wie in eckigen Klammern angegeben. Namen sind durch [Name] ersetzt; keine Gesundheitsangaben.`,
         input: `${context}\n\n== Zu schreibende Kapitel ==\n${g.map((d) => `[kapitel:${d.key}] ${d.title}: ${d.hint} Pflichtangaben: ${d.must.join("; ")}. Umfang etwa ${d.words[0]} bis ${d.words[1]} Wörter.`).join("\n")}`,
       }),
     ),

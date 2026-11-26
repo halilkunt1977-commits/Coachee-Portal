@@ -9,7 +9,7 @@ import { financeItems, financeTouched, planFor } from "@/lib/bp/store";
 import { GRUENDUNG_CATEGORIES } from "@/lib/profile";
 import { guessLand } from "@/lib/bp/foerderung";
 import { FinanceArea } from "./FinanceArea";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { BpBereich } from "./BpBereich";
 import { FinanceReader } from "./Reader";
 import type { Zahlen } from "./BankAbgabe";
@@ -20,6 +20,11 @@ import { calculate } from "@/lib/bp/finance";
 import { SECTIONS, chapterProgress, planIsEmpty } from "@/lib/bp/sections";
 import { BANK_SECTIONS } from "@/lib/bp/bank-sections";
 import { ShareButton } from "../teilen/ShareButton";
+import { loadStand, type PlanStand } from "@/lib/bp/stand";
+import { PlanSteps } from "./PlanSteps";
+import { eur, monthLabel, type FinanceInput } from "@/lib/bp/finance";
+import type { PlanRow } from "@/lib/bp/store";
+import type { FragebogenStand } from "@/lib/bp/fragebogen-store";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
 
@@ -45,6 +50,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
     ),
     loadFragebogen(c.id),
   ]);
+  const stand = await loadStand(c.id);
   const hasFinance = !financeIsEmpty(plan.finance);
   const r = hasFinance ? calculate(plan.finance) : null;
   const zahlen: Zahlen = r
@@ -58,7 +64,10 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
   const names = Object.fromEntries(users.map((u) => [u.id, u.id === user.id ? "dir" : u.name]));
   return (
     <Suspense>
+    {coach && <div className="mb-4"><Steps c={c} plan={plan} fragebogen={fragebogen} stand={stand} fragenNeu={fragen[0]?.beantwortet ?? 0} /></div>}
     <BpBereich
+      stand={stand}
+      financeDa={hasFinance}
       coacheeId={c.id}
       coach={coach}
       name={fullName(c)}
@@ -107,9 +116,25 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
 export async function FinancePanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
   const [plan, items] = await Promise.all([planFor(c), financeItems(c.id)]);
   const coach = user.role === "coach";
+  let steps: ReactNode = null;
   // Der Coachee liest den Finanzplan nur, bearbeiten kann ihn allein der Coach
+  if (coach) {
+    const [fragebogen, stand, fragen] = await Promise.all([
+      loadFragebogen(c.id),
+      loadStand(c.id),
+      query<{ beantwortet: number }>("SELECT count(*) FILTER (WHERE status = 'beantwortet')::int AS beantwortet FROM bp_fragen WHERE coachee_id = $1", [c.id]),
+    ]);
+    steps = (
+      <div className="mb-4 space-y-4">
+        <Suspense><Steps c={c} plan={plan} fragebogen={fragebogen} stand={stand} fragenNeu={fragen[0]?.beantwortet ?? 0} /></Suspense>
+        {!financeIsEmpty(plan.finance) && <Kennzahlen f={plan.finance} />}
+      </div>
+    );
+  }
   if (!coach) return <FinanceReader figures={financeIsEmpty(plan.finance) ? null : keyFigures(plan.finance)} pdfHref={files(c.id).pdf} excelHref={files(c.id).excel} />;
   return (
+    <>
+    {steps}
     <FinanceArea
       name={fullName(c)}
       uploadHref={`${files(c.id).gesamt}/datei`}
@@ -131,5 +156,64 @@ export async function FinancePanel({ user, coachee: c, links }: { user: User; co
       land={plan.bank.land || guessLand(c.city)}
       share={<ShareButton kind="finanzplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title="Finanzplan" />}
     />
+    </>
+  );
+}
+
+const tag = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("de-DE") : "");
+
+/** Schrittleiste über Businessplan und Finanzplan (nur Coach) */
+function Steps({ c, plan, fragebogen: fb, stand, fragenNeu }: { c: Coachee; plan: PlanRow; fragebogen: FragebogenStand; stand: PlanStand; fragenNeu: number }) {
+  const hasFinance = !financeIsEmpty(plan.finance);
+  const r = hasFinance ? calculate(plan.finance) : null;
+  const written = SECTIONS.filter((x) => plan.sections[x.key].text.trim()).length;
+  const bankWritten = BANK_SECTIONS.filter((x) => plan.bankSections[x.key].text.trim()).length;
+  return (
+    <PlanSteps
+      vorname={c.first_name}
+      fragenNeu={fragenNeu}
+      fragebogen={
+        fb.uebernommen_at
+          ? { status: `Übernommen am ${tag(fb.uebernommen_at)}`, done: true }
+          : fb.submitted_at
+            ? { status: `Geschickt am ${tag(fb.submitted_at)}, noch übernehmen`, done: false, warn: true }
+            : { status: fb.gestartet ? `${c.first_name} füllt gerade aus` : "Noch nicht begonnen", done: false }
+      }
+      finanzplan={r ? { status: `Kapitalbedarf ${eur(Math.round(r.capitalNeed.total))}`, done: true } : { status: "Noch leer", done: false }}
+      businessplan={
+        stand.neu.length
+          ? { status: `Neue Angaben: ${stand.neu.join(", ")}`, done: false, warn: true }
+          : { status: written ? `${written} von ${SECTIONS.length} Kapiteln` : "Noch nicht geschrieben", done: written === SECTIONS.length }
+      }
+      bank={
+        stand.bankVeraltet
+          ? { status: "Älter als der Plan, neu schreiben", done: false, warn: true }
+          : { status: bankWritten ? `${bankWritten} von ${BANK_SECTIONS.length} Kapiteln` : "Noch nicht geschrieben", done: bankWritten === BANK_SECTIONS.length }
+      }
+    />
+  );
+}
+
+/** Die wichtigsten Zahlen des Finanzplans als Karten über dem Finanzplan (nur Coach) */
+function Kennzahlen({ f }: { f: FinanceInput }) {
+  const r = calculate(f);
+  const money = (n: number) => eur(Math.round(n));
+  const low = r.minBalance;
+  const cards: { label: string; value: string; sub: string; tone?: "ok" | "warn" }[] = [
+    { label: "Kapitalbedarf", value: money(r.capitalNeed.total), sub: `Investitionen ${money(r.capitalNeed.investments)}, Reserve ${money(r.capitalNeed.reserve)}` },
+    { label: "Umsatz", value: money(r.years[0]?.revenue ?? 0), sub: `Jahr 1 · Jahr 2 ${money(r.years[1]?.revenue ?? 0)} · Jahr 3 ${money(r.years[2]?.revenue ?? 0)}` },
+    { label: "Ergebnis vor Steuern", value: money(r.years[0]?.profit ?? 0), sub: `Jahr 1 · Jahr 2 ${money(r.years[1]?.profit ?? 0)} · Jahr 3 ${money(r.years[2]?.profit ?? 0)}`, tone: (r.years[0]?.profit ?? 0) >= 0 ? "ok" : "warn" },
+    { label: "Niedrigster Kontostand", value: money(low.value), sub: low.value < 0 ? `im ${monthLabel(f.start, low.month)}: Finanzierung reicht nicht` : `im ${monthLabel(f.start, low.month)}, die Liquidität reicht`, tone: low.value < 0 ? "warn" : "ok" },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      {cards.map((k) => (
+        <div key={k.label} className="rounded-2xl border border-line-soft bg-surface px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted">{k.label}</p>
+          <p className={`mt-1 font-[family-name:var(--font-display)] text-xl font-bold tabular-nums sm:text-2xl ${k.tone === "warn" ? "text-danger" : k.tone === "ok" ? "text-ok" : ""}`}>{k.value}</p>
+          <p className="mt-0.5 text-xs text-muted">{k.sub}</p>
+        </div>
+      ))}
+    </div>
   );
 }

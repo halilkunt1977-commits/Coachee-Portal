@@ -8,7 +8,19 @@ export type Posten = { label: string; betrag: number };
 export type Verbindlichkeit = { label: string; betrag: number; rate: number };
 export type BankFrage = { frage: string; antwort: string };
 
+/** Für wen die Bankfassung geschrieben wird: Kredit bei der Hausbank, Förderkredit (KfW, Förderbank) oder Förderprogramm/Zuschuss */
+export type BankZweck = "kredit" | "foerderkredit" | "foerderung";
+export const BANK_ZWECKE: { key: BankZweck; label: string; text: string }[] = [
+  { key: "kredit", label: "Kredit bei der Bank", text: "Kreditantrag bei der Hausbank" },
+  { key: "foerderkredit", label: "Förderkredit", text: "Förderkredit über die Hausbank, z. B. KfW oder Förderbank des Landes" },
+  { key: "foerderung", label: "Förderprogramm", text: "Antrag auf ein Förderprogramm (Zuschuss, Mikrokredit oder Bürgschaft)" },
+];
+
 export type BankInfo = {
+  /** Für wen: Kredit, Förderkredit oder Förderprogramm */
+  zweck: BankZweck;
+  /** Empfänger, z. B. „Sparkasse Köln“ oder „KfW StartGeld“ */
+  empfaenger: string;
   land: string;
   hausbank: string;
   sicherheiten: string;
@@ -30,6 +42,8 @@ export function normalizeBank(raw: unknown): BankInfo {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const fragen = rows(r.fragen, (x) => ({ frage: str(x.frage, 300), antwort: str(x.antwort, 3000) }), 40).filter((x) => x.frage);
   return {
+    zweck: BANK_ZWECKE.some((z) => z.key === r.zweck) ? (r.zweck as BankZweck) : "kredit",
+    empfaenger: str(r.empfaenger, 160),
     land: str(r.land, 4),
     hausbank: str(r.hausbank, 120),
     sicherheiten: str(r.sicherheiten, 1500),

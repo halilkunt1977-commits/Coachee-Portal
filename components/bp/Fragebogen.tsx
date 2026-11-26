@@ -96,13 +96,19 @@ export function Fragebogen({ href, coach, vorname, financeHref, onBack }: { href
     setMsg(res.error ? { ok: false, text: res.error } : { ok: true, text: t("Danke! Dein Fragebogen ist bei deinem Coach.") });
   }
 
-  async function uebernehmen() {
-    if (!window.confirm(t("Die Zahlen aus dem Fragebogen ersetzen im Finanzplan die passenden Bereiche (Umsatz, Kosten, Anschaffungen, Finanzierung, Lebenshaltung). Der bisherige Stand wird als Fassung gesichert. Übernehmen?"))) return;
+  /** Zahlen in den Finanzplan übernehmen; mit schreiben = true danach gleich den ganzen Businessplan schreiben lassen */
+  async function uebernehmen(schreiben = false) {
+    if (!window.confirm(schreiben ? t("Die Zahlen aus dem Fragebogen ersetzen im Finanzplan die passenden Bereiche, danach wird der ganze Businessplan neu geschrieben. Der bisherige Stand wird als Fassung gesichert. Weiter?") : t("Die Zahlen aus dem Fragebogen ersetzen im Finanzplan die passenden Bereiche (Umsatz, Kosten, Anschaffungen, Finanzierung, Lebenshaltung). Der bisherige Stand wird als Fassung gesichert. Übernehmen?"))) return;
     setBusy(true);
     await save();
     const res = await post(href, { uebernehmen: true });
     setBusy(false);
     if (res.data) setStand(res as FragebogenStand);
+    // ohne Zahlen im Fragebogen trotzdem schreiben: Die Texte kommen aus den übrigen Antworten
+    if (schreiben && (!res.error || res.data)) {
+      router.push("?tab=businessplan&schreiben=1", { scroll: false });
+      return;
+    }
     if (res.error) setMsg({ ok: false, text: res.error });
     else {
       setMsg({ ok: true, text: t("In den Finanzplan übernommen: {was}.", { was: (res.uebernommen ?? []).join(", ") }) });
@@ -113,7 +119,7 @@ export function Fragebogen({ href, coach, vorname, financeHref, onBack }: { href
   const head = (
     <section className="card overflow-hidden !p-0">
       <div className="space-y-2 bg-accent px-4 py-4 text-white sm:px-6">
-        <button type="button" className="text-sm text-white/80 hover:text-white" onClick={onBack}>← {t("Zur Übersicht")}</button>
+        <button type="button" className="text-sm text-white/80 hover:text-white" onClick={onBack}>← {coach ? t("Zum Businessplan") : t("Zur Übersicht")}</button>
         <h2 className="font-[family-name:var(--font-display)] text-xl font-bold leading-tight">{coach ? t("Gründungsfragebogen von {name}", { name: vorname }) : t("Gründungsfragebogen")}</h2>
         <p className="text-sm text-white/75">
           {coach
@@ -148,7 +154,8 @@ export function Fragebogen({ href, coach, vorname, financeHref, onBack }: { href
           <div className="flex flex-wrap gap-2">
             <button type="button" className={view === "summary" ? "btn btn-sm" : "btn-ghost btn-sm"} onClick={() => setView("summary")}>{t("Antworten lesen")}</button>
             <button type="button" className={view === "form" ? "btn btn-sm" : "btn-ghost btn-sm"} onClick={() => setView("form")}>{t("Bearbeiten")}</button>
-            <button type="button" className="btn-gold btn-sm" disabled={busy} onClick={() => void uebernehmen()}>{t("Zahlen in den Finanzplan übernehmen")}</button>
+            <button type="button" className="btn-gold btn-sm" disabled={busy} onClick={() => void uebernehmen(true)}>{t("Übernehmen und Businessplan schreiben")}</button>
+            <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => void uebernehmen()}>{t("Nur Zahlen in den Finanzplan übernehmen")}</button>
             <a className="btn-ghost btn-sm" href={financeHref}>{t("Zum Finanzplan")}</a>
           </div>
         )}
