@@ -57,6 +57,10 @@ export function tocTargets(hasFinance: boolean, bank = false) {
 const cssString = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, " ")}"`;
 
 /** pages: Seitenzahlen fürs Inhaltsverzeichnis (aus einem ersten Durchgang), sonst ohne Zahlen */
+/** Untertitel der Bankfassung je nach Zweck */
+const antragTitel = (b: BankInfo) => (b.zweck === "foerderung" ? "Unterlage zum Förderantrag" : b.zweck === "foerderkredit" ? "Unterlage zum Antrag auf einen Förderkredit" : "Unterlage zum Kreditantrag");
+const antragAn = (b: BankInfo) => b.empfaenger.trim() || (b.zweck === "foerderung" ? "" : b.hausbank.trim());
+
 /** opts.bank: Bankfassung für Kreditantrag und Förderkredit (Finanzierungsübersicht, Kapitaldienst, Tilgungsplan, Vermögen) */
 export function renderPlanHtml(sections: Sections, glance: GlanceItem[], finance: FinanceInput, meta: Meta, fontCss: string, pages: Record<string, number> = {}, opts: { bank?: BankInfo } = {}) {
   const bank = opts.bank ?? null;
@@ -152,7 +156,7 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
 <div class="cover">
   <div class="card">
     <div class="navy"><span>Businessplan</span></div>
-    <div class="who">${esc(meta.name)}${meta.title ? `<small>${esc(meta.title)}</small>` : ""}${bank ? `<small>Unterlage zum Finanzierungsantrag</small>` : ""}</div>
+    <div class="who">${esc(meta.name)}${meta.title ? `<small>${esc(meta.title)}</small>` : ""}${bank ? `<small>${esc(antragTitel(bank))}</small>` : ""}</div>
     <div class="bar"></div>
     <div class="date">Stand ${esc(meta.date)}</div>
   </div>
@@ -160,7 +164,7 @@ table { border-collapse: collapse; width: 100%; margin: 2mm 0 5mm; break-inside:
 <div class="front">
   <h1 class="t1">BUSINESSPLAN – ${esc(meta.name)}</h1>
   ${meta.title ? `<h1>${esc(meta.title)}</h1>` : ""}
-  ${bank ? `<p class="lead" style="margin-top:3mm">Unterlage zum Finanzierungsantrag${bank.hausbank ? ` bei der ${esc(bank.hausbank)}` : ""}</p>` : ""}
+  ${bank ? `<p class="lead" style="margin-top:3mm">${esc(antragTitel(bank))}${antragAn(bank) ? ` · ${esc(antragAn(bank))}` : ""}</p>` : ""}
   <h1 class="t3">Inhaltsverzeichnis</h1>
   <ol class="toc">${toc}</ol>
 </div>

@@ -56,7 +56,7 @@ export function useBank(href: string, initial: BankInfo, cityLand: string, readO
     if (out.bank) setB(out.bank);
     if (out.error) setError(out.error);
   }
-  return { b, set, state, draft, drafting, error, href, readOnly };
+  return { b, set, state, save, draft, drafting, error, href, readOnly };
 }
 export type BankState = ReturnType<typeof useBank>;
 

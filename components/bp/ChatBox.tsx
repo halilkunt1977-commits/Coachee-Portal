@@ -31,6 +31,8 @@ type Props = {
   /** Ändert sich, wenn sich der Inhalt einer Antwort ändert (für das Scrollen ans Ende) */
   scrollKey: string;
   className?: string;
+  /** Überschrift des Fensters, Standard „Chat“ */
+  title?: string;
 };
 
 export function ChatBox(p: Props) {
@@ -103,7 +105,7 @@ export function ChatBox(p: Props) {
       }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-line-soft px-4 py-3">
-        <p className="text-sm font-semibold"><span className="text-gold">✦</span> Chat</p>
+        <p className="text-sm font-semibold"><span className="text-gold">✦</span> {p.title ?? "Chat"}</p>
         {p.onClear && p.items.length > 0 && <button type="button" className="link text-xs" disabled={p.working} onClick={p.onClear}>Neuer Chat</button>}
       </div>
 

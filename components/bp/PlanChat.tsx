@@ -38,7 +38,7 @@ const post = (href: string, body: unknown) =>
     .then((r) => r.json())
     .catch(() => ({ error: "Keine Verbindung. Bitte gleich noch einmal versuchen." }));
 
-const chapterTitle = (key: string) => {
+export const chapterTitle = (key: string) => {
   if (key === "blick") return "Auf einen Blick";
   const i = SECTIONS.findIndex((s) => s.key === key);
   return i < 0 ? key : `${i + 1}. ${SECTIONS[i].title}`;
@@ -209,21 +209,22 @@ export function Workspace({ title, name, onBack, more, actions, tab, setTab, doc
   );
 }
 
-function Answer({ run, onUndo, onShow }: { run: RunView; onUndo: () => Promise<void>; onShow: () => void }) {
+export function Answer({ run, onUndo, onShow }: { run: RunView; onUndo: () => Promise<void>; onShow: () => void }) {
   const [busy, setBusy] = useState(false);
-  if (run.status === "laeuft") return <Working text="Ich schreibe den Businessplan …" />;
+  if (run.status === "laeuft") return <Working text={run.progress.phase === "bank" ? "Ich schreibe die Bankfassung passend dazu …" : "Ich schreibe den ganzen Businessplan neu …"} />;
   if (run.status === "fehler") return <Bubble tone="error">{run.error ?? "Das hat nicht geklappt. Bitte noch einmal senden."}</Bubble>;
   const kept = run.changes.filter((x) => x.decision !== "verworfen");
   return (
     <Bubble>
       {run.result?.note ? <div className="bp-text"><Markdown text={run.result.note} /></div> : <p>{run.changes.length ? "Erledigt." : "Alles stimmig, nichts geändert."}</p>}
+      {run.result?.bankError && <p className="text-xs text-danger">{run.result.bankError}</p>}
       {run.changes.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-soft pt-2 text-xs text-muted">
           {run.undone ? (
             <span>Rückgängig gemacht.</span>
           ) : (
             <>
-              <span>{kept.length === 1 ? `Geändert: ${chapterTitle(kept[0].key)}` : `${kept.length} Teile geschrieben`}</span>
+              <span>{kept.length === 1 ? `Geändert: ${chapterTitle(kept[0].key)}` : `${kept.length} Teile geschrieben`}{run.result?.bank ? ", Bankfassung auch" : ""}</span>
               <button type="button" className="link lg:hidden" onClick={onShow}>Ansehen</button>
               <button type="button" className="link" disabled={busy} onClick={async () => { setBusy(true); await onUndo(); setBusy(false); }}>Rückgängig</button>
             </>

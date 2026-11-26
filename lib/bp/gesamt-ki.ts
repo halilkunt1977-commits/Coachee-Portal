@@ -9,6 +9,9 @@ import { brancheOf, brancheText } from "./branchen";
 import { financeSummary } from "./finance";
 import { SECTIONS, chapterProgress, normalizeGlance, normalizeSections, type GlanceItem, type SectionState } from "./sections";
 import { planFor } from "./store";
+import { fragebogenText } from "./fragebogen";
+import { loadFragebogen } from "./fragebogen-store";
+import { draftBankPlan } from "./bank-plan";
 
 /*
  * Eine KI für den ganzen Businessplan (nur Coach). Ein Durchgang:
@@ -22,10 +25,10 @@ import { planFor } from "./store";
 
 export type RunAction = "neu" | "anpassen" | "lassen";
 export type RunChapter = { key: string; action: RunAction; reason: string; status: "wartet" | "schreibt" | "fertig" | "fehler" };
-export type RunProgress = { phase: "pruefen" | "schreiben" | "blick" | "fertig"; chapters: RunChapter[] };
+export type RunProgress = { phase: "pruefen" | "schreiben" | "blick" | "bank" | "fertig"; chapters: RunChapter[] };
 /** Bewertung eines Kapitels mit Rückfragen, wenn etwas fehlt */
 export type ChapterReview = { key: string; rating: "gut" | "ausbaufaehig" | "fehlt"; text: string; questions: string[] };
-export type RunResult = { note: string; glance: number; review?: ChapterReview[] };
+export type RunResult = { note: string; glance: number; review?: ChapterReview[]; /** Bankfassung gleich mit neu geschrieben */ bank?: boolean; bankError?: string };
 export type Decision = "offen" | "uebernommen" | "verworfen";
 /** Eine Änderung der KI: Kapitel (oder „blick“ für Auf einen Blick) vorher und nachher */
 export type RunChange = { key: string; before: string; after: string; decision: Decision };
@@ -72,11 +75,12 @@ Grundsatz: Du stellst KEINE Rückfragen und lässt nichts offen. Fehlt eine Anga
 Was der Coach will:
 - „Fertigstellen“, „schreib den Plan“, „komplett“, „neu“, eine leere Nachricht oder ein noch weitgehend leerer Plan: Du schreibst ALLE 14 Kapitel vollständig und abgabereif und füllst „Auf einen Blick“.
 - Mitgegebene Unterlagen (z. B. ein Businessplan aus einem anderen Programm, Notizen, Fotos): Übernimm ihre Inhalte vollständig in die passenden Kapitel und schreib alle betroffenen Kapitel neu.
-- Ein Änderungswunsch („Start ist April“, „Preis 65 €“, „kürzer“, „mehr zum Marketing“): Setz ihn überall um, wo er hingehört, und schreib jedes betroffene Kapitel komplett neu (nicht nur den geänderten Satz). Die Executive Summary passt du an, sobald sich etwas Wesentliches ändert.
+- Ein Änderungswunsch oder neue Angaben („Start ist April“, „Preis 65 €“, „kürzer“, „mehr zum Marketing“, neuer Fragebogen oder Finanzplan): Du schreibst den GANZEN Plan neu, also alle 14 Kapitel vollständig, damit alles zusammenpasst. Die Änderung setzt du überall um, wo sie hingehört.
 - Eine reine Frage oder Bitte um Einschätzung: Antworte in reply, chapters bleibt leer.
 
 So schreibst du die Kapitel:
-- Jedes Kapitel in chapters enthält den kompletten neuen Kapiteltext (ohne Kapitelüberschrift). Kapitel, die du nicht änderst, lässt du weg.
+- Jedes Kapitel in chapters enthält den kompletten neuen Kapiteltext (ohne Kapitelüberschrift). Schreibst du den Plan, gibst du immer alle 14 Kapitel zurück.
+- Aufbau und Stil wie in der Vorlage des Coachs: je Kapitel mehrere Zwischenüberschriften („### “), sachliche Absätze, wo passend Tabellen (Preise, Zielgruppen, Mitbewerber, Marketingmaßnahmen mit Kosten, Investitionen).
 - Halte dich an die Pflichtangaben je Kapitel und den Umfang aus dem Material (Wörter je Kapitel), eher ausführlich als knapp. Das Kapitel Finanzen ist das ausführlichste.
 - Sachlich in der dritten Person („[Name] plant …“, „Das Unternehmen …“), keine Ich-Form, keine Werbesprache. Absätze mit zwei bis vier Sätzen, getrennt durch eine Leerzeile. Zwischenüberschriften mit „### “, Aufzählungen mit „- “, Tabellen im Markdown-Format, wo sie helfen (z. B. Mitbewerber, Preise, Zielgruppen).
 - Konkret und prüfbar: Ort, Zeitpunkt, Preise, Mengen, Stundensätze, Kundengruppen, Maßnahmen mit Kosten. Keine leeren Sätze wie „hohe Qualität“ oder „wachsender Markt“ ohne Beleg.
@@ -84,7 +88,7 @@ So schreibst du die Kapitel:
 - Alle Kapitel passen zusammen: gleiche Zahlen, gleicher Starttermin, gleiche Bezeichnungen.
 - Die Angaben des Coachs (Nachrichten, Notizen) haben Vorrang vor allem anderen Material.
 
-glance: „Auf einen Blick“ als Liste (label, value), z. B. Gründer, Gründungsvorhaben, Standort, Rechtsform, Start, Zielgruppe, Kapitalbedarf, Finanzierung, Umsatz Jahr 1. Nur ausfüllen, wenn sich dort etwas ändert, sonst leer lassen.
+glance: „Auf einen Blick“ als Liste (label, value), z. B. Gründer, Gründungsvorhaben, Standort, Rechtsform, Start, Zielgruppe, Kapitalbedarf, Finanzierung, Umsatz Jahr 1. Beim Schreiben des Plans immer vollständig ausfüllen.
 
 reply: Antwort an den Coach, per du, auf Deutsch, ohne Floskeln. Bei Änderungen zwei bis vier Sätze: was du geschrieben oder geändert hast und welche wichtigen Annahmen du getroffen hast. Bei einer Frage eine konkrete Antwort mit Bezug auf Kapitel und Zahlen.
 
@@ -107,16 +111,18 @@ const attachedBlock = (a: Attached[], max: number) => a.map((d) => `### ${d.titl
 /** Material zum ganzen Plan als Textblöcke (noch nicht pseudonymisiert) */
 async function planMaterial(c: Coachee, earlier: string[], attached: Attached[] = []) {
   const plan = await planFor(c);
-  const [items, meetings, notes] = await Promise.all([
+  const [items, meetings, notes, fragebogen] = await Promise.all([
     query<{ category: string; title: string; detail: string }>("SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND category <> 'gesundheit' ORDER BY category, created_at", [c.id]),
     query<{ held_on: string; title: string; notes: string; results: string }>("SELECT held_on, title, notes, results FROM meetings WHERE coachee_id = $1 ORDER BY held_on DESC, created_at DESC LIMIT 15", [c.id]),
     loadChats(c.id),
+    loadFragebogen(c.id),
   ]);
   const b = new Budget(110000);
   if (plan.title || c.goal) b.out.push(`Vorhaben: ${plan.title || c.goal}`);
   b.block("Notizen des Coachs zum ganzen Vorhaben", notes.vorhaben, 8000);
   b.block("Standard des Coachs: Pflichtangaben und Umfang je Kapitel", SECTIONS.map((s, i) => `${i + 1}. ${s.title} [${s.key}], ${s.words[0]}–${s.words[1]} Wörter: ${s.must.join("; ")}`).join("\n"), 6000);
   b.block("Branchenprofil", brancheText(brancheOf(plan.branche)), 5000);
+  if (fragebogen.gestartet) b.block("Gründungsfragebogen (eigene Angaben des Gründers, wichtigste Quelle für Inhalte)", withoutHealth(fragebogenText(fragebogen.data)), 14000);
   b.block("Vom Coach gerade mitgegebene Dateien und Fotos (wichtig, gehören zu seiner Nachricht)", attachedBlock(attached, 24000), 24000);
   b.block("Frühere Angaben des Coachs an dich (älteste zuerst, gelten weiter)", earlier.map((m) => `- ${m}`).join("\n"), 8000);
   b.block("Finanzplan (maßgebliche Zahlen)", financeSummary(plan.finance), 8000);
@@ -235,8 +241,23 @@ export async function executeRun(runId: string, user: User, c: Coachee, message:
       glance = glanceItems.length;
     }
 
+    // Gibt es schon eine Bankfassung, wird sie gleich mit neu geschrieben, damit beide Fassungen zusammenpassen
+    let bank = false;
+    let bankError: string | undefined;
+    if (Object.values(plan.bankSections).some((x) => x.text.trim())) {
+      progress.phase = "bank";
+      await saveProgress(runId, progress);
+      try {
+        await draftBankPlan(user, c, true);
+        bank = true;
+      } catch (e) {
+        if (!(e instanceof AiError)) console.error("Bankfassung nach dem Businessplan", e);
+        bankError = "Die Bankfassung konnte nicht mit neu geschrieben werden. Bitte dort noch einmal „Neu schreiben“ antippen.";
+      }
+    }
+
     progress.phase = "fertig";
-    const result: RunResult = { note, glance };
+    const result: RunResult = { note, glance, bank, bankError };
     await query("UPDATE bp_runs SET status = 'fertig', progress = $2, result = $3, finished_at = now() WHERE id = $1", [runId, JSON.stringify(progress), JSON.stringify(result)]);
   } catch (e) {
     if (!(e instanceof AiError)) console.error("Businessplan-KI", e);
