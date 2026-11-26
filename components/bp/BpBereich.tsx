@@ -10,6 +10,7 @@ import { FoerderView, KrediteView, useAbgaben, useBank, type Abgabe, type Zahlen
 import { PlanEditor } from "./PlanEditor";
 import { PlanReader } from "./Reader";
 import { FragenCoach, FragenCoachee } from "./Fragen";
+import { Fragebogen } from "./Fragebogen";
 import { SECTIONS } from "@/lib/bp/sections";
 import { BANK_SECTIONS } from "@/lib/bp/bank-sections";
 import { useT } from "@/components/i18n/LangProvider";
@@ -21,13 +22,14 @@ import { useT } from "@/components/i18n/LangProvider";
  * Bearbeiten kann nur der Coach; der Coachee liest die fertigen Pläne und beantwortet Fragen.
  */
 
-type Area = "amt" | "bank" | "foerderung" | "kredite" | "fragen";
-const AREAS: Area[] = ["amt", "bank", "foerderung", "kredite", "fragen"];
+type Area = "amt" | "bank" | "foerderung" | "kredite" | "fragen" | "fragebogen";
+const AREAS: Area[] = ["amt", "bank", "foerderung", "kredite", "fragen", "fragebogen"];
 export type FragenStand = { offen: number; beantwortet: number };
+export type FragebogenKurz = { gestartet: boolean; submitted_at: string | null; uebernommen_at: string | null };
 
 type EditorProps = Omit<ComponentProps<typeof PlanEditor>, "mode" | "onBack" | "bankState" | "abgaben">;
 
-export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number; bankSections: Sections; bankDone: number; bankCount: number; fragenHref: string; vorname: string; fragen: FragenStand }) {
+export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; bankHref: string; abgabeHref: string; abgaben: Abgabe[]; zahlen: Zahlen; doneCount: number; chapterCount: number; bankSections: Sections; bankDone: number; bankCount: number; fragenHref: string; vorname: string; fragen: FragenStand; fragebogenHref: string; fragebogen: FragebogenKurz }) {
   const t = useT();
   const sp = useSearchParams();
   const raw = sp.get("bereich");
@@ -58,10 +60,11 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     });
   }
 
-  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, bankSections, bankDone: _bd, bankCount: _bc, fragenHref: _f, vorname: _v, fragen: _fs, ...editor } = p;
-  void [_b, _c, _h, _a, _l, _z, _d, _n, _bd, _bc, _f, _v, _fs];
+  const { bank: _b, cityLand: _c, bankHref: _h, abgabeHref: _a, abgaben: _l, zahlen: _z, doneCount: _d, chapterCount: _n, bankSections, bankDone: _bd, bankCount: _bc, fragenHref: _f, vorname: _v, fragen: _fs, fragebogenHref: _fbh, fragebogen: _fb, ...editor } = p;
+  void [_b, _c, _h, _a, _l, _z, _d, _n, _bd, _bc, _f, _v, _fs, _fbh, _fb];
 
   const anchor = <div ref={top} className="h-0" aria-hidden />;
+  if (area === "fragebogen") return <>{anchor}<Fragebogen href={p.fragebogenHref} coach={p.coach} vorname={p.vorname} financeHref={p.financeHref} onBack={() => go(null)} /></>;
   if (area === "fragen") return <>{anchor}{p.coach ? <FragenCoach href={p.fragenHref} gesamtHref={p.gesamtHref} ai={p.ai} vorname={p.vorname} onBack={() => go(null)} /> : <FragenCoachee href={p.fragenHref} onBack={() => go(null)} />}</>;
   if (!p.coach && (area === "amt" || area === "bank")) {
     const isBank = area === "bank";
@@ -102,6 +105,7 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
             { label: "Fassung für die Bank", onClick: () => go("bank") },
             { label: "Förderungen", onClick: () => go("foerderung") },
             { label: "Kredite", onClick: () => go("kredite") },
+            { label: p.fragebogen.submitted_at && !p.fragebogen.uebernommen_at ? `Gründungsfragebogen von ${p.vorname} (neu)` : `Gründungsfragebogen von ${p.vorname}`, onClick: () => go("fragebogen") },
             { label: p.fragen.beantwortet ? `Fragen an ${p.vorname} (${p.fragen.beantwortet} neue Antworten)` : `Fragen an ${p.vorname}`, onClick: () => go("fragen") },
           ]}
           onEdit={() => setEditing(true)}
@@ -147,12 +151,22 @@ export function BpBereich(p: EditorProps & { bank: BankInfo; cityLand: string; b
     <Tile icon={<IconFragen />} title={t("Fragen von deinem Coach")} text={p.fragen.offen ? t("Dein Coach braucht noch Antworten von dir, damit der Plan fertig wird") : t("Hier stehen Fragen, wenn dein Coach etwas von dir braucht")} onClick={() => go("fragen")} highlight={p.fragen.offen > 0} wide
       foot={<span className={p.fragen.offen ? "font-semibold text-accent" : ""}>{p.fragen.offen ? t("{n} offene Fragen", { n: p.fragen.offen }) : t("Keine offenen Fragen")}</span>} />
   );
+  const fb = p.fragebogen;
+  const fbDay = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("de-DE") : "");
+  const fragebogenTile = p.coach ? (
+    <Tile icon={<IconBogen />} title={t("Gründungsfragebogen von {name}", { name: p.vorname })} text={t("Angaben zu Vorhaben, Preisen, Kosten und Finanzierung lesen und die Zahlen in den Finanzplan übernehmen")} onClick={() => go("fragebogen")} highlight={Boolean(fb.submitted_at && !fb.uebernommen_at)} wide
+      foot={<><span className={fb.submitted_at ? "text-ok" : ""}>{fb.submitted_at ? t("Geschickt am {tag}", { tag: fbDay(fb.submitted_at) }) : fb.gestartet ? t("Wird gerade ausgefüllt") : t("Noch nicht begonnen")}</span><span>{fb.uebernommen_at ? t("In den Finanzplan übernommen am {tag}", { tag: fbDay(fb.uebernommen_at) }) : t("Noch nicht übernommen")}</span></>} />
+  ) : (
+    <Tile icon={<IconBogen />} title={t("Gründungsfragebogen")} text={t("Schritt für Schritt alles zu deiner Gründung eintragen: Angebot, Preise, Kosten, Finanzierung. Daraus entsteht dein Businessplan.")} onClick={() => go("fragebogen")} highlight={!fb.submitted_at} wide
+      foot={<span className={fb.submitted_at ? "text-ok" : "font-semibold text-accent"}>{fb.submitted_at ? t("Geschickt am {tag}", { tag: fbDay(fb.submitted_at) }) : fb.gestartet ? t("Angefangen, noch nicht geschickt") : t("Jetzt ausfüllen")}</span>} />
+  );
   const kreditCount = [...BUNDESWEIT, ...(land?.programme ?? [])].filter((x) => x.art === "Kredit").length;
 
   return (
     <>
     {anchor}
     <div className="grid gap-4 sm:grid-cols-2">
+      {fragebogenTile}
       {fragenTile}
       <Tile icon={<IconAmt />} title={p.coach ? t("Businessplan") : t("Businessplan fürs Amt")} text={p.coach ? t("Im Chat schreiben: Unterlagen hochladen, sagen, was du willst, der ganze Plan wird direkt geschrieben") : t("Dein Plan für Jobcenter und Agentur für Arbeit zum Lesen")} onClick={() => go("amt")}
         foot={<><span>{t("{a} von {b} Kapiteln fertig", { a: p.doneCount, b: p.chapterCount })}</span><span className={lastOf("fachstelle") ? "text-ok" : ""}>{when(lastOf("fachstelle"))}</span></>} />
@@ -188,4 +202,5 @@ const IconAmt = () => <svg {...svg}><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v
 const IconBank = () => <svg {...svg}><path d="M3 10 12 4l9 6" /><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" /></svg>;
 const IconFoerder = () => <svg {...svg}><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z" /></svg>;
 const IconFragen = () => <svg {...svg}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="M9.8 9.5a2.3 2.3 0 0 1 4.4.9c0 1.5-2.2 2-2.2 3.1M12 16.5h.01" /></svg>;
+const IconBogen = () => <svg {...svg}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 3.5h6v2H9zM8.5 10l1.5 1.5 3-3M8.5 16l1.5 1.5 3-3M15 10.5h1M15 16.5h1" /></svg>;
 const IconKredit = () => <svg {...svg}><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h4" /></svg>;
