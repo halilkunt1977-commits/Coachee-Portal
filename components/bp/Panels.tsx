@@ -14,6 +14,7 @@ import { BpBereich } from "./BpBereich";
 import { FinanceReader } from "./Reader";
 import type { Zahlen } from "./BankAbgabe";
 import { listAbgaben } from "@/lib/bp/abgabe";
+import { loadFragebogen } from "@/lib/bp/fragebogen-store";
 import { eigenmittel, ersteRate, kapitaldienst } from "@/lib/bp/bank";
 import { calculate } from "@/lib/bp/finance";
 import { SECTIONS, chapterProgress, planIsEmpty } from "@/lib/bp/sections";
@@ -22,13 +23,13 @@ import { ShareButton } from "../teilen/ShareButton";
 
 type Links = { plan: string; finance: string; zahlen: string | null };
 
-const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, word: `/api/businessplan/${id}/word`, excel: `/api/businessplan/${id}/excel`, schreibhilfe: `/api/businessplan/${id}/schreibhilfe`, gesamt: `/api/businessplan/${id}/gesamt`, bank: `/api/businessplan/${id}/bank`, abgabe: `/api/businessplan/${id}/abgabe`, fragen: `/api/businessplan/${id}/fragen` });
+const files = (id: string) => ({ pdf: `/api/businessplan/${id}/pdf`, word: `/api/businessplan/${id}/word`, excel: `/api/businessplan/${id}/excel`, schreibhilfe: `/api/businessplan/${id}/schreibhilfe`, gesamt: `/api/businessplan/${id}/gesamt`, bank: `/api/businessplan/${id}/bank`, abgabe: `/api/businessplan/${id}/abgabe`, fragen: `/api/businessplan/${id}/fragen`, fragebogen: `/api/businessplan/${id}/fragebogen` });
 
 export async function PlanPanel({ user, coachee: c, links }: { user: User; coachee: Coachee; links: Links }) {
   const plan = await planFor(c);
   const ids = [...new Set(Object.values(plan.sections).map((s) => s.updated_by).filter((x): x is string => Boolean(x)))];
   const coach = user.role === "coach";
-  const [users, bausteine, notes, runs, abgaben, fragen] = await Promise.all([
+  const [users, bausteine, notes, runs, abgaben, fragen, fragebogen] = await Promise.all([
     ids.length ? query<{ id: string; name: string }>("SELECT id, name FROM users WHERE id = ANY($1)", [ids]) : Promise.resolve([]),
     query<{ category: string; title: string; detail: string }>(
       "SELECT category, title, detail FROM profile_items WHERE coachee_id = $1 AND (NOT internal OR $2) ORDER BY created_at",
@@ -42,6 +43,7 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       "SELECT count(*) FILTER (WHERE status = 'offen')::int AS offen, count(*) FILTER (WHERE status = 'beantwortet')::int AS beantwortet FROM bp_fragen WHERE coachee_id = $1",
       [c.id],
     ),
+    loadFragebogen(c.id),
   ]);
   const hasFinance = !financeIsEmpty(plan.finance);
   const r = hasFinance ? calculate(plan.finance) : null;
@@ -93,6 +95,8 @@ export async function PlanPanel({ user, coachee: c, links }: { user: User; coach
       fragenHref={files(c.id).fragen}
       vorname={c.first_name}
       fragen={fragen[0] ?? { offen: 0, beantwortet: 0 }}
+      fragebogenHref={files(c.id).fragebogen}
+      fragebogen={{ gestartet: fragebogen.gestartet, submitted_at: fragebogen.submitted_at, uebernommen_at: fragebogen.uebernommen_at }}
       filled={!planIsEmpty(plan.sections, plan.glance) || (financeTouched(plan) && !financeIsEmpty(plan.finance))}
       share={<ShareButton kind="businessplan" refId={c.id} role={user.role} coacheeId={c.id} recipient={c.first_name} title={plan.title || "Businessplan"} className="btn-ghost" />}
     />

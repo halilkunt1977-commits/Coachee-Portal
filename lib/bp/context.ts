@@ -6,6 +6,8 @@ import { query, one } from "../db";
 import { categoryLabel as docCategoryLabel } from "../documents";
 import { categoryLabel } from "../profile";
 import { normalizeSurvey } from "../survey/types";
+import { fragebogenText } from "./fragebogen";
+import { loadFragebogen } from "./fragebogen-store";
 import { brancheOf, brancheText } from "./branchen";
 import { financeSummary } from "./finance";
 import { normalizeTurns, openProposal, VORHABEN, type ChatTurn } from "./notes";
@@ -88,6 +90,7 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
     ),
     loadChats(c.id),
   ]);
+  const fragebogen = await loadFragebogen(c.id).catch(() => null);
 
   const b = new Budget(all ? 80000 : 75000);
 
@@ -116,6 +119,7 @@ export async function chapterContext(c: Coachee, key: string, message: string, p
   for (const g of plan.glance.filter((g) => g.value.trim())) head.push(`- ${g.label}: ${g.value.replace(/\n/g, ", ")}`);
   b.block("Auf einen Blick", head.join("\n"), 3000);
   b.block("Bausteine aus den Coaching-Gesprächen", items.map((i) => `- ${categoryLabel("gruendung", i.category)}: ${i.title}${i.detail ? ` – ${i.detail}` : ""}`).join("\n"), 10000);
+  if (fragebogen?.gestartet) b.block("Gründungsfragebogen (Angaben des Coachees)", withoutHealth(fragebogenText(fragebogen.data)), all ? 8000 : 6000);
   if (cv) {
     const d = normalizeCv(cv.data);
     const lines: string[] = [];
@@ -189,6 +193,8 @@ export async function glanceContext(c: Coachee) {
   b.block("Kapitel des Businessplans", SECTIONS.filter((s) => plan.sections[s.key].text.trim()).map((s) => `## ${s.title}\n${plan.sections[s.key].text.trim().slice(0, 3000)}`).join("\n\n"), 24000);
   b.block("Finanzplan", financeSummary(plan.finance), 5000);
   b.block("Bausteine aus den Coaching-Gesprächen", items.map((i) => `- ${categoryLabel("gruendung", i.category)}: ${i.title}${i.detail ? ` – ${i.detail}` : ""}`).join("\n"), 6000);
+  const fb = await loadFragebogen(c.id).catch(() => null);
+  if (fb?.gestartet) b.block("Gründungsfragebogen (Angaben des Coachees)", withoutHealth(fragebogenText(fb.data)), 6000);
   b.block("Bisherige Angaben „Auf einen Blick“", plan.glance.map((g) => `- ${g.label}: ${g.value.replace(/\n/g, ", ") || "(leer)"}`).join("\n"), 3000);
   return { input: pseudonymize(b.out.join("\n\n"), [c.first_name, c.last_name]), plan };
 }
